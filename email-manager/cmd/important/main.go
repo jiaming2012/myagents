@@ -6,12 +6,22 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/jamal/email-manager/internal/config"
 	"github.com/jamal/email-manager/internal/email"
 	"github.com/jamal/email-manager/internal/provider"
 )
+
+type accountEmails struct {
+	name   string
+	email  string
+	emails []email.Email
+	err    error
+}
 
 func main() {
 	since := flag.Int("since", 7, "show emails from the last N days")
@@ -27,46 +37,90 @@ func main() {
 	}
 
 	ctx := context.Background()
-	totalCount := 0
 	hasErrors := false
 
-	for _, acct := range cfg.Accounts {
-		if *account != "" && !strings.EqualFold(acct.Name, *account) {
-			continue
-		}
+	// Fetch all accounts in parallel
+	results := fetchAll(ctx, cfg, root, *account, *since, *maxResults)
 
-		p, err := buildProvider(acct, cfg, root)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Skipping %s: %v\n", acct.Name, err)
+	var accounts []acctData
+	for _, r := range results {
+		if r.err != nil {
+			fmt.Fprintf(os.Stderr, "Error with %s: %v\n", r.name, r.err)
 			hasErrors = true
 			continue
 		}
-
-		count, err := showImportant(ctx, p, acct, *since, *maxResults)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "Error with %s: %v\n", acct.Name, err)
-			hasErrors = true
+		if len(r.emails) == 0 {
 			continue
 		}
-		totalCount += count
+		accounts = append(accounts, acctData{
+			name:   r.name,
+			email:  r.email,
+			emails: r.emails,
+		})
 	}
 
-	if totalCount == 0 {
-		fmt.Println("\nNo important unread emails found.")
-	} else {
-		fmt.Printf("\n%d important email(s) across all accounts.\n", totalCount)
+	if len(accounts) == 0 {
+		fmt.Println("No important unread emails found.")
+		if hasErrors {
+			os.Exit(1)
+		}
+		return
 	}
+
+	m := newModel(accounts)
+	p := tea.NewProgram(m, tea.WithAltScreen())
+	finalModel, err := p.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "TUI error: %v\n", err)
+		os.Exit(1)
+	}
+
+	fm := finalModel.(model)
+	total := 0
+	for _, a := range fm.accounts {
+		total += len(a.emails)
+	}
+	fmt.Printf("%d important email(s) across %d accounts.\n", total, len(fm.accounts))
 
 	if hasErrors {
 		os.Exit(1)
 	}
 }
 
-func showImportant(ctx context.Context, p provider.EmailProvider, acct config.Account, sinceDays, maxResults int) (int, error) {
+func fetchAll(ctx context.Context, cfg *config.Config, root, accountFilter string, sinceDays, maxResults int) []accountEmails {
+	var accounts []config.Account
+	for _, acct := range cfg.Accounts {
+		if accountFilter != "" && !strings.EqualFold(acct.Name, accountFilter) {
+			continue
+		}
+		accounts = append(accounts, acct)
+	}
+
+	results := make([]accountEmails, len(accounts))
+	var wg sync.WaitGroup
+
+	for i, acct := range accounts {
+		wg.Add(1)
+		go func(i int, acct config.Account) {
+			defer wg.Done()
+			results[i] = fetchAccount(ctx, acct, cfg, root, sinceDays, maxResults)
+		}(i, acct)
+	}
+
+	wg.Wait()
+	return results
+}
+
+func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, root string, sinceDays, maxResults int) accountEmails {
+	p, err := buildProvider(acct, cfg, root)
+	if err != nil {
+		return accountEmails{name: acct.Name, email: acct.Email, err: err}
+	}
+
 	query := buildImportantQuery(acct.Provider, sinceDays)
 	emails, err := p.FetchEmails(ctx, query, maxResults)
 	if err != nil {
-		return 0, err
+		return accountEmails{name: acct.Name, email: acct.Email, err: err}
 	}
 
 	// Filter to unread only
@@ -77,23 +131,7 @@ func showImportant(ctx context.Context, p provider.EmailProvider, acct config.Ac
 		}
 	}
 
-	if len(unread) == 0 {
-		return 0, nil
-	}
-
-	fmt.Printf("\n=== %s (%s) — %d unread important ===\n", acct.Name, acct.Email, len(unread))
-
-	for i, e := range unread {
-		age := time.Since(e.Date)
-		snippet := e.Snippet
-		if len(snippet) > 100 {
-			snippet = snippet[:100] + "..."
-		}
-		fmt.Printf("  [%d] %q\n      from: %s (%s ago)\n      %s\n\n",
-			i+1, e.Subject, e.From, formatAge(age), snippet)
-	}
-
-	return len(unread), nil
+	return accountEmails{name: acct.Name, email: acct.Email, emails: unread}
 }
 
 func buildImportantQuery(providerType string, sinceDays int) string {

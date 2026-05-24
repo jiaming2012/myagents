@@ -74,16 +74,17 @@ func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResult
 			Unread:  containsLabel(full.LabelIds, "UNREAD"),
 		}
 
+		// Use internalDate (epoch millis) as primary — always present and reliable
+		if full.InternalDate > 0 {
+			e.Date = time.UnixMilli(full.InternalDate)
+		}
+
 		for _, h := range full.Payload.Headers {
 			switch h.Name {
 			case "Subject":
 				e.Subject = h.Value
 			case "From":
 				e.From = h.Value
-			case "Date":
-				if t, err := parseEmailDate(h.Value); err == nil {
-					e.Date = t
-				}
 			}
 		}
 
@@ -146,21 +147,6 @@ func containsLabel(labels []string, target string) bool {
 	return false
 }
 
-func parseEmailDate(s string) (time.Time, error) {
-	formats := []string{
-		time.RFC1123Z,
-		time.RFC1123,
-		"Mon, 2 Jan 2006 15:04:05 -0700",
-		"2 Jan 2006 15:04:05 -0700",
-		time.RFC3339,
-	}
-	for _, f := range formats {
-		if t, err := time.Parse(f, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("unparseable date: %s", s)
-}
 
 // StartAuthServer runs a temporary HTTP server to capture the OAuth2 callback.
 // Returns the authorization code.
