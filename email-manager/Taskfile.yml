@@ -1,0 +1,54 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build all commands
+    cmds:
+      - go build ./cmd/...
+
+  cleanup:
+    desc: Review and delete old/promo emails
+    cmds:
+      - go run ./cmd/cleanup {{.CLI_ARGS}}
+
+  cleanup:dry:
+    desc: Preview what would be deleted (no prompts)
+    cmds:
+      - go run ./cmd/cleanup --dry-run
+
+  cleanup:old:
+    desc: Clean emails older than N days (default 30)
+    cmds:
+      - go run ./cmd/cleanup --older-than 30 {{.CLI_ARGS}}
+
+  important:
+    desc: View important unread emails across all accounts
+    cmds:
+      - go run ./cmd/important {{.CLI_ARGS}}
+
+  important:today:
+    desc: View today's important emails only
+    cmds:
+      - go run ./cmd/important --since 1
+
+  auth:
+    desc: Run OAuth2 setup for an account
+    cmds:
+      - go run ./cmd/auth {{.CLI_ARGS}}
+
+  auth:gmail:
+    desc: "OAuth2 flow for a Gmail account (usage: task auth:gmail EMAIL=user@gmail.com)"
+    vars:
+      EMAIL: '{{.EMAIL}}'
+    cmds:
+      - go run ./cmd/auth --provider gmail --email {{.EMAIL}}
+
+  auth:zoho:
+    desc: OAuth2 flow for Zoho account
+    cmds:
+      - go run ./cmd/auth --provider zoho
+
+  test:
+    desc: Run tests
+    cmds:
+      - go test ./...

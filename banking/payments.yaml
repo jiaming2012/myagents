@@ -1,0 +1,605 @@
+# Payment Registry
+# Source: seeded from Zoho Calendar + Google Sheets (2026-04-10)
+# Edit this file directly when payments change.
+
+# =============================================================
+# Accounts
+# =============================================================
+# Each account has:
+#   id:              short identifier used in payments below
+#   name:            display name
+#   institution:     bank/provider
+#   last4:           last 4 digits of account number
+#   type:            depository | credit | investment | loan
+#   category:        personal | business
+#   monarch_match:   name as it appears in Monarch Money (for balance lookup)
+#   xero_account_id:  Xero account name for balance lookup (business accounts)
+#   role:            income_hub | business | null
+#   nicknames:       list of human-readable aliases for account resolution from calendar notes
+
+accounts:
+  # --- Mercury Personal (Jamal Cole) ---
+  - id: mercury-personal-6343
+    name: "Mercury Personal Checking"
+    institution: "Mercury"
+    last4: "6343"
+    type: depository
+    category: personal
+    monarch_match: null
+    role: income_hub
+    nicknames: ["Mercury Personal", "Mercury 6343", "Mercury Checking"]
+    min_balance: 500
+    # alert_on: error (default) | warning | none — controls email alert threshold
+    alert_on: error
+
+  - id: mercury-personal-savings-5237
+    name: "Mercury Personal Savings"
+    institution: "Mercury"
+    last4: "5237"
+    type: depository
+    category: personal
+    monarch_match: null
+    nicknames: ["Mercury Savings", "Mercury 5237"]
+
+  # --- Mercury Business (Yumyums Kitchen LLC) ---
+  - id: mercury-biz-income-4613
+    name: "Mercury Business Income"
+    institution: "Mercury"
+    last4: "4613"
+    type: depository
+    category: business
+    monarch_match: null
+    xero_account_id: "Mercury: Income (4613)"
+    nicknames: ["Mercury Business", "Mercury Biz Income", "Mercury 4613"]
+
+  - id: mercury-biz-outgoing-5396
+    name: "Mercury Business Outgoing ACH"
+    institution: "Mercury"
+    last4: "5396"
+    type: depository
+    category: business
+    monarch_match: null
+    xero_account_id: "Mercury: Outgoing ACH (5396)"
+    nicknames: ["Mercury Outgoing", "Mercury Biz Outgoing", "Mercury 5396"]
+
+  - id: mercury-biz-operations-0551
+    name: "Mercury Business Operations"
+    institution: "Mercury"
+    last4: "0551"
+    type: depository
+    category: business
+    monarch_match: null
+    xero_account_id: "Mercury: Operations (0551)"
+    nicknames: ["Mercury Operations", "Mercury Biz Ops", "Mercury 0551"]
+
+  - id: mercury-biz-profit-7818
+    name: "Mercury Business Profit (Savings)"
+    institution: "Mercury"
+    last4: "7818"
+    type: depository
+    category: business
+    monarch_match: null
+    xero_account_id: "Mercury: Profit (7818)"
+    nicknames: ["Mercury Profit", "Mercury Biz Savings", "Mercury 7818"]
+
+  # --- Capital One ---
+  - id: cap1-income-8513
+    name: "360 Checking (Income)"
+    institution: "Capital One"
+    last4: "8513"
+    type: depository
+    category: personal
+    monarch_match: "360 Checking (...8513)"
+    nicknames: ["Cap1 Income", "Cap1 8513", "Capital One 8513", "360 Checking Income"]
+    min_balance: 200
+    alert_on: error
+
+  - id: cap1-recurring-4354
+    name: "360 Checking (Recurring ACH)"
+    institution: "Capital One"
+    last4: "4354"
+    type: depository
+    category: personal
+    monarch_match: "360 Checking (...4354)"
+    nicknames: ["Cap1 Recurring", "Cap1 4354", "Capital One 4354", "360 Checking Recurring"]
+    min_balance: 500
+    alert_on: warning
+
+  - id: cap1-savings-5550
+    name: "360 Performance Savings"
+    institution: "Capital One"
+    last4: "5550"
+    type: depository
+    category: personal
+    monarch_match: "360 Performance Savings (...5550)"
+    nicknames: ["Cap1 Savings", "Cap1 5550", "Capital One 5550", "360 Savings"]
+
+  - id: cap1-quicksilver-0732
+    name: "Quicksilver"
+    institution: "Capital One"
+    last4: "0732"
+    type: credit
+    category: personal
+    monarch_match: "Quicksilver (...0732)"
+    nicknames: ["Quicksilver", "Cap1 Quicksilver", "Capital One 0732", "Cap1 0732"]
+
+  # --- Bank of America ---
+  - id: boa-checking-2803
+    name: "Adv Plus Banking"
+    institution: "Bank of America"
+    last4: "2803"
+    type: depository
+    category: personal
+    monarch_match: "Adv Plus Banking (...2803)"
+    nicknames: ["BoA Checking", "BoA 2803", "Bank of America 2803", "Adv Plus Banking"]
+    min_balance: 200
+    alert_on: error
+
+  - id: boa-business-1778
+    name: "Business Adv Fundamentals"
+    institution: "Bank of America"
+    last4: "1778"
+    type: depository
+    category: business
+    monarch_match: null  # TODO: confirm Monarch name
+    xero_account_id: "BoA: Business Checking (1778)"
+    nicknames: ["BoA Business", "BoA 1778", "Bank of America 1778", "BoA Biz"]
+    min_balance: 500
+    alert_on: error
+
+  - id: boa-plat1-5153
+    name: "Platinum Plus Mastercard 1"
+    institution: "Bank of America"
+    last4: "5153"
+    type: credit
+    category: personal
+    monarch_match: "BankAmericard Platinum Plus Mastercard (...5153)"
+    nicknames: ["BoA Plat 1", "BoA 5153", "Bank of America 5153", "Platinum Plus 1"]
+
+  - id: boa-plat2-7250
+    name: "Platinum Plus Mastercard 2"
+    institution: "Bank of America"
+    last4: "7250"
+    type: credit
+    category: personal
+    monarch_match: "BankAmericard Platinum Plus Mastercard (...7250)"
+    nicknames: ["BoA Plat 2", "BoA 7250", "Bank of America 7250", "Platinum Plus 2"]
+
+  - id: boa-visa-2986
+    name: "Visa Platinum Plus"
+    institution: "Bank of America"
+    last4: "2986"
+    type: credit
+    category: personal
+    monarch_match: "Customized Cash Rewards Visa Signature (...2986)"
+    nicknames: ["BoA Visa", "BoA 2986", "Bank of America 2986", "Cash Rewards Visa"]
+
+  - id: boa-corp-2119
+    name: "CORP Account"
+    institution: "Bank of America"
+    last4: "2119"
+    type: credit
+    category: business
+    monarch_match: null  # TODO: confirm Monarch name
+    xero_account_id: "BoA: CORP Account (2119)"
+    nicknames: ["BoA Corp", "BoA 2119", "Bank of America 2119", "CORP"]
+
+  - id: boa-cash-rewards-5819
+    name: "Business Adv Cash Rewards"
+    institution: "Bank of America"
+    last4: "5819"
+    type: credit
+    category: business
+    monarch_match: null  # TODO: confirm Monarch name
+    xero_account_id: "BoA: Jamal Cash Rewards (5819)"
+    nicknames: ["BoA Cash Rewards", "BoA 5819", "Bank of America 5819", "Biz Cash Rewards"]
+
+  # --- Chase ---
+  - id: chase-ink-7667
+    name: "Chase Ink"
+    institution: "Chase"
+    last4: "7667"
+    type: credit
+    category: business
+    monarch_match: null  # TODO: confirm Monarch name
+    xero_account_id: null
+    nicknames: ["Chase 7667", "Ink 7667", "Chase Ink", "Ink"]
+
+  - id: chase-wholefds-7006
+    name: "Whole Foods Card"
+    institution: "Chase"
+    last4: "7006"
+    type: credit
+    category: personal
+    monarch_match: "CREDIT CARD (...7006)"
+    nicknames: ["Whole Foods", "Chase 7006", "Whole Foods Card", "WF Card"]
+
+  # --- Discover ---
+  - id: discover-gray-8886
+    name: "Gray Card"
+    institution: "Discover"
+    last4: "8886"
+    type: credit
+    category: personal
+    monarch_match: "Discover it Card (...8886)"
+    nicknames: ["Discover Gray", "Discover 8886", "Gray Card"]
+
+  - id: discover-rainbow-9035
+    name: "Rainbow Card"
+    institution: "Discover"
+    last4: "9035"
+    type: credit
+    category: personal
+    monarch_match: "Discover it Card (...9035)"
+    nicknames: ["Discover Rainbow", "Discover 9035", "Rainbow Card"]
+
+  - id: discover-debit-8206
+    name: "Cashback Debit"
+    institution: "Discover"
+    last4: "8206"
+    type: depository
+    category: personal
+    monarch_match: "CASHBACK DEBIT (...8206)"
+    nicknames: ["Discover Debit", "Discover 8206", "Cashback Debit"]
+
+  # --- Citi ---
+  - id: citi-rewards-8281
+    name: "Rewards+"
+    institution: "Citi"
+    last4: "8281"
+    type: credit
+    category: personal
+    monarch_match: "Citi Strata Card (...8281)"
+    nicknames: ["Citi", "Citi 8281", "Citi Rewards", "Rewards+"]
+
+  # --- Amex ---
+  - id: amex-delta-1008
+    name: "Delta SkyMiles"
+    institution: "American Express"
+    last4: "1008"
+    type: credit
+    category: personal
+    monarch_match: "Delta SkyMiles Gold Card (...1008)"
+    nicknames: ["Amex", "Amex Delta", "Amex 1008", "Delta SkyMiles", "American Express 1008"]
+
+  - id: amex-platinum-2004
+    name: "Platinum Card"
+    institution: "American Express"
+    last4: "2004"
+    type: credit
+    category: personal
+    monarch_match: "Platinum Card (...2004)"
+    nicknames: ["Amex Platinum", "Amex 2004", "Platinum Card", "American Express 2004"]
+
+  # --- Wells Fargo ---
+  - id: bilt-4607
+    name: "BILT World Elite Mastercard"
+    institution: "Wells Fargo"
+    last4: "4607"
+    type: credit
+    category: personal
+    monarch_match: "BILT WORLD ELITE MASTERCARD (...XXXX-XXXX-XXXX-4607)"
+    nicknames: ["BILT", "BILT 4607", "Wells Fargo 4607", "BILT Mastercard"]
+
+  # --- Apple / Goldman Sachs ---
+  - id: apple-card
+    name: "Apple Card"
+    institution: "Apple Card, Cash, and Savings"
+    last4: null
+    type: credit
+    category: personal
+    monarch_match: "Apple Card"
+    nicknames: ["Apple Card", "Apple Credit"]
+
+  - id: apple-cash
+    name: "Apple Cash"
+    institution: "Apple Card, Cash, and Savings"
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: "Apple Cash"
+    nicknames: ["Apple Cash", "Apple Debit"]
+
+  # --- Navy Federal ---
+  - id: navyfed-checking-7909
+    name: "EveryDay Checking"
+    institution: "Navy Federal"
+    last4: "7909"
+    type: depository
+    category: personal
+    monarch_match: "EveryDay Checking (...7909)"
+    nicknames: ["NavyFed Checking", "NavyFed 7909", "Navy Federal 7909", "NavyFed"]
+    min_balance: 200
+    alert_on: error
+
+  - id: navyfed-savings-7517
+    name: "Share Savings"
+    institution: "Navy Federal"
+    last4: "7517"
+    type: depository
+    category: personal
+    monarch_match: "Share Savings (...7517)"
+    nicknames: ["NavyFed Savings", "NavyFed 7517", "Navy Federal 7517", "Share Savings"]
+
+  # --- Lafayette Federal ---
+  - id: lafayette-checking-0621
+    name: "Checking"
+    institution: "Lafayette Federal"
+    last4: "0621"
+    type: depository
+    category: personal
+    monarch_match: "Checking (...0621)"
+    nicknames: ["Lafayette Checking", "Lafayette 0621", "Lafayette Federal 0621"]
+
+  - id: lafayette-business-3617
+    name: "Business Basic Checking"
+    institution: "Lafayette Federal"
+    last4: "3617"
+    type: depository
+    category: business
+    monarch_match: "Business Basic Checking Account (...3617)"
+    xero_account_id: "LFCU: Checking"
+    nicknames: ["Lafayette Business", "Lafayette 3617", "Lafayette Federal 3617"]
+
+  - id: lafayette-savings-3617s0
+    name: "LFCU Savings"
+    institution: "Lafayette Federal"
+    last4: "3617"
+    type: depository
+    category: business
+    monarch_match: null
+    xero_account_id: "LFCU: Savings"
+    nicknames: ["Lafayette Savings", "LFCU Savings"]
+
+  # --- Fidelity ---
+  - id: fidelity-cash-0789
+    name: "Cash Management"
+    institution: "Fidelity"
+    last4: "0789"
+    type: depository
+    category: personal
+    monarch_match: "Cash Management (...*****0789)"
+    nicknames: ["Fidelity", "Fidelity 0789", "Fidelity Cash", "Cash Management"]
+
+  # --- Loans ---
+  - id: truist-auto-1001
+    name: "Auto Loan"
+    institution: "Truist"
+    last4: "1001"
+    type: loan
+    category: personal
+    monarch_match: "Auto Loan 31001 (...1001)"
+    nicknames: ["Truist Auto", "Truist 1001", "Auto Loan"]
+
+  - id: lafayette-loan-0621
+    name: "Personal Loan"
+    institution: "Lafayette Federal"
+    last4: "0621"
+    type: loan
+    category: personal
+    monarch_match: "Personal Loan (...0621)"
+    nicknames: ["Lafayette Loan", "Lafayette Personal Loan"]
+
+# =============================================================
+# Payments (recurring bills)
+# =============================================================
+# Each payment has:
+#   name:             display name (matches Zoho Calendar event title prefix)
+#   amount:           monthly amount
+#   day_of_month:     due date
+#   funding_account:  references accounts[].id above
+#   autopay:          true | false | null (needs review)
+#   autopay_type:     full | min | null
+#   category:         personal | business
+#   zoho_match:       title prefix in Zoho Calendar (for automated matching)
+
+payments:
+  # --- Business ---
+  - name: "Quickbooks"
+    amount: 38.00
+    day_of_month: 11
+    funding_account: chase-ink-7667
+    autopay: true
+    autopay_type: null
+    category: business
+    zoho_match: "Quickbooks"
+
+  - name: "OnPay"
+    amount: 61.00
+    day_of_month: 2
+    funding_account: boa-business-1778
+    autopay: true
+    autopay_type: null
+    category: business
+    zoho_match: "OnPay"
+
+  - name: "Spotify"
+    amount: 12.78
+    day_of_month: 16
+    funding_account: boa-corp-2119
+    autopay: true
+    autopay_type: null
+    category: business
+    zoho_match: "Spotify"
+
+  # --- Personal ---
+  - name: "Rent"
+    amount: 1000.00
+    day_of_month: 1
+    funding_account: boa-business-1778
+    autopay: false
+    autopay_type: null
+    category: personal
+    zoho_match: "Rent"
+    notes: "Paid from BoA business debit - review if this should move"
+
+  - name: "Progressive (Insurance)"
+    amount: 450.10
+    day_of_month: 30
+    funding_account: boa-business-1778
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Progressive"
+
+  - name: "Chase Credit Card"
+    amount: 156.00
+    day_of_month: 9
+    funding_account: cap1-recurring-4354
+    autopay: null
+    autopay_type: null
+    category: personal
+    zoho_match: "Chase"
+    notes: "NEEDS REVIEW - which account pays this?"
+
+  - name: "Sling"
+    amount: 10.00
+    day_of_month: 10
+    funding_account: boa-business-1778
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Sling"
+
+  - name: "PayPal - Medium"
+    amount: 5.00
+    day_of_month: 26
+    funding_account: boa-business-1778
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "PayPal - Medium"
+
+  - name: "Northwest (Mail Forwarding)"
+    amount: 20.00
+    day_of_month: 16
+    funding_account: mercury-biz-operations-0551
+    autopay: null
+    autopay_type: null
+    category: personal
+    zoho_match: "Northwest"
+    notes: "NEEDS REVIEW - which account pays this?"
+
+  # --- Credit Card Payments (from Google Sheet, not in Zoho Calendar) ---
+  - name: "BoA Platinum Plus 1 - 5153"
+    amount: 953.00
+    day_of_month: 1
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: min
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - not yet in Zoho Calendar"
+
+  - name: "BoA Platinum Plus - 7250"
+    amount: 1801.00
+    day_of_month: 18
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - not yet in Zoho Calendar"
+
+  - name: "BoA Visa Platinum - 2986"
+    amount: 0.00
+    day_of_month: 7
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - pays in full"
+
+  - name: "Discover Gray (full)"
+    amount: 0.00
+    day_of_month: 19
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - pays in full"
+
+  - name: "Discover Rainbow (min)"
+    amount: 0.00
+    day_of_month: 13
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: min
+    category: personal
+    zoho_match: null
+
+  - name: "Citi Rewards+ (full)"
+    amount: 556.68
+    day_of_month: 1
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet"
+
+  - name: "Whole Foods Chase (full)"
+    amount: 868.49
+    day_of_month: 1
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet"
+
+  - name: "Apple Card (full)"
+    amount: 0.00
+    day_of_month: 30
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - pays in full"
+
+  - name: "BILT (full)"
+    amount: 0.00
+    day_of_month: 27
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: null
+    notes: "From Google Sheet - NEEDS REVIEW autopay status"
+
+  - name: "ESCI - Heartland"
+    amount: 55.00
+    day_of_month: 10
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: null
+    category: null
+    zoho_match: null
+    notes: ""
+
+  - name: "ESCI - Gov"
+    amount: 39.04
+    day_of_month: 10
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: null
+    category: null
+    zoho_match: null
+    notes: ""
+
+# =============================================================
+# Transfer Rules
+# =============================================================
+transfer_rules:
+  # All income -> Mercury Personal -> distribute to other accounts
+  personal_hub: mercury-personal-6343
+  # Business income -> Mercury Business Income -> outgoing ACH for business expenses
+  business_hub: mercury-biz-income-4613
+  business_outgoing: mercury-biz-outgoing-5396
+  # When business needs funding: personal hub -> business hub
+  business_funding_source: mercury-personal-6343
+  minimum_coverage_days: 7
+  preferred_coverage_days: 14

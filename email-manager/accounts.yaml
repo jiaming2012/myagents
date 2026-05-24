@@ -1,0 +1,32 @@
+accounts:
+  - name: "Cornell"
+    email: "jac475@cornell.edu"
+    provider: gmail
+    token_file: ".tokens/jac475_cornell_edu.json"
+
+  - name: "Finance"
+    email: "jcolefinance@gmail.com"
+    provider: gmail
+    token_file: ".tokens/jcolefinance_gmail_com.json"
+
+  - name: "Crypto"
+    email: "jcolecrypto@gmail.com"
+    provider: gmail
+    token_file: ".tokens/jcolecrypto_gmail_com.json"
+
+  - name: "PureCraft"
+    email: "purecraftcodingsolutions@gmail.com"
+    provider: gmail
+    token_file: ".tokens/purecraftcodingsolutions_gmail_com.json"
+
+  - name: "YumYums"
+    email: "jamal@yumyums.kitchen"
+    provider: zoho
+    # Uses ZOHO_* env vars for auth
+
+cleanup:
+  older_than_days: 30
+  categories:
+    - promotions
+    - social
+    - updates

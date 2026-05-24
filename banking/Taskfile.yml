@@ -1,0 +1,120 @@
+version: "3"
+
+tasks:
+  install:
+    desc: Install Python dependencies
+    cmds:
+      - pip install -r requirements.txt
+
+  payments:
+    desc: List upcoming payment events (default 7 days)
+    cmds:
+      - python zoho_calendar_payments.py {{.CLI_ARGS}}
+
+  payments:today:
+    desc: List today's payment events
+    cmds:
+      - python zoho_calendar_payments.py --days 1
+
+  payments:month:
+    desc: List payment events for the next 30 days
+    cmds:
+      - python zoho_calendar_payments.py --days 30
+
+  bill-map:
+    desc: Show bill-to-account mapping with balances (default 30 days)
+    cmds:
+      - python zoho_calendar_payments.py --bill-map {{.CLI_ARGS}}
+
+  bill-map:month:
+    desc: Bill mapping for next 30 days
+    cmds:
+      - python zoho_calendar_payments.py --bill-map --days 30
+
+  report:
+    desc: Weekly coverage report (all windows)
+    cmds:
+      - python coverage_report.py {{.CLI_ARGS}}
+
+  report:week:
+    desc: Coverage report for next 7 days only
+    cmds:
+      - python coverage_report.py --days 7
+
+  forecast:
+    desc: Payment forecast (default 30 days)
+    cmds:
+      - python payment_forecast.py {{.CLI_ARGS}}
+
+  forecast:week:
+    desc: Payment forecast for next 7 days
+    cmds:
+      - python payment_forecast.py --days 7
+
+  forecast:month:
+    desc: Payment forecast for next 30 days
+    cmds:
+      - python payment_forecast.py --days 30
+
+  forecast:email:
+    desc: Email forecast summary (default 30 days)
+    cmds:
+      - python payment_forecast.py --email-summary {{.CLI_ARGS}}
+
+  forecast:email-weekly:
+    desc: Email forecast summary for next 7 days
+    cmds:
+      - python payment_forecast.py --email-summary --days 7
+
+  balances:
+    desc: Show Monarch Money account balances
+    cmds:
+      - python monarch_balances.py {{.CLI_ARGS}}
+
+  balances:login:
+    desc: Re-login to Monarch Money (interactive)
+    cmds:
+      - python monarch_balances.py --login
+
+  xero:auth:
+    desc: Run Xero OAuth flow then copy token to this project
+    cmds:
+      - echo "Starting Xero OAuth server..."
+      - echo "1. Visit http://localhost:9091/login in your browser"
+      - echo "2. Authorize the app on Xero"
+      - echo "3. Once you see 'Token saved', press Ctrl+C to stop the server"
+      - echo ""
+      - cmd: python /Users/jamal/projects/yumyums/accounting/xero/app.py
+        ignore_error: true
+      - cp /Users/jamal/projects/yumyums/accounting/xero/.xero_token.json .xero_token.json
+      - echo "Token copied. Run 'task forecast' to verify business balances load."
+
+  audit:
+    desc: Transaction coverage audit (default 7 days)
+    cmds:
+      - python transaction_audit.py {{.CLI_ARGS}}
+
+  budget:
+    desc: Monarch budget and goal tracker
+    cmds:
+      - python monarch_budget.py {{.CLI_ARGS}}
+
+  health:
+    desc: Weekly financial health check (all checks)
+    cmds:
+      - python weekly_health.py {{.CLI_ARGS}}
+
+  health:email:
+    desc: Email weekly financial health report
+    cmds:
+      - python weekly_health.py --email {{.CLI_ARGS}}
+
+  health:preview:
+    desc: Preview weekly health report as HTML
+    cmds:
+      - python weekly_health.py --dry-run
+
+  test:
+    desc: Run integration tests (requires valid .env credentials)
+    cmds:
+      - python -m pytest test_integration.py -v
