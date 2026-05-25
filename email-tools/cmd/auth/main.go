@@ -19,8 +19,8 @@ import (
 	"golang.org/x/oauth2/google"
 	"google.golang.org/api/gmail/v1"
 
-	"github.com/jamal/email-manager/internal/config"
-	"github.com/jamal/email-manager/internal/provider"
+	"github.com/jamal/email-tools/internal/config"
+	"github.com/jamal/email-tools/internal/provider"
 	"github.com/joho/godotenv"
 )
 

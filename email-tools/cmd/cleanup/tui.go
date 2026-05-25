@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/jamal/email-manager/internal/email"
-	"github.com/jamal/email-manager/internal/provider"
+	"github.com/jamal/email-tools/internal/email"
+	"github.com/jamal/email-tools/internal/provider"
 )
 
 // --- styles ---

@@ -14,7 +14,7 @@ import (
 	"google.golang.org/api/gmail/v1"
 	"google.golang.org/api/option"
 
-	"github.com/jamal/email-manager/internal/email"
+	"github.com/jamal/email-tools/internal/email"
 )
 
 // GmailProvider implements EmailProvider for Gmail accounts.

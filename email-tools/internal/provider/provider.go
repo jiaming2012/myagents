@@ -3,7 +3,7 @@ package provider
 import (
 	"context"
 
-	"github.com/jamal/email-manager/internal/email"
+	"github.com/jamal/email-tools/internal/email"
 )
 
 // EmailProvider abstracts email operations across Gmail and Zoho.

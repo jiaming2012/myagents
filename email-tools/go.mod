@@ -1,4 +1,4 @@
-module github.com/jamal/email-manager
+module github.com/jamal/email-tools
 
 go 1.25.5
 

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/jamal/email-manager/internal/email"
+	"github.com/jamal/email-tools/internal/email"
 )
 
 // ZohoProvider implements EmailProvider for Zoho Mail accounts.
