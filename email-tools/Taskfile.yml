@@ -21,15 +21,38 @@ tasks:
     cmds:
       - go run ./cmd/cleanup --older-than 30 {{.CLI_ARGS}}
 
-  important:
-    desc: View important unread emails across all accounts
+  important:download:
+    desc: Download emails from all accounts
     cmds:
-      - go run ./cmd/important {{.CLI_ARGS}}
+      - go run ./cmd/important download {{.CLI_ARGS}}
 
-  important:today:
-    desc: View today's important emails only
+  important:analyze:
+    desc: Analyze downloaded emails with Claude Code
     cmds:
-      - go run ./cmd/important --since 1
+      - |
+        while true; do
+          go run ./cmd/important prepare-chunk --chunk-size 10
+          if [ $? -ne 0 ]; then break; fi
+          claude -p "$(cat .cache/important/chunk_prompt.txt)" > .cache/important/chunk_response.txt
+          go run ./cmd/important ingest-chunk
+        done
+
+  important:view:
+    desc: View analyzed emails in TUI
+    cmds:
+      - go run ./cmd/important view {{.CLI_ARGS}}
+
+  important:status:
+    desc: Show download/analysis progress
+    cmds:
+      - go run ./cmd/important status
+
+  important:
+    desc: Full pipeline - download, analyze, view
+    cmds:
+      - task: important:download
+      - task: important:analyze
+      - task: important:view
 
   auth:
     desc: Run OAuth2 setup for an account

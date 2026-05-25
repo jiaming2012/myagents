@@ -1,5 +1,6 @@
 .env
 .tokens/
+.cache/
 auth
 cleanup
 important

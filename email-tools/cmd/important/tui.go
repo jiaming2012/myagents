@@ -9,222 +9,52 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"github.com/jamal/email-tools/internal/email"
+	"github.com/jamal/email-tools/internal/pipeline"
 )
 
 var (
-	headerStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12"))
-	activeTab   = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	fromStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	acctStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
-	helpStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
-	countStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("13"))
+	activeTab = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("10"))
+	dimStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+	fromStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	acctStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("13"))
+	helpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("8"))
+
 	urgentStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("9"))
 	actionStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
 	fyiStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("12"))
+	topicStyle  = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("5"))
+	summaryStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("7"))
 )
 
-// --- urgency levels ---
+// --- data types ---
 
-type urgency int
-
-const (
-	urgentLevel urgency = iota
-	actionLevel
-	infoLevel
-)
-
-func (u urgency) String() string {
-	switch u {
-	case urgentLevel:
-		return "URGENT"
-	case actionLevel:
-		return "ACTION NEEDED"
-	default:
-		return "FYI"
-	}
+type acctData struct {
+	name     string
+	insights []pipeline.EmailInsight
 }
 
-func (u urgency) style() lipgloss.Style {
-	switch u {
-	case urgentLevel:
-		return urgentStyle
-	case actionLevel:
-		return actionStyle
-	default:
-		return fyiStyle
-	}
-}
-
-// --- topic categories ---
-
-type topic int
-
-const (
-	topicFinance topic = iota
-	topicSecurity
-	topicWork
-	topicSocial
-	topicShopping
-	topicTravel
-	topicHealth
-	topicNewsletter
-	topicOther
-)
-
-var allTopics = []topic{
-	topicFinance, topicSecurity, topicWork, topicSocial,
-	topicShopping, topicTravel, topicHealth, topicNewsletter, topicOther,
-}
-
-func (t topic) String() string {
-	switch t {
-	case -1:
-		return "All"
-	case topicFinance:
-		return "Finance"
-	case topicSecurity:
-		return "Security"
-	case topicWork:
-		return "Work"
-	case topicSocial:
-		return "Social"
-	case topicShopping:
-		return "Shopping"
-	case topicTravel:
-		return "Travel"
-	case topicHealth:
-		return "Health"
-	case topicNewsletter:
-		return "Newsletter"
-	default:
-		return "Other"
-	}
-}
-
-// --- classification ---
-
-type classified struct {
-	email   email.Email
-	account string
-	urgency urgency
-	topic   topic
+type categoryTab struct {
+	topic string
+	items []pipeline.EmailInsight
+	count int
 }
 
 type displayItem struct {
 	isHeader bool
 	label    string
-	style    lipgloss.Style
 	count    int
-	item     classified
-}
-
-func classifyEmail(e email.Email, accountName string) classified {
-	subj := strings.ToLower(e.Subject)
-	from := strings.ToLower(e.From)
-
-	c := classified{email: e, account: accountName, urgency: infoLevel, topic: topicOther}
-
-	urgentKeywords := []string{"urgent", "suspended", "suspension", "immediately", "action required",
-		"verify your", "confirm your identity", "unauthorized", "security alert"}
-	actionKeywords := []string{"payment declined", "payment failed", "failed to process",
-		"couldn't process", "balance due", "overdue", "reminder:", "requires",
-		"update your", "finish setting up", "complete your", "charged your", "has been charged"}
-
-	for _, kw := range urgentKeywords {
-		if strings.Contains(subj, kw) || strings.Contains(from, kw) {
-			c.urgency = urgentLevel
-			break
-		}
-	}
-	if c.urgency != urgentLevel {
-		for _, kw := range actionKeywords {
-			if strings.Contains(subj, kw) {
-				c.urgency = actionLevel
-				break
-			}
-		}
-	}
-
-	financeSenders := []string{"mercury", "bluevine", "wave", "xero", "onpay", "coinbase",
-		"tradier", "digitalocean", "vultr", "stripe", "paypal", "venmo",
-		"bank", "invoice", "receipt", "billing"}
-	securitySenders := []string{"no-reply@accounts", "noreply@accounts",
-		"security-noreply", "alert@"}
-	workSenders := []string{"linear", "github", "slack", "notion", "jira", "gitlab",
-		"bitbucket", "asana", "trello", "confluence", "archer"}
-	socialSenders := []string{"facebook", "linkedin", "twitter", "instagram",
-		"discord", "meetup", "pickleball", "dupr", "podplay"}
-	shoppingSenders := []string{"amazon", "ebay", "walmart", "target", "etsy",
-		"fiverr", "crexi", "restaurant depot", "restaurantstore"}
-	travelSenders := []string{"airbnb", "booking.com", "expedia", "hotels",
-		"airline", "united", "delta", "southwest"}
-	healthSenders := []string{"health", "medical", "pharmacy", "doctor",
-		"hospital", "dental", "insurance"}
-	newsletterSenders := []string{"newsletter", "nytimes", "nytdirect", "substack",
-		"beehiiv", "the-messenger", "editorpicks", "breakingnews", "whimsical",
-		"tradingview", "digest"}
-
-	fromLower := from + " " + subj
-	match := func(keywords []string) bool {
-		for _, kw := range keywords {
-			if strings.Contains(fromLower, kw) {
-				return true
-			}
-		}
-		return false
-	}
-
-	switch {
-	case match(securitySenders) || strings.Contains(subj, "security alert") || strings.Contains(subj, "sign-in"):
-		c.topic = topicSecurity
-	case match(financeSenders) || strings.Contains(subj, "payment") || strings.Contains(subj, "invoice"):
-		c.topic = topicFinance
-	case match(workSenders):
-		c.topic = topicWork
-	case match(travelSenders):
-		c.topic = topicTravel
-	case match(healthSenders):
-		c.topic = topicHealth
-	case match(shoppingSenders):
-		c.topic = topicShopping
-	case match(socialSenders):
-		c.topic = topicSocial
-	case match(newsletterSenders):
-		c.topic = topicNewsletter
-	}
-
-	if c.topic == topicSecurity && c.urgency == infoLevel {
-		c.urgency = actionLevel
-	}
-
-	return c
-}
-
-// --- data types ---
-
-type acctData struct {
-	name   string
-	email  string
-	emails []email.Email
-}
-
-type categoryTab struct {
-	topic topic
-	items []classified
-	count int
+	item     pipeline.EmailInsight
 }
 
 // --- model ---
 
 type model struct {
 	accounts   []acctData
-	all        []classified  // all classified emails
-	acctIdx    int           // -1 = All, 0..n = specific account
+	all        []pipeline.EmailInsight // all insights
+	acctIdx    int                     // -1 = All, 0..n = specific account
 	categories []categoryTab
 	catIdx     int
-	allGrouped bool // true = group by topic in All tab, false = flat timeline
+	allGrouped bool // true = group by topic in All tab
 	cursor     int
 	offset     int
 	height     int
@@ -236,15 +66,13 @@ type model struct {
 func newModel(accounts []acctData) model {
 	m := model{
 		accounts: accounts,
-		acctIdx:  -1, // "All" by default
+		acctIdx:  -1,
 		height:   24,
 		width:    80,
 	}
 
 	for _, acct := range accounts {
-		for _, e := range acct.emails {
-			m.all = append(m.all, classifyEmail(e, acct.name))
-		}
+		m.all = append(m.all, acct.insights...)
 	}
 
 	m.rebuildCategories()
@@ -252,36 +80,46 @@ func newModel(accounts []acctData) model {
 }
 
 func (m *model) rebuildCategories() {
-	// Filter by account
-	var filtered []classified
-	for _, c := range m.all {
-		if m.acctIdx == -1 || c.account == m.accounts[m.acctIdx].name {
-			filtered = append(filtered, c)
+	var filtered []pipeline.EmailInsight
+	for _, ins := range m.all {
+		if m.acctIdx == -1 || ins.AccountName == m.accounts[m.acctIdx].name {
+			filtered = append(filtered, ins)
 		}
 	}
 
-	byTopic := make(map[topic][]classified)
-	for _, c := range filtered {
-		byTopic[c.topic] = append(byTopic[c.topic], c)
+	byTopic := make(map[string][]pipeline.EmailInsight)
+	for _, ins := range filtered {
+		byTopic[ins.Topic] = append(byTopic[ins.Topic], ins)
 	}
 
 	// "All" category first
 	m.categories = []categoryTab{{
-		topic: -1,
+		topic: "All",
 		items: filtered,
 		count: len(filtered),
 	}}
-	for _, t := range allTopics {
-		if items, ok := byTopic[t]; ok {
-			m.categories = append(m.categories, categoryTab{
-				topic: t,
-				items: items,
-				count: len(items),
-			})
-		}
+
+	// Sort topics by count descending
+	type topicCount struct {
+		topic string
+		count int
+	}
+	var topics []topicCount
+	for t, items := range byTopic {
+		topics = append(topics, topicCount{t, len(items)})
+	}
+	sort.Slice(topics, func(i, j int) bool {
+		return topics[i].count > topics[j].count
+	})
+
+	for _, tc := range topics {
+		m.categories = append(m.categories, categoryTab{
+			topic: tc.topic,
+			items: byTopic[tc.topic],
+			count: tc.count,
+		})
 	}
 
-	// Reset category selection if out of bounds
 	if m.catIdx >= len(m.categories) {
 		m.catIdx = 0
 	}
@@ -299,52 +137,45 @@ func (m model) buildItems() []displayItem {
 
 	cat := m.categories[m.catIdx]
 
-	// "All" tab: grouped by topic or flat timeline
-	if cat.topic == -1 && m.allGrouped {
-		byTopic := make(map[topic][]classified)
-		for _, c := range cat.items {
-			byTopic[c.topic] = append(byTopic[c.topic], c)
+	// "All" tab with grouping
+	if cat.topic == "All" && m.allGrouped {
+		byTopic := make(map[string][]pipeline.EmailInsight)
+		for _, ins := range cat.items {
+			byTopic[ins.Topic] = append(byTopic[ins.Topic], ins)
 		}
 
-		// Sort each topic's emails by date desc
-		for t := range byTopic {
-			items := byTopic[t]
-			sort.Slice(items, func(i, j int) bool {
-				return items[i].email.Date.After(items[j].email.Date)
-			})
-		}
-
-		// Use the same topic order as the category tabs (skip "All" at index 0)
 		var display []displayItem
 		for _, tab := range m.categories[1:] {
 			items, ok := byTopic[tab.topic]
 			if !ok {
 				continue
 			}
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].Date.After(items[j].Date)
+			})
 			display = append(display, displayItem{
 				isHeader: true,
-				label:    tab.topic.String(),
+				label:    tab.topic,
 				count:    len(items),
 			})
-			for _, c := range items {
-				display = append(display, displayItem{item: c})
+			for _, ins := range items {
+				display = append(display, displayItem{item: ins})
 			}
 		}
 		return display
 	}
 
-	// Specific topic tab: flat list sorted by timestamp
-	items := make([]classified, len(cat.items))
+	// Flat list sorted by timestamp
+	items := make([]pipeline.EmailInsight, len(cat.items))
 	copy(items, cat.items)
 	sort.Slice(items, func(i, j int) bool {
-		return items[i].email.Date.After(items[j].email.Date)
+		return items[i].Date.After(items[j].Date)
 	})
 
 	var display []displayItem
-	for _, c := range items {
-		display = append(display, displayItem{item: c})
+	for _, ins := range items {
+		display = append(display, displayItem{item: ins})
 	}
-
 	return display
 }
 
@@ -395,7 +226,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.adjustScroll()
 			}
 
-		// Category tabs: tab / shift+tab
 		case "tab":
 			if len(m.categories) > 1 {
 				m.catIdx = (m.catIdx + 1) % len(m.categories)
@@ -412,18 +242,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.items = m.buildItems()
 			}
 
-		// Toggle grouped/flat in All tab
 		case "g":
-			if len(m.categories) > 0 && m.categories[m.catIdx].topic == -1 {
+			if len(m.categories) > 0 && m.categories[m.catIdx].topic == "All" {
 				m.allGrouped = !m.allGrouped
 				m.cursor = 0
 				m.offset = 0
 				m.items = m.buildItems()
 			}
 
-		// Account tabs: left/right or h/l
 		case "right", "l":
-			// cycle: -1 (All) -> 0 -> 1 -> ... -> n-1 -> -1
 			m.acctIdx++
 			if m.acctIdx >= len(m.accounts) {
 				m.acctIdx = -1
@@ -450,7 +277,7 @@ func (m *model) adjustScroll() {
 		}
 	}
 	lines := 0
-	visible := m.height - 8
+	visible := m.height - 10
 	for i := m.offset; i < len(m.items); i++ {
 		if m.items[i].isHeader {
 			lines += 2
@@ -478,7 +305,6 @@ func (m model) View() string {
 
 	// === Row 1: Account tabs ===
 	var acctTabs []string
-	// "All" tab
 	allCount := len(m.all)
 	if m.acctIdx == -1 {
 		acctTabs = append(acctTabs, activeTab.Render(fmt.Sprintf("[All (%d)]", allCount)))
@@ -486,7 +312,7 @@ func (m model) View() string {
 		acctTabs = append(acctTabs, dimStyle.Render(fmt.Sprintf(" All (%d) ", allCount)))
 	}
 	for i, a := range m.accounts {
-		label := fmt.Sprintf("%s (%d)", a.name, len(a.emails))
+		label := fmt.Sprintf("%s (%d)", a.name, len(a.insights))
 		if i == m.acctIdx {
 			acctTabs = append(acctTabs, activeTab.Render("["+label+"]"))
 		} else {
@@ -505,7 +331,7 @@ func (m model) View() string {
 
 	var catTabs []string
 	for i, cat := range m.categories {
-		label := fmt.Sprintf("%s (%d)", cat.topic.String(), cat.count)
+		label := fmt.Sprintf("%s (%d)", cat.topic, cat.count)
 		if i == m.catIdx {
 			catTabs = append(catTabs, activeTab.Render("["+label+"]"))
 		} else {
@@ -516,7 +342,7 @@ func (m model) View() string {
 
 	// === Email list ===
 	lines := 0
-	maxLines := m.height - 8
+	maxLines := m.height - 10
 	navIdx := 0
 
 	for i, item := range m.items {
@@ -531,27 +357,29 @@ func (m model) View() string {
 			if lines+2 > maxLines {
 				break
 			}
-			b.WriteString(item.style.Render(fmt.Sprintf("  === %s (%d) ===", item.label, item.count)))
+			b.WriteString(topicStyle.Render(fmt.Sprintf("  === %s (%d) ===", item.label, item.count)))
 			b.WriteString("\n\n")
 			lines += 2
 		} else {
-			if lines+3 > maxLines {
+			if lines+4 > maxLines {
 				break
 			}
 
-			e := item.item.email
+			ins := item.item
 			cursor := "  "
 			if navIdx == m.cursor {
 				cursor = "> "
 			}
 
 			unreadMark := " "
-			if e.Unread {
+			if ins.Unread {
 				unreadMark = "●"
 			}
 
-			subj := e.Subject
-			maxSubj := m.width - 25
+			urgTag := urgencyTag(ins.Urgency)
+
+			subj := ins.Subject
+			maxSubj := m.width - 30
 			if maxSubj < 30 {
 				maxSubj = 30
 			}
@@ -559,27 +387,43 @@ func (m model) View() string {
 				subj = subj[:maxSubj-3] + "..."
 			}
 
-			age := formatAge(time.Since(e.Date))
-			snippet := e.Snippet
+			age := formatAge(time.Since(ins.Date))
+
+			if navIdx == m.cursor {
+				b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%s %s %q  %s\n", unreadMark, urgTag, subj, dimStyle.Render(age+" ago")))
+			} else {
+				b.WriteString(fmt.Sprintf("%s%s %s %q  %s\n", cursor, unreadMark, urgTag, subj, dimStyle.Render(age+" ago")))
+			}
+			b.WriteString(fmt.Sprintf("      %s — %s\n", fromStyle.Render(ins.From), acctStyle.Render(ins.AccountName)))
+
+			// Show AI summary instead of snippet
+			summary := ins.Summary
+			if summary == "" {
+				summary = ins.Snippet
+			}
 			maxSnip := m.width - 10
 			if maxSnip < 40 {
 				maxSnip = 40
 			}
-			if len(snippet) > maxSnip {
-				snippet = snippet[:maxSnip-3] + "..."
+			if len(summary) > maxSnip {
+				summary = summary[:maxSnip-3] + "..."
 			}
+			b.WriteString(fmt.Sprintf("      %s\n", summaryStyle.Render(summary)))
 
-			acctTag := acctStyle.Render(item.item.account)
-
-			if navIdx == m.cursor {
-				b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%s %q  %s\n", unreadMark, subj, dimStyle.Render(age+" ago")))
-			} else {
-				b.WriteString(fmt.Sprintf("%s%s %q  %s\n", cursor, unreadMark, subj, dimStyle.Render(age+" ago")))
-			}
-			b.WriteString(fmt.Sprintf("      %s — %s\n", fromStyle.Render(e.From), acctTag))
-			b.WriteString(fmt.Sprintf("      %s\n", dimStyle.Render(snippet)))
 			lines += 3
 			navIdx++
+		}
+	}
+
+	// Detail pane for selected email
+	if m.navigableLen() > 0 {
+		idx := m.cursorToItemIdx(m.cursor)
+		if idx < len(m.items) && !m.items[idx].isHeader {
+			ins := m.items[idx].item
+			if ins.WhyImportant != "" {
+				b.WriteString("\n")
+				b.WriteString(dimStyle.Render("  Why: ") + ins.WhyImportant + "\n")
+			}
 		}
 	}
 
@@ -589,11 +433,21 @@ func (m model) View() string {
 		b.WriteString(dimStyle.Render(fmt.Sprintf("\n  %d of %d", m.cursor+1, total)))
 	}
 
-	// Help
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelp())
 
 	return b.String()
+}
+
+func urgencyTag(urgency string) string {
+	switch urgency {
+	case "urgent":
+		return urgentStyle.Render("[URGENT]")
+	case "action_needed":
+		return actionStyle.Render("[ACTION]")
+	default:
+		return fyiStyle.Render("[FYI]")
+	}
 }
 
 func (m model) renderHelp() string {
