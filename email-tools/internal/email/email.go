@@ -8,7 +8,11 @@ type Email struct {
 	Subject string
 	From    string
 	Snippet string
+	Body    string
 	Date    time.Time
 	Labels  []string
 	Unread  bool
 }
+
+// MaxBodyLen is the max characters of email body to retain.
+const MaxBodyLen = 2000

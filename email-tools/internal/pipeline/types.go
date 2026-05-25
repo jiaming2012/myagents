@@ -27,6 +27,7 @@ type DownloadedEmail struct {
 	Subject      string    `json:"subject"`
 	From         string    `json:"from"`
 	Snippet      string    `json:"snippet"`
+	Body         string    `json:"body,omitempty"`
 	Date         time.Time `json:"date"`
 	Labels       []string  `json:"labels,omitempty"`
 	Unread       bool      `json:"unread"`
@@ -56,4 +57,5 @@ type EmailInsight struct {
 	Urgency      string    `json:"urgency"`
 	Summary      string    `json:"summary"`
 	WhyImportant string    `json:"why_important"`
+	ActionItems  []string  `json:"action_items,omitempty"`
 }

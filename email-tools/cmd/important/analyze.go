@@ -73,6 +73,7 @@ For each email, return a JSON object with:
 - "urgency": one of ["urgent", "action_needed", "fyi"]
 - "summary": a 1-2 sentence plain-text summary of what this email is about
 - "why_important": a brief explanation of why this might need attention, or "Routine" if it doesn't
+- "action_items": an array of specific, actionable steps the user should take (e.g. "Pay $450.10 to Progressive by May 30", "Update payment method on Amazon"). Empty array [] if no action needed.
 
 Return ONLY a JSON array of objects. No markdown fences, no explanation.
 
@@ -80,6 +81,13 @@ Emails:
 `)
 	for _, e := range chunk {
 		fmt.Fprintf(&b, "---\nID: %s\nAccount: %s\nFrom: %s\nSubject: %s\nSnippet: %s\nDate: %s\nUnread: %v\n", e.ID, e.AccountName, e.From, e.Subject, e.Snippet, e.Date.Format(time.RFC3339), e.Unread)
+		if e.Body != "" {
+			body := e.Body
+			if len(body) > 1000 {
+				body = body[:1000]
+			}
+			fmt.Fprintf(&b, "Body:\n%s\n", body)
+		}
 	}
 
 	promptPath := pipeline.ChunkPromptPath(root)

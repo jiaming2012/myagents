@@ -2,11 +2,13 @@ package provider
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"golang.org/x/oauth2"
@@ -61,8 +63,8 @@ func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResult
 
 	var emails []email.Email
 	for _, msg := range resp.Messages {
-		full, err := g.service.Users.Messages.Get("me", msg.Id).Format("metadata").
-			MetadataHeaders("Subject", "From", "Date").Context(ctx).Do()
+		full, err := g.service.Users.Messages.Get("me", msg.Id).Format("full").
+			Context(ctx).Do()
 		if err != nil {
 			continue
 		}
@@ -74,7 +76,6 @@ func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResult
 			Unread:  containsLabel(full.LabelIds, "UNREAD"),
 		}
 
-		// Use internalDate (epoch millis) as primary — always present and reliable
 		if full.InternalDate > 0 {
 			e.Date = time.UnixMilli(full.InternalDate)
 		}
@@ -86,6 +87,12 @@ func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResult
 			case "From":
 				e.From = h.Value
 			}
+		}
+
+		// Extract plain text body
+		e.Body = extractPlainText(full.Payload)
+		if len(e.Body) > email.MaxBodyLen {
+			e.Body = e.Body[:email.MaxBodyLen]
 		}
 
 		emails = append(emails, e)
@@ -136,6 +143,28 @@ func SaveToken(path string, token *oauth2.Token) error {
 	}
 	defer f.Close()
 	return json.NewEncoder(f).Encode(token)
+}
+
+// extractPlainText walks a Gmail message payload tree and returns the
+// first text/plain part it finds, decoded from base64.
+func extractPlainText(payload *gmail.MessagePart) string {
+	if payload == nil {
+		return ""
+	}
+	// Direct text/plain body
+	if payload.MimeType == "text/plain" && payload.Body != nil && payload.Body.Data != "" {
+		data, err := base64.URLEncoding.DecodeString(payload.Body.Data)
+		if err == nil {
+			return strings.TrimSpace(string(data))
+		}
+	}
+	// Recurse into multipart parts
+	for _, part := range payload.Parts {
+		if text := extractPlainText(part); text != "" {
+			return text
+		}
+	}
+	return ""
 }
 
 func containsLabel(labels []string, target string) bool {

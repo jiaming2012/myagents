@@ -434,6 +434,12 @@ func (m model) View() string {
 				b.WriteString("\n")
 				b.WriteString(dimStyle.Render("  Why: ") + ins.WhyImportant + "\n")
 			}
+			if len(ins.ActionItems) > 0 {
+				b.WriteString(actionStyle.Render("  Action items:") + "\n")
+				for _, item := range ins.ActionItems {
+					b.WriteString("    → " + item + "\n")
+				}
+			}
 		}
 	}
 

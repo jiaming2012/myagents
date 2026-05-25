@@ -48,9 +48,9 @@ func runDownload(args []string) {
 		}
 	}
 
-	seen := make(map[string]bool)
-	for _, e := range manifest.Emails {
-		seen[e.ID] = true
+	existingIdx := make(map[string]int)
+	for i, e := range manifest.Emails {
+		existingIdx[e.ID] = i
 	}
 
 	// Filter accounts
@@ -64,8 +64,9 @@ func runDownload(args []string) {
 
 	// Fetch in parallel
 	type result struct {
-		status pipeline.AccountFetchStatus
-		emails []pipeline.DownloadedEmail
+		status    pipeline.AccountFetchStatus
+		newEmails []pipeline.DownloadedEmail
+		updates   []pipeline.DownloadedEmail
 	}
 	results := make([]result, len(accounts))
 	var wg sync.WaitGroup
@@ -105,22 +106,26 @@ func runDownload(args []string) {
 				return
 			}
 
-			var downloaded []pipeline.DownloadedEmail
+			var newEmails []pipeline.DownloadedEmail
+			var updates []pipeline.DownloadedEmail
 			for _, e := range emails {
-				if seen[e.ID] {
-					continue
-				}
-				downloaded = append(downloaded, pipeline.DownloadedEmail{
+				de := pipeline.DownloadedEmail{
 					ID:           e.ID,
 					AccountName:  acct.Name,
 					AccountEmail: acct.Email,
 					Subject:      e.Subject,
 					From:         e.From,
 					Snippet:      e.Snippet,
+					Body:         e.Body,
 					Date:         e.Date,
 					Labels:       e.Labels,
 					Unread:       e.Unread,
-				})
+				}
+				if _, exists := existingIdx[e.ID]; exists {
+					updates = append(updates, de)
+				} else {
+					newEmails = append(newEmails, de)
+				}
 			}
 
 			results[i] = result{
@@ -129,16 +134,18 @@ func runDownload(args []string) {
 					Email:     acct.Email,
 					Provider:  acct.Provider,
 					FetchedAt: time.Now(),
-					Count:     len(downloaded),
+					Count:     len(newEmails),
 				},
-				emails: downloaded,
+				newEmails: newEmails,
+				updates:   updates,
 			}
 		}(i, acct)
 	}
 	wg.Wait()
 
-	// Merge results
+	// Merge results: update existing emails, append new ones
 	newCount := 0
+	updatedCount := 0
 	manifest.Accounts = nil
 	for _, r := range results {
 		manifest.Accounts = append(manifest.Accounts, r.status)
@@ -146,8 +153,16 @@ func runDownload(args []string) {
 			fmt.Fprintf(os.Stderr, "  %s: %s\n", r.status.Name, r.status.Error)
 			continue
 		}
-		manifest.Emails = append(manifest.Emails, r.emails...)
-		newCount += len(r.emails)
+		// Update existing emails (e.g. unread status changed)
+		for _, u := range r.updates {
+			if idx, ok := existingIdx[u.ID]; ok {
+				manifest.Emails[idx] = u
+				updatedCount++
+			}
+		}
+		// Append new emails
+		manifest.Emails = append(manifest.Emails, r.newEmails...)
+		newCount += len(r.newEmails)
 	}
 
 	// Enforce max limit: keep newest
@@ -163,7 +178,7 @@ func runDownload(args []string) {
 		os.Exit(1)
 	}
 
-	fmt.Printf("Downloaded %d new emails (%d total, %d accounts)\n", newCount, len(manifest.Emails), len(accounts))
+	fmt.Printf("Downloaded %d new, %d updated (%d total, %d accounts)\n", newCount, updatedCount, len(manifest.Emails), len(accounts))
 }
 
 func buildDownloadQuery(providerType string, sinceDays int) string {
