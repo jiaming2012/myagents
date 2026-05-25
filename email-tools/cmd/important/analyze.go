@@ -62,6 +62,11 @@ func runPrepareChunk(args []string) {
 	var b strings.Builder
 	b.WriteString(`You are an email triage assistant. Classify each email below.
 
+IMPORTANT: Be aggressive about marking promotional, marketing, newsletter, and sales emails as "fyi".
+Only use "urgent" for things that require immediate action to prevent harm (account suspension, security breach, payment failure blocking a service).
+Only use "action_needed" for things that genuinely need the user to do something soon (bills due, expiring deadlines, security alerts, failed transactions).
+Marketing sales ("40% off!", "Sale ends tonight!"), newsletters, digests, and social notifications are always "fyi".
+
 For each email, return a JSON object with:
 - "email_id": the ID provided
 - "topic": one of ["Finance", "Security", "Work", "Social", "Shopping", "Travel", "Health", "Newsletter", "Other"]

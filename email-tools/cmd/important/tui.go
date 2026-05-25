@@ -55,6 +55,7 @@ type model struct {
 	categories []categoryTab
 	catIdx     int
 	allGrouped bool // true = group by topic in All tab
+	hideFYI    bool // true = hide FYI urgency emails
 	cursor     int
 	offset     int
 	height     int
@@ -67,6 +68,7 @@ func newModel(accounts []acctData) model {
 	m := model{
 		accounts: accounts,
 		acctIdx:  -1,
+		hideFYI:  true,
 		height:   24,
 		width:    80,
 	}
@@ -82,9 +84,13 @@ func newModel(accounts []acctData) model {
 func (m *model) rebuildCategories() {
 	var filtered []pipeline.EmailInsight
 	for _, ins := range m.all {
-		if m.acctIdx == -1 || ins.AccountName == m.accounts[m.acctIdx].name {
-			filtered = append(filtered, ins)
+		if m.acctIdx != -1 && ins.AccountName != m.accounts[m.acctIdx].name {
+			continue
 		}
+		if m.hideFYI && ins.Urgency == "fyi" {
+			continue
+		}
+		filtered = append(filtered, ins)
 	}
 
 	byTopic := make(map[string][]pipeline.EmailInsight)
@@ -249,6 +255,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.offset = 0
 				m.items = m.buildItems()
 			}
+
+		case "f":
+			m.hideFYI = !m.hideFYI
+			m.rebuildCategories()
 
 		case "right", "l":
 			m.acctIdx++
@@ -456,6 +466,7 @@ func (m model) renderHelp() string {
 		"h/l account",
 		"tab category",
 		"g group/flat",
+		"f toggle FYI",
 		"q quit",
 	}
 	return helpStyle.Render("  " + strings.Join(parts, "  |  "))

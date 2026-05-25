@@ -29,13 +29,7 @@ tasks:
   important:analyze:
     desc: Analyze downloaded emails with Claude Code
     cmds:
-      - |
-        while true; do
-          go run ./cmd/important prepare-chunk --chunk-size 10
-          if [ $? -ne 0 ]; then break; fi
-          claude -p "$(cat .cache/important/chunk_prompt.txt)" > .cache/important/chunk_response.txt
-          go run ./cmd/important ingest-chunk
-        done
+      - claude "Read email-tools/.cache/important/emails.json and classify each email. For each email, determine topic (Finance/Security/Work/Social/Shopping/Travel/Health/Newsletter/Other), urgency (urgent/action_needed/fyi), a 1-2 sentence summary, and why_important. Be aggressive about marking promotional, marketing, newsletter, and sales emails as fyi. Only use urgent for things requiring immediate action to prevent harm. Only use action_needed for genuine deadlines or failed transactions. Write results to email-tools/.cache/important/insights.json using the InsightsManifest format from email-tools/internal/pipeline/types.go."
 
   important:view:
     desc: View analyzed emails in TUI
