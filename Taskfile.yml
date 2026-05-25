@@ -1,0 +1,15 @@
+version: "3"
+
+includes:
+  finance:
+    taskfile: ./finance-tools/Taskfile.yml
+    dir: ./finance-tools
+  email:
+    taskfile: ./email-tools/Taskfile.yml
+    dir: ./email-tools
+
+tasks:
+  default:
+    desc: List all available tasks
+    cmds:
+      - task --list-all

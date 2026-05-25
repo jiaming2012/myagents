@@ -123,21 +123,13 @@ func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, 
 		return accountEmails{name: acct.Name, email: acct.Email, err: err}
 	}
 
-	// Filter to unread only
-	var unread []email.Email
-	for _, e := range emails {
-		if e.Unread {
-			unread = append(unread, e)
-		}
-	}
-
-	return accountEmails{name: acct.Name, email: acct.Email, emails: unread}
+	return accountEmails{name: acct.Name, email: acct.Email, emails: emails}
 }
 
 func buildImportantQuery(providerType string, sinceDays int) string {
 	switch providerType {
 	case "gmail":
-		return fmt.Sprintf("is:important is:unread newer_than:%dd", sinceDays)
+		return fmt.Sprintf("newer_than:%dd", sinceDays)
 	case "zoho":
 		cutoff := time.Now().AddDate(0, 0, -sinceDays)
 		return fmt.Sprintf("after:%s is:unread", cutoff.Format("2006-01-02"))

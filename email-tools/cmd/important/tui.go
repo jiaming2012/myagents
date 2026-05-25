@@ -80,6 +80,8 @@ var allTopics = []topic{
 
 func (t topic) String() string {
 	switch t {
+	case -1:
+		return "All"
 	case topicFinance:
 		return "Finance"
 	case topicSecurity:
@@ -222,6 +224,7 @@ type model struct {
 	acctIdx    int           // -1 = All, 0..n = specific account
 	categories []categoryTab
 	catIdx     int
+	allGrouped bool // true = group by topic in All tab, false = flat timeline
 	cursor     int
 	offset     int
 	height     int
@@ -262,7 +265,12 @@ func (m *model) rebuildCategories() {
 		byTopic[c.topic] = append(byTopic[c.topic], c)
 	}
 
-	m.categories = nil
+	// "All" category first
+	m.categories = []categoryTab{{
+		topic: -1,
+		items: filtered,
+		count: len(filtered),
+	}}
 	for _, t := range allTopics {
 		if items, ok := byTopic[t]; ok {
 			m.categories = append(m.categories, categoryTab{
@@ -272,9 +280,6 @@ func (m *model) rebuildCategories() {
 			})
 		}
 	}
-	sort.Slice(m.categories, func(i, j int) bool {
-		return m.categories[i].count > m.categories[j].count
-	})
 
 	// Reset category selection if out of bounds
 	if m.catIdx >= len(m.categories) {
@@ -294,32 +299,49 @@ func (m model) buildItems() []displayItem {
 
 	cat := m.categories[m.catIdx]
 
+	// "All" tab: grouped by topic or flat timeline
+	if cat.topic == -1 && m.allGrouped {
+		byTopic := make(map[topic][]classified)
+		for _, c := range cat.items {
+			byTopic[c.topic] = append(byTopic[c.topic], c)
+		}
+
+		// Sort each topic's emails by date desc
+		for t := range byTopic {
+			items := byTopic[t]
+			sort.Slice(items, func(i, j int) bool {
+				return items[i].email.Date.After(items[j].email.Date)
+			})
+		}
+
+		// Use the same topic order as the category tabs (skip "All" at index 0)
+		var display []displayItem
+		for _, tab := range m.categories[1:] {
+			items, ok := byTopic[tab.topic]
+			if !ok {
+				continue
+			}
+			display = append(display, displayItem{
+				isHeader: true,
+				label:    tab.topic.String(),
+				count:    len(items),
+			})
+			for _, c := range items {
+				display = append(display, displayItem{item: c})
+			}
+		}
+		return display
+	}
+
+	// Specific topic tab: flat list sorted by timestamp
 	items := make([]classified, len(cat.items))
 	copy(items, cat.items)
 	sort.Slice(items, func(i, j int) bool {
-		if items[i].urgency != items[j].urgency {
-			return items[i].urgency < items[j].urgency
-		}
 		return items[i].email.Date.After(items[j].email.Date)
 	})
 
 	var display []displayItem
-	var currentUrgency urgency = -1
-	urgencyCounts := map[urgency]int{}
 	for _, c := range items {
-		urgencyCounts[c.urgency]++
-	}
-
-	for _, c := range items {
-		if c.urgency != currentUrgency {
-			currentUrgency = c.urgency
-			display = append(display, displayItem{
-				isHeader: true,
-				label:    c.urgency.String(),
-				style:    c.urgency.style(),
-				count:    urgencyCounts[c.urgency],
-			})
-		}
 		display = append(display, displayItem{item: c})
 	}
 
@@ -385,6 +407,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "shift+tab":
 			if len(m.categories) > 1 {
 				m.catIdx = (m.catIdx - 1 + len(m.categories)) % len(m.categories)
+				m.cursor = 0
+				m.offset = 0
+				m.items = m.buildItems()
+			}
+
+		// Toggle grouped/flat in All tab
+		case "g":
+			if len(m.categories) > 0 && m.categories[m.catIdx].topic == -1 {
+				m.allGrouped = !m.allGrouped
 				m.cursor = 0
 				m.offset = 0
 				m.items = m.buildItems()
@@ -514,6 +545,11 @@ func (m model) View() string {
 				cursor = "> "
 			}
 
+			unreadMark := " "
+			if e.Unread {
+				unreadMark = "●"
+			}
+
 			subj := e.Subject
 			maxSubj := m.width - 25
 			if maxSubj < 30 {
@@ -536,9 +572,9 @@ func (m model) View() string {
 			acctTag := acctStyle.Render(item.item.account)
 
 			if navIdx == m.cursor {
-				b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%q  %s\n", subj, dimStyle.Render(age+" ago")))
+				b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%s %q  %s\n", unreadMark, subj, dimStyle.Render(age+" ago")))
 			} else {
-				b.WriteString(fmt.Sprintf("%s%q  %s\n", cursor, subj, dimStyle.Render(age+" ago")))
+				b.WriteString(fmt.Sprintf("%s%s %q  %s\n", cursor, unreadMark, subj, dimStyle.Render(age+" ago")))
 			}
 			b.WriteString(fmt.Sprintf("      %s — %s\n", fromStyle.Render(e.From), acctTag))
 			b.WriteString(fmt.Sprintf("      %s\n", dimStyle.Render(snippet)))
@@ -565,6 +601,7 @@ func (m model) renderHelp() string {
 		"j/k navigate",
 		"h/l account",
 		"tab category",
+		"g group/flat",
 		"q quit",
 	}
 	return helpStyle.Render("  " + strings.Join(parts, "  |  "))
