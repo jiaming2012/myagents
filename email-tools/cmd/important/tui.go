@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"strings"
@@ -10,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/jamal/email-tools/internal/pipeline"
+	"github.com/jamal/email-tools/internal/todoist"
 )
 
 var (
@@ -46,6 +48,15 @@ type displayItem struct {
 	item     pipeline.EmailInsight
 }
 
+type actionItem struct {
+	text     string
+	subject  string
+	from     string
+	topic    string
+	selected bool
+	uploaded bool
+}
+
 // --- model ---
 
 type model struct {
@@ -62,15 +73,25 @@ type model struct {
 	width      int
 	quitting   bool
 	items      []displayItem
+
+	// Action items view
+	actionView    bool
+	actionItems   []actionItem
+	actionCursor  int
+	actionOffset  int
+	confirming    bool // waiting for y/n to upload
+	statusMsg     string
+	todoistClient *todoist.Client
 }
 
-func newModel(accounts []acctData) model {
+func newModel(accounts []acctData, tc *todoist.Client) model {
 	m := model{
-		accounts: accounts,
-		acctIdx:  -1,
-		hideFYI:  true,
-		height:   24,
-		width:    80,
+		accounts:      accounts,
+		acctIdx:       -1,
+		hideFYI:       true,
+		height:        24,
+		width:         80,
+		todoistClient: tc,
 	}
 
 	for _, acct := range accounts {
@@ -78,7 +99,23 @@ func newModel(accounts []acctData) model {
 	}
 
 	m.rebuildCategories()
+	m.buildActionItems()
 	return m
+}
+
+func (m *model) buildActionItems() {
+	m.actionItems = nil
+	for _, ins := range m.all {
+		for _, item := range ins.ActionItems {
+			m.actionItems = append(m.actionItems, actionItem{
+				text:     item,
+				subject:  ins.Subject,
+				from:     ins.From,
+				topic:    ins.Topic,
+				selected: true,
+			})
+		}
+	}
 }
 
 func (m *model) rebuildCategories() {
@@ -208,15 +245,65 @@ func (m model) cursorToItemIdx(cursor int) int {
 	return len(m.items) - 1
 }
 
+// uploadResultMsg is sent after the Todoist upload goroutine completes.
+type uploadResultMsg struct {
+	uploaded int
+	err      error
+}
+
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case uploadResultMsg:
+		if msg.err != nil {
+			m.statusMsg = fmt.Sprintf("Upload failed: %v", msg.err)
+		} else {
+			m.statusMsg = fmt.Sprintf("Uploaded %d tasks to Todoist", msg.uploaded)
+			// Mark uploaded items
+			count := 0
+			for i := range m.actionItems {
+				if m.actionItems[i].selected && !m.actionItems[i].uploaded {
+					m.actionItems[i].uploaded = true
+					m.actionItems[i].selected = false
+					count++
+					if count >= msg.uploaded {
+						break
+					}
+				}
+			}
+		}
+		m.confirming = false
+		return m, nil
+
 	case tea.WindowSizeMsg:
 		m.height = msg.Height
 		m.width = msg.Width
 
 	case tea.KeyMsg:
+		// Confirmation dialog
+		if m.confirming {
+			switch msg.String() {
+			case "y":
+				m.statusMsg = "Uploading..."
+				return m, m.uploadToTodoist()
+			case "n", "esc":
+				m.confirming = false
+				m.statusMsg = ""
+			}
+			return m, nil
+		}
+
+		// Action items view
+		if m.actionView {
+			return m.updateActionView(msg)
+		}
+
+		// Email view
 		switch msg.String() {
-		case "q", "ctrl+c", "esc":
+		case "q", "ctrl+c":
+			m.quitting = true
+			return m, tea.Quit
+
+		case "esc":
 			m.quitting = true
 			return m, tea.Quit
 
@@ -260,6 +347,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.hideFYI = !m.hideFYI
 			m.rebuildCategories()
 
+		case "t":
+			if len(m.actionItems) > 0 {
+				m.actionView = true
+				m.actionCursor = 0
+				m.actionOffset = 0
+				m.statusMsg = ""
+			}
+
 		case "right", "l":
 			m.acctIdx++
 			if m.acctIdx >= len(m.accounts) {
@@ -276,6 +371,103 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	}
 	return m, nil
+}
+
+func (m model) updateActionView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "q", "ctrl+c":
+		m.quitting = true
+		return m, tea.Quit
+
+	case "esc":
+		m.actionView = false
+		m.statusMsg = ""
+
+	case "up", "k":
+		if m.actionCursor > 0 {
+			m.actionCursor--
+		}
+
+	case "down", "j":
+		if m.actionCursor < len(m.actionItems)-1 {
+			m.actionCursor++
+		}
+
+	case " ":
+		if m.actionCursor < len(m.actionItems) {
+			m.actionItems[m.actionCursor].selected = !m.actionItems[m.actionCursor].selected
+		}
+
+	case "a":
+		// Toggle all: if all selected, deselect all; otherwise select all
+		allSelected := true
+		for _, ai := range m.actionItems {
+			if !ai.selected && !ai.uploaded {
+				allSelected = false
+				break
+			}
+		}
+		for i := range m.actionItems {
+			if !m.actionItems[i].uploaded {
+				m.actionItems[i].selected = !allSelected
+			}
+		}
+
+	case "u":
+		if m.todoistClient == nil {
+			m.statusMsg = "No TODOIST_API_TOKEN configured"
+			break
+		}
+		selected := 0
+		for _, ai := range m.actionItems {
+			if ai.selected && !ai.uploaded {
+				selected++
+			}
+		}
+		if selected == 0 {
+			m.statusMsg = "No items selected"
+			break
+		}
+		m.confirming = true
+		m.statusMsg = fmt.Sprintf("Upload %d items to Todoist? (y/n)", selected)
+	}
+	return m, nil
+}
+
+func (m *model) uploadToTodoist() tea.Cmd {
+	// Collect items to upload
+	type uploadItem struct {
+		idx  int
+		text string
+		desc string
+	}
+	var items []uploadItem
+	for i, ai := range m.actionItems {
+		if ai.selected && !ai.uploaded {
+			items = append(items, uploadItem{
+				idx:  i,
+				text: ai.text,
+				desc: fmt.Sprintf("From: %s\nRe: %s", ai.from, ai.subject),
+			})
+		}
+	}
+
+	client := m.todoistClient
+	return func() tea.Msg {
+		ctx := context.Background()
+		uploaded := 0
+		for _, item := range items {
+			err := client.CreateTask(ctx, todoist.Task{
+				Content:     item.text,
+				Description: item.desc,
+			})
+			if err != nil {
+				return uploadResultMsg{uploaded: uploaded, err: err}
+			}
+			uploaded++
+		}
+		return uploadResultMsg{uploaded: uploaded}
+	}
 }
 
 func (m *model) adjustScroll() {
@@ -309,6 +501,10 @@ func (m *model) adjustScroll() {
 func (m model) View() string {
 	if m.quitting {
 		return ""
+	}
+
+	if m.actionView {
+		return m.viewActionItems()
 	}
 
 	var b strings.Builder
@@ -466,6 +662,80 @@ func urgencyTag(urgency string) string {
 	}
 }
 
+func (m model) viewActionItems() string {
+	var b strings.Builder
+
+	// Header with counts
+	selected := 0
+	for _, ai := range m.actionItems {
+		if ai.selected && !ai.uploaded {
+			selected++
+		}
+	}
+	b.WriteString(activeTab.Render(fmt.Sprintf("=== Action Items (%d selected / %d total) ===", selected, len(m.actionItems))))
+	b.WriteString("\n\n")
+
+	// List
+	maxLines := m.height - 8
+	lines := 0
+	for i, ai := range m.actionItems {
+		if lines+3 > maxLines {
+			break
+		}
+
+		cursor := "  "
+		if i == m.actionCursor {
+			cursor = "> "
+		}
+
+		check := "[ ]"
+		if ai.uploaded {
+			check = dimStyle.Render("[✓]")
+		} else if ai.selected {
+			check = activeTab.Render("[x]")
+		}
+
+		text := ai.text
+		maxText := m.width - 10
+		if maxText < 40 {
+			maxText = 40
+		}
+		if len(text) > maxText {
+			text = text[:maxText-3] + "..."
+		}
+
+		if ai.uploaded {
+			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, dimStyle.Render(text)))
+		} else if i == m.actionCursor {
+			b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%s %s\n", check, text))
+		} else {
+			b.WriteString(fmt.Sprintf("%s%s %s\n", cursor, check, text))
+		}
+		b.WriteString(fmt.Sprintf("      %s — %s\n", dimStyle.Render(ai.topic), fromStyle.Render(ai.from)))
+		lines += 2
+	}
+
+	// Status / confirmation
+	if m.statusMsg != "" {
+		b.WriteString("\n")
+		if m.confirming {
+			b.WriteString(actionStyle.Render("  "+m.statusMsg) + "\n")
+		} else {
+			b.WriteString(activeTab.Render("  "+m.statusMsg) + "\n")
+		}
+	}
+
+	// Scroll indicator
+	if len(m.actionItems) > 0 {
+		b.WriteString(dimStyle.Render(fmt.Sprintf("\n  %d of %d", m.actionCursor+1, len(m.actionItems))))
+	}
+
+	b.WriteString("\n\n")
+	b.WriteString(m.renderActionHelp())
+
+	return b.String()
+}
+
 func (m model) renderHelp() string {
 	parts := []string{
 		"j/k navigate",
@@ -473,7 +743,19 @@ func (m model) renderHelp() string {
 		"tab category",
 		"g group/flat",
 		"f toggle FYI",
+		"t action items",
 		"q quit",
+	}
+	return helpStyle.Render("  " + strings.Join(parts, "  |  "))
+}
+
+func (m model) renderActionHelp() string {
+	parts := []string{
+		"j/k navigate",
+		"space select",
+		"a select all",
+		"u upload to Todoist",
+		"esc back",
 	}
 	return helpStyle.Render("  " + strings.Join(parts, "  |  "))
 }

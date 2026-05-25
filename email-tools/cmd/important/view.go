@@ -8,6 +8,7 @@ import (
 
 	"github.com/jamal/email-tools/internal/config"
 	"github.com/jamal/email-tools/internal/pipeline"
+	"github.com/jamal/email-tools/internal/todoist"
 )
 
 func runView(args []string) {
@@ -43,7 +44,13 @@ func runView(args []string) {
 		})
 	}
 
-	m := newModel(accounts)
+	// Set up Todoist client if token is available
+	var tc *todoist.Client
+	if token := os.Getenv("TODOIST_API_TOKEN"); token != "" {
+		tc = todoist.NewClient(token)
+	}
+
+	m := newModel(accounts, tc)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	finalModel, err := p.Run()
 	if err != nil {
