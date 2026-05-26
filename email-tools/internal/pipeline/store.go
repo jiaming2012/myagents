@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-const dataSubdir = ".cache/important"
+const dataSubdir = ".cache/inbox"
 
 // DataDir returns the pipeline data directory, creating it if needed.
 func DataDir(root string) (string, error) {

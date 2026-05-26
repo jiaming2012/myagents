@@ -21,32 +21,32 @@ tasks:
     cmds:
       - go run ./cmd/cleanup --older-than 30 {{.CLI_ARGS}}
 
-  important:download:
+  inbox:download:
     desc: Download emails from all accounts
     cmds:
-      - go run ./cmd/important download {{.CLI_ARGS}}
+      - go run ./cmd/inbox download {{.CLI_ARGS}}
 
-  important:analyze:
+  inbox:analyze:
     desc: Analyze downloaded emails with Claude Code
     cmds:
-      - claude "Read email-tools/.cache/important/emails.json and classify each email. Use the email body for deeper understanding. For each email, determine topic (Finance/Security/Work/Social/Shopping/Travel/Health/Newsletter/Other), urgency (urgent/action_needed/fyi), a 1-2 sentence summary, why_important, and action_items (specific actionable steps like 'Pay $450 to Progressive by May 30' — empty array if none). Be aggressive about marking promotional, marketing, newsletter, and sales emails as fyi. Only use urgent for things requiring immediate action to prevent harm. Only use action_needed for genuine deadlines or failed transactions. Write results to email-tools/.cache/important/insights.json using the InsightsManifest format from email-tools/internal/pipeline/types.go."
+      - claude "Read email-tools/.cache/inbox/emails.json and classify each email. Use the email body for deeper understanding. For each email, determine topic (Finance/Security/Work/Social/Shopping/Travel/Health/Newsletter/Other), urgency (urgent/action_needed/fyi), a 1-2 sentence summary, why_important, and action_items (specific actionable steps like 'Pay $450 to Progressive by May 30' — empty array if none). Be aggressive about marking promotional, marketing, newsletter, and sales emails as fyi. Only use urgent for things requiring immediate action to prevent harm. Only use action_needed for genuine deadlines or failed transactions. Write results to email-tools/.cache/inbox/insights.json using the InsightsManifest format from email-tools/internal/pipeline/types.go."
 
-  important:view:
+  inbox:view:
     desc: View analyzed emails in TUI
     cmds:
-      - go run ./cmd/important view {{.CLI_ARGS}}
+      - go run ./cmd/inbox view {{.CLI_ARGS}}
 
-  important:status:
+  inbox:status:
     desc: Show download/analysis progress
     cmds:
-      - go run ./cmd/important status
+      - go run ./cmd/inbox status
 
-  important:
+  inbox:
     desc: Full pipeline - download, analyze, view
     cmds:
-      - task: important:download
-      - task: important:analyze
-      - task: important:view
+      - task: inbox:download
+      - task: inbox:analyze
+      - task: inbox:view
 
   auth:
     desc: Run OAuth2 setup for an account
