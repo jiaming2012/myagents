@@ -1,14 +1,18 @@
 package todoist
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/google/uuid"
 )
 
-const apiURL = "https://api.todoist.com/rest/v2/tasks"
+const syncURL = "https://api.todoist.com/api/v1/sync"
 
 type Client struct {
 	token string
@@ -19,22 +23,51 @@ func NewClient(token string) *Client {
 }
 
 type Task struct {
+	Content     string
+	Description string
+}
+
+type syncCommand struct {
+	Type   string      `json:"type"`
+	TempID string      `json:"temp_id"`
+	UUID   string      `json:"uuid"`
+	Args   syncTaskArgs `json:"args"`
+}
+
+type syncTaskArgs struct {
 	Content     string `json:"content"`
 	Description string `json:"description,omitempty"`
 }
 
+type syncResponse struct {
+	SyncStatus map[string]interface{} `json:"sync_status"`
+}
+
 func (c *Client) CreateTask(ctx context.Context, task Task) error {
-	body, err := json.Marshal(task)
+	cmd := syncCommand{
+		Type:   "item_add",
+		TempID: uuid.NewString(),
+		UUID:   uuid.NewString(),
+		Args: syncTaskArgs{
+			Content:     task.Content,
+			Description: task.Description,
+		},
+	}
+
+	cmds, err := json.Marshal([]syncCommand{cmd})
 	if err != nil {
 		return err
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", apiURL, bytes.NewReader(body))
+	form := url.Values{}
+	form.Set("commands", string(cmds))
+
+	req, err := http.NewRequestWithContext(ctx, "POST", syncURL, strings.NewReader(form.Encode()))
 	if err != nil {
 		return err
 	}
 	req.Header.Set("Authorization", "Bearer "+c.token)
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -43,7 +76,21 @@ func (c *Client) CreateTask(ctx context.Context, task Task) error {
 	defer resp.Body.Close()
 
 	if resp.StatusCode >= 300 {
-		return fmt.Errorf("todoist API returned %d", resp.StatusCode)
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("todoist API returned %d: %s", resp.StatusCode, string(body))
 	}
+
+	// Check sync status
+	var sr syncResponse
+	if err := json.NewDecoder(resp.Body).Decode(&sr); err != nil {
+		return nil // request succeeded even if we can't parse response
+	}
+
+	for _, status := range sr.SyncStatus {
+		if s, ok := status.(string); ok && s != "ok" {
+			return fmt.Errorf("todoist sync error: %s", s)
+		}
+	}
+
 	return nil
 }

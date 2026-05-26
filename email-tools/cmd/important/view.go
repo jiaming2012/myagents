@@ -14,6 +14,9 @@ import (
 func runView(args []string) {
 	root := config.ProjectRoot()
 
+	// Load .env so TODOIST_API_TOKEN is available
+	config.Load(root)
+
 	insights, err := pipeline.LoadInsightsManifest(root)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error loading insights: %v\n", err)
