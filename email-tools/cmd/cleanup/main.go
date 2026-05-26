@@ -1,11 +1,13 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
 	"os"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +40,7 @@ func main() {
 	dryRun := flag.Bool("dry-run", false, "preview deletions without prompting")
 	olderThan := flag.Int("older-than", 0, "delete emails older than N days (overrides accounts.yaml)")
 	account := flag.String("account", "", "filter to a specific account name")
+	maxEmails := flag.Int("max", 0, "max emails to fetch per query (0 = no limit)")
 	flag.Parse()
 
 	root := config.ProjectRoot()
@@ -47,18 +50,21 @@ func main() {
 		os.Exit(1)
 	}
 
-	maxAge := cfg.Cleanup.OlderThanDays
+	var maxAge int
 	if *olderThan > 0 {
 		maxAge = *olderThan
-	}
-	if maxAge == 0 {
-		maxAge = 30
+	} else {
+		def := cfg.Cleanup.OlderThanDays
+		if def == 0 {
+			def = 30
+		}
+		maxAge = promptForDays(def)
 	}
 
 	ctx := context.Background()
 
 	// Fetch all accounts in parallel
-	results := fetchAllAccounts(ctx, cfg, root, *account, maxAge)
+	results := fetchAllAccounts(ctx, cfg, root, *account, maxAge, *maxEmails)
 
 	// Build TUI model from results
 	var accounts []accountData
@@ -101,7 +107,23 @@ func main() {
 	}
 }
 
-func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilter string, maxAge int) []accountResult {
+func promptForDays(defaultDays int) int {
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Printf("Delete emails older than how many days? [%d]: ", defaultDays)
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return defaultDays
+	}
+	days, err := strconv.Atoi(input)
+	if err != nil || days <= 0 {
+		fmt.Fprintf(os.Stderr, "Invalid number, using %d days.\n", defaultDays)
+		return defaultDays
+	}
+	return days
+}
+
+func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilter string, maxAge, maxEmails int) []accountResult {
 	var accounts []config.Account
 	for _, acct := range cfg.Accounts {
 		if accountFilter != "" && !strings.EqualFold(acct.Name, accountFilter) {
@@ -117,7 +139,7 @@ func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilt
 		wg.Add(1)
 		go func(i int, acct config.Account) {
 			defer wg.Done()
-			results[i] = fetchAccount(ctx, acct, cfg, root, maxAge)
+			results[i] = fetchAccount(ctx, acct, cfg, root, maxAge, maxEmails)
 		}(i, acct)
 	}
 
@@ -125,7 +147,7 @@ func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilt
 	return results
 }
 
-func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, root string, maxAge int) accountResult {
+func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, root string, maxAge, maxEmails int) accountResult {
 	p, err := buildProvider(acct, cfg, root)
 	if err != nil {
 		return accountResult{name: acct.Name, email: acct.Email, err: err}
@@ -133,22 +155,41 @@ func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, 
 
 	var allEmails []email.Email
 
+	fetchLimit := maxEmails
+	if fetchLimit <= 0 {
+		fetchLimit = 10000
+	}
+
+	// Build a single combined query instead of separate fetches
+	var queryParts []string
 	if maxAge > 0 {
-		query := buildOlderThanQuery(acct.Provider, maxAge)
-		emails, err := p.FetchEmails(ctx, query, 100)
+		queryParts = append(queryParts, buildOlderThanQuery(acct.Provider, maxAge))
+	}
+	for _, cat := range cfg.Cleanup.Categories {
+		q := buildCategoryQuery(acct.Provider, cat, maxAge)
+		if q != "" {
+			queryParts = append(queryParts, q)
+		}
+	}
+
+	// Gmail supports OR via {q1 q2} syntax; fetch each separately for other providers
+	if acct.Provider == "gmail" && len(queryParts) > 1 {
+		combined := "{" + strings.Join(queryParts, " ") + "}"
+		fmt.Fprintf(os.Stderr, "  %s: searching...\n", acct.Name)
+		emails, err := p.FetchEmails(ctx, combined, fetchLimit)
 		if err != nil {
 			return accountResult{name: acct.Name, email: acct.Email, err: err}
 		}
 		allEmails = append(allEmails, emails...)
-	}
-
-	for _, cat := range cfg.Cleanup.Categories {
-		query := buildCategoryQuery(acct.Provider, cat)
-		emails, err := p.FetchEmails(ctx, query, 100)
-		if err != nil {
-			continue
+	} else {
+		for _, q := range queryParts {
+			fmt.Fprintf(os.Stderr, "  %s: searching...\n", acct.Name)
+			emails, err := p.FetchEmails(ctx, q, fetchLimit)
+			if err != nil {
+				continue
+			}
+			allEmails = append(allEmails, emails...)
 		}
-		allEmails = append(allEmails, emails...)
 	}
 
 	allEmails = dedup(allEmails)
@@ -289,9 +330,12 @@ func buildOlderThanQuery(providerType string, days int) string {
 	}
 }
 
-func buildCategoryQuery(providerType string, category string) string {
+func buildCategoryQuery(providerType string, category string, olderThanDays int) string {
 	switch providerType {
 	case "gmail":
+		if olderThanDays > 0 {
+			return fmt.Sprintf("category:%s older_than:%dd", category, olderThanDays)
+		}
 		return fmt.Sprintf("category:%s", category)
 	case "zoho":
 		return category

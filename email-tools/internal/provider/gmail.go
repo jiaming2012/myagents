@@ -54,23 +54,54 @@ func (g *GmailProvider) AccountName() string  { return g.name }
 func (g *GmailProvider) AccountEmail() string { return g.addr }
 
 func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResults int) ([]email.Email, error) {
-	call := g.service.Users.Messages.List("me").Q(query).MaxResults(int64(maxResults)).Context(ctx)
-
-	resp, err := call.Do()
-	if err != nil {
-		return nil, fmt.Errorf("listing messages: %w", err)
+	var allMsgIDs []string
+	pageSize := int64(500)
+	if int64(maxResults) < pageSize {
+		pageSize = int64(maxResults)
 	}
 
+	// Paginate message list (lightweight — only fetches IDs)
+	pageToken := ""
+	for {
+		call := g.service.Users.Messages.List("me").Q(query).MaxResults(pageSize).Context(ctx)
+		if pageToken != "" {
+			call = call.PageToken(pageToken)
+		}
+
+		resp, err := call.Do()
+		if err != nil {
+			return nil, fmt.Errorf("listing messages: %w", err)
+		}
+
+		for _, msg := range resp.Messages {
+			allMsgIDs = append(allMsgIDs, msg.Id)
+			if len(allMsgIDs) >= maxResults {
+				break
+			}
+		}
+
+		fmt.Fprintf(os.Stderr, "\r  %s: found %d emails...", g.name, len(allMsgIDs))
+
+		if len(allMsgIDs) >= maxResults || resp.NextPageToken == "" {
+			break
+		}
+		pageToken = resp.NextPageToken
+		time.Sleep(100 * time.Millisecond) // rate limit between pages
+	}
+
+	fmt.Fprintf(os.Stderr, "\r  %s: fetching %d emails...          \n", g.name, len(allMsgIDs))
+
+	// Fetch full message details with rate limiting
 	var emails []email.Email
-	for _, msg := range resp.Messages {
-		full, err := g.service.Users.Messages.Get("me", msg.Id).Format("full").
+	for i, msgID := range allMsgIDs {
+		full, err := g.service.Users.Messages.Get("me", msgID).Format("full").
 			Context(ctx).Do()
 		if err != nil {
 			continue
 		}
 
 		e := email.Email{
-			ID:      msg.Id,
+			ID:      msgID,
 			Snippet: full.Snippet,
 			Labels:  full.LabelIds,
 			Unread:  containsLabel(full.LabelIds, "UNREAD"),
@@ -96,6 +127,18 @@ func (g *GmailProvider) FetchEmails(ctx context.Context, query string, maxResult
 		}
 
 		emails = append(emails, e)
+
+		// Progress + rate limit
+		if (i+1)%10 == 0 || i+1 == len(allMsgIDs) {
+			fmt.Fprintf(os.Stderr, "\r  %s: %d/%d emails fetched...", g.name, i+1, len(allMsgIDs))
+		}
+		if (i+1)%50 == 0 {
+			time.Sleep(200 * time.Millisecond)
+		}
+	}
+
+	if len(allMsgIDs) > 0 {
+		fmt.Fprintf(os.Stderr, "\r  %s: %d emails fetched.            \n", g.name, len(emails))
 	}
 
 	return emails, nil
@@ -106,14 +149,23 @@ func (g *GmailProvider) DeleteEmails(ctx context.Context, ids []string) error {
 		return nil
 	}
 
-	// Gmail batch trash (moves to trash, recoverable for 30 days)
-	req := &gmail.BatchModifyMessagesRequest{
-		Ids:            ids,
-		AddLabelIds:    []string{"TRASH"},
-		RemoveLabelIds: []string{"INBOX"},
+	// Gmail batch modify limited to 1000 IDs per call
+	const batchSize = 1000
+	for i := 0; i < len(ids); i += batchSize {
+		end := i + batchSize
+		if end > len(ids) {
+			end = len(ids)
+		}
+		req := &gmail.BatchModifyMessagesRequest{
+			Ids:            ids[i:end],
+			AddLabelIds:    []string{"TRASH"},
+			RemoveLabelIds: []string{"INBOX"},
+		}
+		if err := g.service.Users.Messages.BatchModify("me", req).Context(ctx).Do(); err != nil {
+			return fmt.Errorf("batch delete %d-%d: %w", i, end, err)
+		}
 	}
-
-	return g.service.Users.Messages.BatchModify("me", req).Context(ctx).Do()
+	return nil
 }
 
 // --- OAuth2 token helpers ---

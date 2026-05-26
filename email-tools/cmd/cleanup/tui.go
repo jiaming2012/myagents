@@ -68,6 +68,7 @@ type model struct {
 	totalDeleted int
 	status       string
 	quitting     bool
+	confirmQuit  bool
 	deleting     bool
 	dryRun       bool
 }
@@ -136,10 +137,24 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
+		// Quit confirmation
+		if m.confirmQuit {
+			switch msg.String() {
+			case "y":
+				m.quitting = true
+				return m, tea.Quit
+			default:
+				m.confirmQuit = false
+				m.status = ""
+			}
+			return m, nil
+		}
+
 		switch msg.String() {
 		case "q", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
+			m.confirmQuit = true
+			m.status = "Quit? (y/n)"
+			return m, nil
 
 		case "up", "k":
 			if m.cursor > 0 {
