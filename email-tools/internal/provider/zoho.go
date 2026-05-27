@@ -207,31 +207,22 @@ func (z *ZohoProvider) DeleteEmails(ctx context.Context, ids []string) error {
 		return nil
 	}
 
-	// Zoho Mail API: move messages to trash
-	endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/messages", z.accountID)
+	// Zoho Mail API requires message ID in the URL path for updates
+	for _, id := range ids {
+		endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/messages/%s", z.accountID, id)
 
-	payload := struct {
-		MsgIDs []string `json:"messageId"`
-		Mode   string   `json:"mode"`
-	}{
-		MsgIDs: ids,
-		Mode:   "moveToTrash",
-	}
+		payload := `{"mode":"moveToTrash"}`
 
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return err
-	}
+		resp, err := z.doRequest(ctx, "PUT", endpoint, strings.NewReader(payload))
+		if err != nil {
+			return fmt.Errorf("zoho delete %s: %w", id, err)
+		}
+		defer resp.Body.Close()
 
-	resp, err := z.doRequest(ctx, "PUT", endpoint, strings.NewReader(string(body)))
-	if err != nil {
-		return fmt.Errorf("zoho delete: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("zoho delete status %d: %s", resp.StatusCode, string(respBody))
+		if resp.StatusCode >= 300 {
+			respBody, _ := io.ReadAll(resp.Body)
+			return fmt.Errorf("zoho delete %s status %d: %s", id, resp.StatusCode, string(respBody))
+		}
 	}
 
 	return nil

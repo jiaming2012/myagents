@@ -38,7 +38,8 @@ type accountResult struct {
 
 func main() {
 	dryRun := flag.Bool("dry-run", false, "preview deletions without prompting")
-	olderThan := flag.Int("older-than", 0, "delete emails older than N days (overrides accounts.yaml)")
+	olderThan := flag.Int("older-than", 0, "only emails older than N days")
+	newerThan := flag.Int("newer-than", 0, "only emails newer than N days")
 	account := flag.String("account", "", "filter to a specific account name")
 	maxEmails := flag.Int("max", 0, "max emails to fetch per query (0 = no limit)")
 	flag.Parse()
@@ -53,6 +54,8 @@ func main() {
 	var maxAge int
 	if *olderThan > 0 {
 		maxAge = *olderThan
+	} else if *newerThan > 0 {
+		// Don't prompt for older-than when newer-than is specified
 	} else {
 		def := cfg.Cleanup.OlderThanDays
 		if def == 0 {
@@ -64,7 +67,7 @@ func main() {
 	ctx := context.Background()
 
 	// Fetch all accounts in parallel
-	results := fetchAllAccounts(ctx, cfg, root, *account, maxAge, *maxEmails)
+	results := fetchAllAccounts(ctx, cfg, root, *account, maxAge, *newerThan, *maxEmails)
 
 	// Build TUI model from results
 	var accounts []accountData
@@ -123,7 +126,7 @@ func promptForDays(defaultDays int) int {
 	return days
 }
 
-func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilter string, maxAge, maxEmails int) []accountResult {
+func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilter string, maxAge, newerThan, maxEmails int) []accountResult {
 	var accounts []config.Account
 	for _, acct := range cfg.Accounts {
 		if accountFilter != "" && !strings.EqualFold(acct.Name, accountFilter) {
@@ -139,7 +142,7 @@ func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilt
 		wg.Add(1)
 		go func(i int, acct config.Account) {
 			defer wg.Done()
-			results[i] = fetchAccount(ctx, acct, cfg, root, maxAge, maxEmails)
+			results[i] = fetchAccount(ctx, acct, cfg, root, maxAge, newerThan, maxEmails)
 		}(i, acct)
 	}
 
@@ -147,7 +150,7 @@ func fetchAllAccounts(ctx context.Context, cfg *config.Config, root, accountFilt
 	return results
 }
 
-func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, root string, maxAge, maxEmails int) accountResult {
+func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, root string, maxAge, newerThan, maxEmails int) accountResult {
 	p, err := buildProvider(acct, cfg, root)
 	if err != nil {
 		return accountResult{name: acct.Name, email: acct.Email, err: err}
@@ -162,13 +165,20 @@ func fetchAccount(ctx context.Context, acct config.Account, cfg *config.Config, 
 
 	// Build a single combined query instead of separate fetches
 	var queryParts []string
-	if maxAge > 0 {
-		queryParts = append(queryParts, buildOlderThanQuery(acct.Provider, maxAge))
-	}
-	for _, cat := range cfg.Cleanup.Categories {
-		q := buildCategoryQuery(acct.Provider, cat, maxAge)
-		if q != "" {
-			queryParts = append(queryParts, q)
+	if len(cfg.Cleanup.Categories) > 0 {
+		for _, cat := range cfg.Cleanup.Categories {
+			q := buildCategoryQuery(acct.Provider, cat, maxAge, newerThan)
+			if q != "" {
+				queryParts = append(queryParts, q)
+			}
+		}
+	} else {
+		// No categories — use time filters as the query
+		if maxAge > 0 {
+			queryParts = append(queryParts, buildOlderThanQuery(acct.Provider, maxAge))
+		}
+		if newerThan > 0 {
+			queryParts = append(queryParts, buildNewerThanQuery(acct.Provider, newerThan))
 		}
 	}
 
@@ -318,6 +328,18 @@ func extractIDs(emails []email.Email) []string {
 	return ids
 }
 
+func buildNewerThanQuery(providerType string, days int) string {
+	switch providerType {
+	case "gmail":
+		return fmt.Sprintf("newer_than:%dd", days)
+	case "zoho":
+		cutoff := time.Now().AddDate(0, 0, -days)
+		return fmt.Sprintf("after:%s", cutoff.Format("2006-01-02"))
+	default:
+		return ""
+	}
+}
+
 func buildOlderThanQuery(providerType string, days int) string {
 	switch providerType {
 	case "gmail":
@@ -330,13 +352,17 @@ func buildOlderThanQuery(providerType string, days int) string {
 	}
 }
 
-func buildCategoryQuery(providerType string, category string, olderThanDays int) string {
+func buildCategoryQuery(providerType string, category string, olderThanDays, newerThanDays int) string {
 	switch providerType {
 	case "gmail":
+		q := fmt.Sprintf("category:%s", category)
 		if olderThanDays > 0 {
-			return fmt.Sprintf("category:%s older_than:%dd", category, olderThanDays)
+			q += fmt.Sprintf(" older_than:%dd", olderThanDays)
 		}
-		return fmt.Sprintf("category:%s", category)
+		if newerThanDays > 0 {
+			q += fmt.Sprintf(" newer_than:%dd", newerThanDays)
+		}
+		return q
 	case "zoho":
 		return category
 	default:

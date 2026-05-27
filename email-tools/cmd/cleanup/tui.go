@@ -55,22 +55,24 @@ const (
 // --- model ---
 
 type model struct {
-	accounts     []accountData
-	acctIdx      int
-	cursor       int
-	selected     map[int]bool // selected group indices (in group view) or email indices (in expand view)
-	mode         viewMode
-	expandIdx    int // which group is expanded
-	expandSel    map[int]bool
-	offset       int // scroll offset
-	height       int // terminal height
-	width        int // terminal width
-	totalDeleted int
-	status       string
-	quitting     bool
-	confirmQuit  bool
-	deleting     bool
-	dryRun       bool
+	accounts      []accountData
+	acctIdx       int
+	cursor        int
+	selected      map[int]bool // selected group indices (in group view) or email indices (in expand view)
+	mode          viewMode
+	expandIdx     int // which group is expanded
+	expandSel     map[int]bool
+	offset        int // scroll offset
+	height        int // terminal height
+	width         int // terminal width
+	totalDeleted  int
+	status        string
+	quitting      bool
+	confirmQuit   bool
+	confirmDelete bool
+	pendingDelete int // count of emails pending deletion
+	deleting      bool
+	dryRun        bool
 }
 
 func newModel(accounts []accountData) model {
@@ -134,6 +136,19 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		if m.deleting {
+			return m, nil
+		}
+
+		// Delete confirmation
+		if m.confirmDelete {
+			switch msg.String() {
+			case "y":
+				m.confirmDelete = false
+				return m.executeDelete()
+			default:
+				m.confirmDelete = false
+				m.status = ""
+			}
 			return m, nil
 		}
 
@@ -254,12 +269,53 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m model) countPendingDeletes() int {
+	acct := m.currentAccount()
+	count := 0
+	switch m.mode {
+	case viewGroups:
+		if len(m.selected) == 0 {
+			if m.cursor < len(acct.groups) {
+				count = len(acct.groups[m.cursor].emails)
+			}
+		} else {
+			for idx := range m.selected {
+				if idx < len(acct.groups) {
+					count += len(acct.groups[idx].emails)
+				}
+			}
+		}
+	case viewExpand:
+		g := acct.groups[m.expandIdx]
+		if len(m.expandSel) == 0 {
+			if m.cursor < len(g.emails) {
+				count = 1
+			}
+		} else {
+			count = len(m.expandSel)
+		}
+	}
+	return count
+}
+
 func (m model) handleDelete() (model, tea.Cmd) {
 	if m.dryRun {
 		m.status = "dry run — delete disabled"
 		return m, nil
 	}
 
+	count := m.countPendingDeletes()
+	if count == 0 {
+		return m, nil
+	}
+
+	m.confirmDelete = true
+	m.pendingDelete = count
+	m.status = fmt.Sprintf("Delete %d emails? (y/n)", count)
+	return m, nil
+}
+
+func (m model) executeDelete() (model, tea.Cmd) {
 	acct := m.currentAccount()
 
 	var toDelete []email.Email
@@ -267,7 +323,6 @@ func (m model) handleDelete() (model, tea.Cmd) {
 	switch m.mode {
 	case viewGroups:
 		if len(m.selected) == 0 {
-			// delete group under cursor
 			if m.cursor < len(acct.groups) {
 				toDelete = acct.groups[m.cursor].emails
 				m.selected[m.cursor] = true

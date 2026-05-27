@@ -16,6 +16,11 @@ tasks:
     cmds:
       - go run ./cmd/cleanup --dry-run
 
+  cleanup:recent:
+    desc: Clean emails from the last 7 days
+    cmds:
+      - go run ./cmd/cleanup --newer-than 7 {{.CLI_ARGS}}
+
   cleanup:old:
     desc: Clean emails older than N days (default 30)
     cmds:
