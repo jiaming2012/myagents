@@ -14,10 +14,15 @@ tasks:
       - .venv/bin/python
 
   calendars:pull:
-    desc: "Dump upcoming iCloud calendar events as JSON (default 7 days) + cache snapshot. Pass extra args after --"
+    desc: "Dump upcoming iCloud calendar events as JSON + cache snapshot. Vars: DAYS (default 7), FROM, TO, CALENDAR"
     deps: [_check-venv]
+    vars:
+      DAYS_ARG: '{{if .DAYS}}--days {{.DAYS}}{{end}}'
+      FROM_ARG: '{{if .FROM}}--from {{.FROM}}{{end}}'
+      TO_ARG: '{{if .TO}}--to {{.TO}}{{end}}'
+      CALENDAR_ARG: '{{if .CALENDAR}}--calendar {{.CALENDAR}}{{end}}'
     cmds:
-      - "{{.PY}} cmd/calendars/main.py pull {{.CLI_ARGS}}"
+      - "{{.PY}} cmd/calendars/main.py pull {{.DAYS_ARG}} {{.FROM_ARG}} {{.TO_ARG}} {{.CALENDAR_ARG}}"
 
   calendars:list:
     desc: List iCloud calendars with writable / read-only status
@@ -53,11 +58,19 @@ tasks:
     cmds:
       - "{{.PY}} cmd/todoist/main.py reschedule"
 
-  todoist:morning:
-    desc: Morning routine — pull + Claude briefing
+  todoist:view:
+    desc: Interactive TUI to review reschedules.json + apply directly to Todoist
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/todoist/main.py view"
+
+  todoist:discuss:
+    desc: "Pull + interactive Claude REPL on today's feasibility. Add `-- --triage` to end the session by writing reshuffle proposals to .cache/todoist/reschedules.json"
+    vars:
+      TRIAGE_MODE: '{{if contains "--triage" .CLI_ARGS}}1{{end}}'
     cmds:
       - task: todoist:pull
-      - task: todoist:analyze:morning
+      - 'claude "Read productivity-tools/.cache/todoist/snapshot.json. Priority mapping (Todoist quirk): API priority 4 = p1 (highest, red), 3 = p2, 2 = p3, 1 = p4 (default). This is an INTERACTIVE conversation about whether today is feasible. {{if .TRIAGE_MODE}}You are in TRIAGE MODE: when I signal the conversation is done (e.g. write it, do it, ship it), write productivity-tools/.cache/todoist/reschedules.json with my reshuffle plan.{{else}}You are in DISCUSS MODE: read-only. Do NOT write any files.{{end}} Open with a one-paragraph honest feasibility read: total p1+p2 count due today, overdue debt (count + how stale), rough hour estimate vs a realistic 6-hour working day, and your top concern. Next, output an INBOX TRIAGE section listing every task where project_name is Inbox — these are unsorted captures, usually no project and no due date. For each Inbox item, ask whether to (a) assign a project, (b) set a real due date, (c) add a grp_* batch label, or (d) complete or delete. If there are no Inbox items, say so and skip the section. Then ASK what constraints I want to apply: hours available, must-keeps, must-drops, batches to form. Push back if my plan looks unrealistic — quote specific task counts. Reuse existing grp_* labels before inventing new ones; label names must match grp_[a-z0-9_]+. {{if .TRIAGE_MODE}}When I am ready, write productivity-tools/.cache/todoist/reschedules.json as an array of objects with required fields task_id (string), current_due (YYYY-MM-DD or null), priority (1-4), reasoning (one short sentence with the [pN] tag), and optional fields new_due (YYYY-MM-DD) for non-recurring tasks and add_labels (array of grp_* strings) plus current_labels (verbatim copy from snapshot) when batching. Triage rules unless I override: keep all p1/p2 due today; push p3 out 2-4 days; push p4 out 3-7 days; skip is_recurring=true for new_due (add_labels still ok); Inbox items can get add_labels AND new_due when appropriate. After writing, print a DIFF summary (what stayed, what moved, what got labeled, what Inbox decisions were made) and remind me to review productivity-tools/.cache/todoist/reschedules.json then run task productivity:todoist:reschedule.{{else}}Stay in the conversation until I exit. Do NOT write any files in DISCUSS MODE.{{end}}"'
 
   todoist:evening:
     desc: Evening routine — pull + Claude review + reschedule proposals (review, then run todoist:reschedule)

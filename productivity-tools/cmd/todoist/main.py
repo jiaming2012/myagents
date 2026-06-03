@@ -6,6 +6,8 @@ Subcommands:
                Writes .cache/todoist/snapshot.json.
   reschedule   Apply reschedule proposals from .cache/todoist/reschedules.json
                (Claude writes that file during the evening flow).
+  view         Interactive TUI to review and selectively apply reschedules.json
+               without going through the batch `reschedule` command.
 """
 
 import argparse
@@ -26,6 +28,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CACHE_DIR = PROJECT_ROOT / ".cache" / "todoist"
 SNAPSHOT_PATH = CACHE_DIR / "snapshot.json"
 RESCHEDULES_PATH = CACHE_DIR / "reschedules.json"
+ARCHIVE_PATH = RESCHEDULES_PATH.with_suffix(".applied.json")
 
 
 class TodoistClient:
@@ -59,6 +62,19 @@ def _items(resp) -> list:
     return []
 
 
+def _paginate(client: "TodoistClient", path: str, **params) -> list:
+    """Walk all cursor pages of a Todoist v1 list endpoint."""
+    out: list = []
+    cursor = None
+    while True:
+        page_params = {**params, **({"cursor": cursor} if cursor else {})}
+        resp = client.get(path, **page_params)
+        out.extend(_items(resp))
+        cursor = resp.get("next_cursor") if isinstance(resp, dict) else None
+        if not cursor:
+            return out
+
+
 def _serialize_task(t: dict, project_names: dict[str, str]) -> dict:
     due = t.get("due") or {}
     return {
@@ -90,27 +106,33 @@ def cmd_pull(client: TodoistClient) -> None:
     today = date.today()
     tomorrow = today + timedelta(days=1)
 
-    project_names = {p["id"]: p["name"] for p in _items(client.get("/projects"))}
+    project_names = {p["id"]: p["name"] for p in _paginate(client, "/projects")}
 
-    today_overdue = _items(client.get("/tasks", filter="today | overdue"))
-    tomorrow_raw = _items(client.get("/tasks", filter="tomorrow"))
+    today_overdue = _paginate(client, "/tasks/filter", query="today | overdue")
+    tomorrow_raw = _paginate(client, "/tasks/filter", query="tomorrow")
 
     today_iso = today.isoformat()
     today_tasks, overdue_tasks = [], []
     for t in today_overdue:
         due_date = ((t.get("due") or {}).get("date") or "")[:10]
-        bucket = overdue_tasks if due_date and due_date < today_iso else today_tasks
-        bucket.append(_serialize_task(t, project_names))
+        if due_date and due_date < today_iso:
+            overdue_tasks.append(_serialize_task(t, project_names))
+        elif due_date == today_iso:
+            today_tasks.append(_serialize_task(t, project_names))
+        # else: future-dated or undated. /tasks/filter should not return
+        # these for a `today | overdue` query, but drop them defensively
+        # so the snapshot only ever reflects what is actually due today.
 
     tomorrow_tasks = [_serialize_task(t, project_names) for t in tomorrow_raw]
 
     since = datetime.combine(today, datetime.min.time()).isoformat()
     until = datetime.now().isoformat()
-    completed_raw = _items(client.get(
+    completed_raw = _paginate(
+        client,
         "/tasks/completed/by_completion_date",
         since=since,
         until=until,
-    ))
+    )
     completed_today = [_serialize_completed(t, project_names) for t in completed_raw]
 
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
@@ -183,28 +205,37 @@ def cmd_reschedule(client: TodoistClient) -> None:
 
     print(f"\nApplied {ok}, failed {fail}")
     if ok and not fail:
-        archived = RESCHEDULES_PATH.with_suffix(".applied.json")
-        RESCHEDULES_PATH.rename(archived)
-        print(f"Archived {RESCHEDULES_PATH.name} -> {archived.name}")
+        RESCHEDULES_PATH.rename(ARCHIVE_PATH)
+        print(f"Archived {RESCHEDULES_PATH.name} -> {ARCHIVE_PATH.name}")
+
+
+def cmd_view(client: TodoistClient | None) -> None:
+    from tui import run_view
+    run_view(client, RESCHEDULES_PATH, SNAPSHOT_PATH, ARCHIVE_PATH)
 
 
 def main():
     load_dotenv(find_dotenv(usecwd=True))
-    token = os.environ.get("TODOIST_API_TOKEN")
-    if not token:
-        sys.exit("ERROR: set TODOIST_API_TOKEN (see .env.example)")
 
     parser = argparse.ArgumentParser(prog="todoist", description=__doc__)
     sub = parser.add_subparsers(dest="cmd", required=True)
     sub.add_parser("pull", help="Fetch today/tomorrow/overdue + completed_today")
     sub.add_parser("reschedule", help="Apply reschedule proposals from reschedules.json")
+    sub.add_parser("view", help="Interactive TUI to review + apply reschedules.json")
     args = parser.parse_args()
 
-    client = TodoistClient(token)
+    token = os.environ.get("TODOIST_API_TOKEN")
+    needs_token = args.cmd in ("pull", "reschedule")
+    if needs_token and not token:
+        sys.exit("ERROR: set TODOIST_API_TOKEN (see .env.example)")
+
+    client = TodoistClient(token) if token else None
     if args.cmd == "pull":
         cmd_pull(client)
     elif args.cmd == "reschedule":
         cmd_reschedule(client)
+    elif args.cmd == "view":
+        cmd_view(client)
 
 
 if __name__ == "__main__":

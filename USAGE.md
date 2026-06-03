@@ -27,15 +27,26 @@ system.
 | Task | What it does |
 |------|--------------|
 | `productivity:todoist:pull` | Fetch today / tomorrow / overdue tasks + tasks completed today → `.cache/todoist/snapshot.json` |
-| `productivity:todoist:morning` | Pull + Claude briefing: priority-sorted [p1]–[p4] view of overdue, batches, today, and a tomorrow look-ahead |
+| `productivity:todoist:discuss` | Pull + interactive Claude REPL: feasibility read on today's plan, INBOX TRIAGE of unsorted captures, and constraint-shaping conversation. Read-only by default. |
+| `productivity:todoist:discuss -- --triage` | Same as `discuss`, but Claude ends the session by writing reshuffle proposals to `.cache/todoist/reschedules.json` — review, then run `todoist:reschedule` |
 | `productivity:todoist:evening` | Pull + Claude reviews the day: DONE vs NOT DONE, proposes reschedules for incomplete non-recurring tasks, suggests `grp_*` labels for natural batches → writes `.cache/todoist/reschedules.json` |
 | `productivity:todoist:reschedule` | Apply the reviewed proposals (priority order, p1 first); merges new labels with existing ones; archives the file on success |
+
+**Inbox project convention.** Todoist's default "Inbox" project is the
+unsorted bucket — anything captured quickly without a project or date
+lands there. `discuss` surfaces these as an explicit **INBOX TRIAGE**
+section so they do not silently rot. For each Inbox item Claude will
+ask whether to (a) assign a project, (b) set a real due date, (c) add
+a `grp_*` batch label, or (d) complete or delete. In `--triage` mode
+those decisions land in `reschedules.json` as `new_due` and
+`add_labels` records — project moves still happen manually in the
+Todoist UI for now.
 
 **iCloud Calendar (events sync from iOS via iCloud)**
 
 | Task | What it does |
 |------|--------------|
-| `productivity:calendars:pull` | Dump events in a window as JSON + cache snapshot. Flags: `-- --days 14`, `--from 2026-06-04 --to 2026-06-08`, `--calendar Home` |
+| `productivity:calendars:pull` | Dump events in a window as JSON + cache snapshot. Vars: `DAYS=14`, `FROM=2026-06-04 TO=2026-06-08`, `CALENDAR=Home` |
 | `productivity:calendars:list` | List calendars with writable / read-only status |
 | `productivity:calendars:apply` | Apply `create` / `update` / `delete` proposals from `.cache/calendars/proposals.json` (Claude writes; you review; this commits) |
 
@@ -87,15 +98,21 @@ the same pattern: see the state, let Claude shape it, you commit.
 task email:inbox             # download + Claude triage + TUI to skim urgent items
 
 # 2. What's already on the calendar today?
-task productivity:calendars:pull -- --days 1
+task productivity:calendars:pull DAYS=1
 
 # 3. What did I commit to doing?
-task productivity:todoist:morning
-#   → Claude prints:
-#     - OVERDUE (sorted p1→p4)
-#     - BATCHES (any grp_* labels from last night's evening review)
-#     - TODAY by project, p1 & p2 called out
-#     - TOMORROW look-ahead
+task productivity:todoist:discuss -- --triage
+#   → Claude opens an interactive feasibility chat:
+#     - opening read: overdue debt, p1+p2 count, hour budget vs ~6h day
+#     - INBOX TRIAGE: unsorted captures — pick a project, a date,
+#       a grp_* label, or complete/delete
+#     - then asks what constraints you want to apply today
+#     (push back if the plan is unrealistic — Claude has the counts)
+#   → ends by writing reshuffle proposals to
+#     productivity-tools/.cache/todoist/reschedules.json. 
+
+# 4. Review, then:
+task productivity:todoist:reschedule
 ```
 
 Optional, depending on the day:
@@ -154,7 +171,7 @@ mutates a live system without you reading the proposal first:
 
 | Domain   | pull                       | analyze (Claude)                | proposal file                                  | apply                           |
 |----------|----------------------------|---------------------------------|-----------------------------------------------|---------------------------------|
-| Todoist  | `todoist:pull`             | `todoist:analyze:evening`       | `.cache/todoist/reschedules.json`             | `todoist:reschedule`            |
+| Todoist  | `todoist:pull`             | `todoist:analyze:evening` or `todoist:discuss -- --triage` | `.cache/todoist/reschedules.json`             | `todoist:reschedule`            |
 | Calendar | `calendars:pull`           | conversational ("schedule X")   | `.cache/calendars/proposals.json`             | `calendars:apply`               |
 | Email    | `inbox:download`           | `inbox:analyze`                 | `.cache/inbox/insights.json` (read-only meta) | (no destructive apply — view in TUI) |
 
