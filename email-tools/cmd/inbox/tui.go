@@ -75,13 +75,14 @@ type model struct {
 	items      []displayItem
 
 	// Action items view
-	actionView    bool
-	actionItems   []actionItem
-	actionCursor  int
-	actionOffset  int
-	confirming    bool // waiting for y/n to upload
-	statusMsg     string
-	todoistClient *todoist.Client
+	actionView     bool
+	actionItems    []actionItem
+	actionCursor   int
+	actionOffset   int
+	confirming     bool // waiting for y/n to upload
+	quitConfirming bool // waiting for y/n to quit
+	statusMsg      string
+	todoistClient  *todoist.Client
 }
 
 func newModel(accounts []acctData, tc *todoist.Client) model {
@@ -279,7 +280,20 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 
 	case tea.KeyMsg:
-		// Confirmation dialog
+		// Quit confirmation dialog (takes precedence — applies in both views)
+		if m.quitConfirming {
+			switch msg.String() {
+			case "y":
+				m.quitting = true
+				return m, tea.Quit
+			case "n", "esc":
+				m.quitConfirming = false
+				m.statusMsg = ""
+			}
+			return m, nil
+		}
+
+		// Upload confirmation dialog
 		if m.confirming {
 			switch msg.String() {
 			case "y":
@@ -299,13 +313,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Email view
 		switch msg.String() {
-		case "q", "ctrl+c":
-			m.quitting = true
-			return m, tea.Quit
-
-		case "esc":
-			m.quitting = true
-			return m, tea.Quit
+		case "q", "ctrl+c", "esc":
+			m.quitConfirming = true
+			m.statusMsg = "Quit? (y/n)"
+			return m, nil
 
 		case "up", "k":
 			if m.cursor > 0 {
@@ -376,8 +387,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m model) updateActionView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
-		m.quitting = true
-		return m, tea.Quit
+		m.quitConfirming = true
+		m.statusMsg = "Quit? (y/n)"
+		return m, nil
 
 	case "esc":
 		m.actionView = false
@@ -661,6 +673,11 @@ func (m model) View() string {
 		b.WriteString(dimStyle.Render(fmt.Sprintf("\n  %d of %d", m.cursor+1, total)))
 	}
 
+	if m.quitConfirming {
+		b.WriteString("\n\n")
+		b.WriteString(actionStyle.Render("  " + m.statusMsg))
+	}
+
 	b.WriteString("\n\n")
 	b.WriteString(m.renderHelp())
 
@@ -735,7 +752,7 @@ func (m model) viewActionItems() string {
 	// Status / confirmation
 	if m.statusMsg != "" {
 		b.WriteString("\n")
-		if m.confirming {
+		if m.confirming || m.quitConfirming {
 			b.WriteString(actionStyle.Render("  "+m.statusMsg) + "\n")
 		} else {
 			b.WriteString(activeTab.Render("  "+m.statusMsg) + "\n")
