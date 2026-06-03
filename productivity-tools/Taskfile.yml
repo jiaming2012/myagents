@@ -1,0 +1,72 @@
+version: "3"
+
+vars:
+  PY: .venv/bin/python
+
+tasks:
+  install:
+    desc: Create .venv and install Python dependencies into it
+    cmds:
+      - python3 -m venv .venv
+      - "{{.PY}} -m pip install --upgrade pip"
+      - "{{.PY}} -m pip install -r requirements.txt"
+    generates:
+      - .venv/bin/python
+
+  calendars:pull:
+    desc: "Dump upcoming iCloud calendar events as JSON (default 7 days) + cache snapshot. Pass extra args after --"
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/calendars/main.py pull {{.CLI_ARGS}}"
+
+  calendars:list:
+    desc: List iCloud calendars with writable / read-only status
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/calendars/main.py list {{.CLI_ARGS}}"
+
+  calendars:apply:
+    desc: Apply create/update/delete proposals from .cache/calendars/proposals.json to iCloud
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/calendars/main.py apply"
+
+  todoist:pull:
+    desc: Fetch today/tomorrow/overdue tasks + tasks completed today -> .cache/todoist/snapshot.json
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/todoist/main.py pull"
+
+  todoist:analyze:morning:
+    desc: Claude briefing on today and tomorrow tasks from snapshot.json
+    cmds:
+      - 'claude "Read productivity-tools/.cache/todoist/snapshot.json and produce a concise morning briefing. Priority mapping (Todoist quirk): API priority 4 = p1 (highest, red), 3 = p2, 2 = p3, 1 = p4 (default). Sort EVERY section by priority descending so p1 items always appear first, then p2, then p3, then p4. Prefix each item with its priority tag in brackets like [p1], [p2], [p3], [p4]. Order of sections: (1) overdue_tasks - most urgent. (2) BATCHES - scan overdue_tasks + today_tasks for any label starting with grp_ (Claude-managed batch labels). For each grp_* label found, list the tasks carrying it, sorted by priority descending. If no grp_ labels exist, omit this section. (3) today_tasks NOT already shown in a batch, grouped by project_name with p1 and p2 items called out at the top. (4) short look-ahead at tomorrow_tasks, sorted by priority. Do NOT write any files."'
+
+  todoist:analyze:evening:
+    desc: Claude reviews the day, proposes reschedules and label batches for incomplete tasks
+    cmds:
+      - 'claude "Read productivity-tools/.cache/todoist/snapshot.json. Priority mapping (Todoist quirk): API priority 4 = p1 (highest, red), 3 = p2, 2 = p3, 1 = p4 (default). Your job is to produce two kinds of output: a human summary printed to stdout, and a JSON file at productivity-tools/.cache/todoist/reschedules.json. SUMMARY SECTIONS: (1) DONE TODAY - list completed_today items grouped by project_name with a count; prefix each item with [p1]/[p2]/[p3]/[p4]. (2) NOT DONE - list every task in today_tasks and overdue_tasks that does NOT appear in completed_today (match by id vs task_id), sorted by priority descending, each prefixed with its [p1]/[p2]/[p3]/[p4] tag. (3) BATCHES - before the reschedule list, show the groupings you propose. Scan ALL tasks under review (today_tasks + tomorrow_tasks + overdue_tasks) for natural batches: 2 or more tasks that share a context, domain, or workflow (e.g. several Xero or Monarch tasks -> grp_finance; several reply-to-X tasks -> grp_inbox; several errands -> grp_errands; several deep coding tasks -> grp_deepwork). Reuse any grp_* labels already present in the snapshots labels arrays before inventing new names so groupings stabilize across days. Label names MUST match the pattern grp_[a-z0-9_]+ (lowercase, underscores only). (4) RESCHEDULES - the concrete reschedule plan grouped by priority (p1 first). JSON FILE: write a JSON array of objects. Required fields on every record: task_id (string), current_due (YYYY-MM-DD or null), priority (1-4), reasoning (one short sentence mentioning the priority tag). Optional fields - include at least ONE: new_due (YYYY-MM-DD) for non-recurring NOT DONE tasks - default p1->tomorrow no exceptions, p2->tomorrow or up to 2 days out, p3->2 to 4 days, p4->3 to 7 days; AND/OR add_labels (array of grp_* strings) when the task belongs to a batch and does not already carry that label - if you include add_labels you MUST also include current_labels (copy the tasks current labels array verbatim from the snapshot so the apply step can merge without losing anything). Skip is_recurring=true tasks for new_due, but you may still add_labels to them. A record may carry new_due only, add_labels only, or both. After writing the JSON, print the four summary sections so the user can review before running: task productivity:todoist:reschedule"'
+
+  todoist:reschedule:
+    desc: Apply reschedule proposals from reschedules.json to Todoist
+    deps: [_check-venv]
+    cmds:
+      - "{{.PY}} cmd/todoist/main.py reschedule"
+
+  todoist:morning:
+    desc: Morning routine — pull + Claude briefing
+    cmds:
+      - task: todoist:pull
+      - task: todoist:analyze:morning
+
+  todoist:evening:
+    desc: Evening routine — pull + Claude review + reschedule proposals (review, then run todoist:reschedule)
+    cmds:
+      - task: todoist:pull
+      - task: todoist:analyze:evening
+
+  _check-venv:
+    internal: true
+    silent: true
+    cmds:
+      - 'test -x {{.PY}} || { echo "venv missing — run: task productivity:install" >&2; exit 1; }'

@@ -7,6 +7,9 @@ includes:
   email:
     taskfile: ./email-tools/Taskfile.yml
     dir: ./email-tools
+  productivity:
+    taskfile: ./productivity-tools/Taskfile.yml
+    dir: ./productivity-tools
 
 tasks:
   default:
