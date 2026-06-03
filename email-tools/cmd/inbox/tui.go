@@ -386,11 +386,13 @@ func (m model) updateActionView(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "up", "k":
 		if m.actionCursor > 0 {
 			m.actionCursor--
+			m.adjustActionScroll()
 		}
 
 	case "down", "j":
 		if m.actionCursor < len(m.actionItems)-1 {
 			m.actionCursor++
+			m.adjustActionScroll()
 		}
 
 	case " ":
@@ -467,6 +469,20 @@ func (m *model) uploadToTodoist() tea.Cmd {
 			uploaded++
 		}
 		return uploadResultMsg{uploaded: uploaded}
+	}
+}
+
+func (m *model) adjustActionScroll() {
+	if m.actionCursor < m.actionOffset {
+		m.actionOffset = m.actionCursor
+		return
+	}
+	visibleItems := (m.height - 8) / 2
+	if visibleItems < 1 {
+		visibleItems = 1
+	}
+	if m.actionCursor >= m.actionOffset+visibleItems {
+		m.actionOffset = m.actionCursor - visibleItems + 1
 	}
 }
 
@@ -678,7 +694,8 @@ func (m model) viewActionItems() string {
 	// List
 	maxLines := m.height - 8
 	lines := 0
-	for i, ai := range m.actionItems {
+	for i := m.actionOffset; i < len(m.actionItems); i++ {
+		ai := m.actionItems[i]
 		if lines+3 > maxLines {
 			break
 		}
