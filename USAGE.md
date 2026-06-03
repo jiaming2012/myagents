@@ -30,7 +30,8 @@ system.
 | `productivity:todoist:discuss` | Pull + interactive Claude REPL: feasibility read on today's plan, INBOX TRIAGE of unsorted captures, and constraint-shaping conversation. Read-only by default. |
 | `productivity:todoist:discuss -- --triage` | Same as `discuss`, but Claude ends the session by writing reshuffle proposals to `.cache/todoist/reschedules.json` — review, then run `todoist:reschedule` |
 | `productivity:todoist:evening` | Pull + Claude reviews the day: DONE vs NOT DONE, proposes reschedules for incomplete non-recurring tasks, suggests `grp_*` labels for natural batches → writes `.cache/todoist/reschedules.json` |
-| `productivity:todoist:reschedule` | Apply the reviewed proposals (priority order, p1 first); merges new labels with existing ones; archives the file on success |
+| `productivity:todoist:view` | Interactive TUI over `reschedules.json` — scope tabs (All / Inbox / Overdue / Labeled / Recurring), batch tabs (per `grp_*`), per-item checkbox + detail pane, `u` applies selected directly to Todoist (no `reschedule` call needed) |
+| `productivity:todoist:reschedule` | Non-interactive batch apply of the reviewed proposals (priority order, p1 first); merges new labels with existing ones; archives the file on success |
 
 **Inbox project convention.** Todoist's default "Inbox" project is the
 unsorted bucket — anything captured quickly without a project or date
@@ -111,8 +112,9 @@ task productivity:todoist:discuss -- --triage
 #   → ends by writing reshuffle proposals to
 #     productivity-tools/.cache/todoist/reschedules.json. 
 
-# 4. Review, then:
-task productivity:todoist:reschedule
+# 4. Review + apply. Two ways — pick one:
+task productivity:todoist:view          # interactive TUI: skim, deselect anything wrong, hit `u` to apply
+task productivity:todoist:reschedule    # or: non-interactive batch apply of the whole file
 ```
 
 Optional, depending on the day:
@@ -147,10 +149,14 @@ task productivity:todoist:evening
 #     - RESCHEDULES (proposed new dates by priority)
 #   → Writes .cache/todoist/reschedules.json
 
-# 2. Eyeball the proposal file. Edit/delete records you disagree with.
-$EDITOR productivity-tools/.cache/todoist/reschedules.json
+# 2. Review + apply. Either:
+task productivity:todoist:view
+#   → TUI loads reschedules.json + enriches from snapshot.json. Tab through
+#     batches, hit space to drop anything you disagree with, `u` to apply
+#     selected — POSTs land per-item with live progress. Failed items stay
+#     in the file with an error marker so you can fix and re-run.
 
-# 3. Commit the changes to Todoist.
+# ...or for the whole file at once, no interactive review:
 task productivity:todoist:reschedule
 #   → Applies p1 first; rescheduled tasks move; new grp_* labels merge
 #     with existing labels; file archived to reschedules.applied.json
@@ -171,7 +177,7 @@ mutates a live system without you reading the proposal first:
 
 | Domain   | pull                       | analyze (Claude)                | proposal file                                  | apply                           |
 |----------|----------------------------|---------------------------------|-----------------------------------------------|---------------------------------|
-| Todoist  | `todoist:pull`             | `todoist:analyze:evening` or `todoist:discuss -- --triage` | `.cache/todoist/reschedules.json`             | `todoist:reschedule`            |
+| Todoist  | `todoist:pull`             | `todoist:analyze:evening` or `todoist:discuss -- --triage` | `.cache/todoist/reschedules.json`             | `todoist:view` (interactive) or `todoist:reschedule` (batch) |
 | Calendar | `calendars:pull`           | conversational ("schedule X")   | `.cache/calendars/proposals.json`             | `calendars:apply`               |
 | Email    | `inbox:download`           | `inbox:analyze`                 | `.cache/inbox/insights.json` (read-only meta) | (no destructive apply — view in TUI) |
 
