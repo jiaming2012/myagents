@@ -1,0 +1,6 @@
+.env
+.cache/
+# top-level build artifacts produced by `go build ./cmd/<name>`
+/brain
+/people
+/registry

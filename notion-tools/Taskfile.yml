@@ -1,0 +1,78 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build all binaries
+    cmds:
+      - go build ./cmd/...
+
+  registry:
+    desc: "List every Notion object tagged triage:*"
+    cmds:
+      - go run ./cmd/registry
+
+  # --- brain handler ----------------------------------------------------
+
+  brain:download:
+    desc: "Fetch pages tagged triage:brain, extract unchecked to_do blocks"
+    cmds:
+      - go run ./cmd/brain download {{.CLI_ARGS}}
+
+  brain:analyze:
+    desc: "Claude reviews brain to-do blocks and writes insights.json"
+    cmds:
+      - 'claude "Read notion-tools/.cache/brain/pages.json. For each unchecked to_do block, decide: KEEP if it is genuinely actionable in the next week (write a concrete imperative Todoist task), or SKIP if it is stale, vague, or already done in real life. For KEEPs, write notion-tools/.cache/brain/insights.json as an object {\"version\":1,\"handler\":\"brain\",\"insights\":[{...}]}. Each insight requires: source_page_id, source_page_title, source_page_url, source_block_id, content (rewritten task in imperative form like ''Email Alex re: menu draft'', not the raw Notion fragment), priority (''p1''-''p4'', default ''p4''), and optional suggested_due (YYYY-MM-DD) + grp_label (matches grp_[a-z0-9_]+). DO NOT invent source_block_ids — copy verbatim from pages.json. After writing, print a short summary: kept N, skipped M. Then remind the user to review insights.json and run: task notion:brain:apply"'
+
+  brain:apply:
+    desc: "Push triaged items to Todoist + stamp Notion source blocks"
+    cmds:
+      - go run ./cmd/brain apply {{.CLI_ARGS}}
+
+  brain:status:
+    desc: "Show brain pipeline state"
+    cmds:
+      - go run ./cmd/brain status
+
+  brain:
+    desc: "brain full pipeline: download → analyze → apply"
+    cmds:
+      - task: brain:download
+      - task: brain:analyze
+      - task: brain:apply
+
+  # --- people handler ---------------------------------------------------
+
+  people:download:
+    desc: "Bridge Todoist completions → Notion, then list overdue people"
+    cmds:
+      - go run ./cmd/people download {{.CLI_ARGS}}
+
+  people:analyze:
+    desc: "Claude proposes follow-up tasks for overdue people and writes followups.json"
+    cmds:
+      - 'claude "Read notion-tools/.cache/people/rows.json. For each person (every row is already filtered to overdue), produce ONE Todoist follow-up task. Output notion-tools/.cache/people/followups.json as {\"version\":1,\"handler\":\"people\",\"followups\":[{...}]}. Each followup requires: row_id (copy verbatim), name, db_title, page_url (copy verbatim from rows.json), content (imperative reach-out phrasing scoped to the relationship — ''Catch up with Alex — coffee or call'', not ''Follow up''), reasoning (one short sentence drawing on the notes/context if present, otherwise mention how overdue), priority (default ''p3''; use ''p2'' when overdue_by >= 2*cadence_days; use ''p4'' when context contains low_touch), suggested_due (today, YYYY-MM-DD), grp_label (''grp_people''). NEVER invent a row_id not in rows.json. After writing, print a short summary by priority. Then remind the user to review followups.json and run: task notion:people:apply"'
+
+  people:apply:
+    desc: "Push follow-up tasks to Todoist with row markers"
+    cmds:
+      - go run ./cmd/people apply {{.CLI_ARGS}}
+
+  people:status:
+    desc: "Show people pipeline state"
+    cmds:
+      - go run ./cmd/people status
+
+  people:
+    desc: "people full pipeline: download → analyze → apply"
+    cmds:
+      - task: people:download
+      - task: people:analyze
+      - task: people:apply
+
+  # --- top level --------------------------------------------------------
+
+  all:
+    desc: "Run every handler's full pipeline"
+    cmds:
+      - task: brain
+      - task: people

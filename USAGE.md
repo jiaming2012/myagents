@@ -7,14 +7,15 @@ Run `task` (no args) from this directory for the full list.
 myagents/
 ├── productivity-tools/   Python — iCloud calendar + Todoist
 ├── email-tools/          Go     — Gmail (+ Zoho) cleanup, inbox triage
+├── notion-tools/         Go     — second-brain triage + keep-in-touch
 └── finance-tools/        Python — Monarch, Xero, payment forecasting
 ```
 
 Tasks are namespaced by tool: `task productivity:…`, `task email:…`,
-`task finance:…`. Several follow the same pattern: **pull → analyze
-(Claude) → apply (Python/Go)**. Claude only ever proposes changes to a
-JSON file in `.cache/`; you review before any `apply` step hits a live
-system.
+`task notion:…`, `task finance:…`. Several follow the same pattern:
+**pull → analyze (Claude) → apply (Python/Go)**. Claude only ever
+proposes changes to a JSON file in `.cache/`; you review before any
+`apply` step hits a live system.
 
 ---
 
@@ -50,6 +51,38 @@ Todoist UI for now.
 | `productivity:calendars:pull` | Dump events in a window as JSON + cache snapshot. Vars: `DAYS=14`, `FROM=2026-06-04 TO=2026-06-08`, `CALENDAR=Home` |
 | `productivity:calendars:list` | List calendars with writable / read-only status |
 | `productivity:calendars:apply` | Apply `create` / `update` / `delete` proposals from `.cache/calendars/proposals.json` (Claude writes; you review; this commits) |
+
+### notion — second-brain triage + keep-in-touch (Go)
+
+Each Notion object you want the tool to touch carries a `triage:<handler>`
+tag — put it in the page/database title or in any `Tags` multi-select
+property. Add the tag = opt in. Delete the tag = opt out. No code or
+config changes.
+
+| Task | What it does |
+|------|--------------|
+| `notion:registry` | List every Notion object the tool currently sees as opted-in. Read-only sanity check before running a handler. |
+| `notion:brain:download` | Pages tagged `triage:brain` → unchecked `to_do` blocks (recursive, depth 3) → `.cache/brain/pages.json` |
+| `notion:brain:analyze` | Claude reads `pages.json`, decides keep / skip, writes `.cache/brain/insights.json` (rewritten as Todoist-shaped tasks) |
+| `notion:brain:apply` | Push insights to Todoist Inbox; stamp source Notion blocks with `[queued: <url>]`; record in `.cache/brain/applied.json` |
+| `notion:brain` | Full brain pipeline |
+| `notion:people:download` | (1) Bridge: scan Todoist completions for `notion-people:<row_id>` markers, patch Notion `Last Contacted`. (2) Pull rows from DBs tagged `triage:people`, write only overdue rows to `.cache/people/rows.json` |
+| `notion:people:analyze` | Claude proposes one follow-up task per overdue person → `.cache/people/followups.json` |
+| `notion:people:apply` | Push follow-ups to Todoist (with `notion-people:<row_id>` marker in description), record in `.cache/people/applied.json` |
+| `notion:people` | Full people pipeline |
+| `notion:all` | Run every handler's full pipeline |
+
+**People DB schema contract.** Every database tagged `triage:people` must
+have these properties (the tool fails loudly on the first download if any
+are missing):
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `Name` | Title | Person identifier |
+| `Last Contacted` | Date | Source of truth for cadence math — **only the Todoist completion bridge writes this**; do not edit by hand |
+| `Cadence` | Select | `weekly` / `monthly` / `quarterly` / `yearly` |
+| `Context` | Multi-select | (optional) Domain tags `family`, `work`, …; add `low_touch` to lower priority |
+| `Notes` | Rich text | (optional) Context Claude can lean on when phrasing the follow-up |
 
 ### email — Gmail cleanup + inbox triage (Go)
 
@@ -122,6 +155,12 @@ Optional, depending on the day:
 ```bash
 task finance:payments:today  # if today is a known bill day
 task finance:balances        # quick "am I solvent" check before spending
+
+# Weekly (e.g. Monday morning): catch overdue people follow-ups.
+task notion:people            # bridge completions → pull overdue → propose → push to Todoist
+
+# Ad-hoc: when you've been dumping ideas into Notion and want them surfaced.
+task notion:brain             # pages tagged triage:brain → Todoist Inbox
 ```
 
 ### During the day — quick conversational changes

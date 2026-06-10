@@ -10,6 +10,9 @@ includes:
   productivity:
     taskfile: ./productivity-tools/Taskfile.yml
     dir: ./productivity-tools
+  notion:
+    taskfile: ./notion-tools/Taskfile.yml
+    dir: ./notion-tools
 
 tasks:
   default:
