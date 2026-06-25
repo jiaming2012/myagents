@@ -17,9 +17,9 @@ import (
 func runDownload(args []string) {
 	fs := flag.NewFlagSet("download", flag.ExitOnError)
 	since := fs.Int("since", 7, "download emails from the last N days")
-	maxEmails := fs.Int("max", 100, "maximum total emails to keep")
+	maxEmails := fs.Int("max", 10000, "safety cap on total emails kept in cache")
 	account := fs.String("account", "", "filter to a specific account name")
-	chunkSize := fs.Int("chunk-size", 25, "emails to fetch per provider call")
+	chunkSize := fs.Int("chunk-size", 10000, "safety cap on emails fetched per account")
 	fs.Parse(args)
 
 	root := config.ProjectRoot()

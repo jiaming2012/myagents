@@ -105,59 +105,95 @@ func (z *ZohoProvider) doRequest(ctx context.Context, method, endpoint string, b
 }
 
 func (z *ZohoProvider) FetchEmails(ctx context.Context, query string, maxResults int) ([]email.Email, error) {
-	// First get the inbox folder ID
 	folderID, err := z.getInboxFolderID(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	// Use folder-based message listing with status filter
-	endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/messages/view?folderId=%s&limit=%d&status=unread",
-		z.accountID, folderID, maxResults)
-
-	resp, err := z.doRequest(ctx, "GET", endpoint, nil)
-	if err != nil {
-		return nil, fmt.Errorf("zoho fetch: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		body, _ := io.ReadAll(resp.Body)
-		return nil, fmt.Errorf("zoho fetch status %d: %s", resp.StatusCode, string(body))
+	// Parse "after:YYYY-MM-DD" cutoff if present. Zoho's /messages/view has no
+	// server-side date filter, so we paginate and stop client-side once we see
+	// emails older than the cutoff (results come back newest-first).
+	var cutoff time.Time
+	if rest, ok := strings.CutPrefix(query, "after:"); ok {
+		if t, err := time.Parse("2006-01-02", strings.TrimSpace(rest)); err == nil {
+			cutoff = t
+		}
 	}
 
-	var result struct {
-		Data []struct {
-			MessageID string      `json:"messageId"`
-			Subject   string      `json:"subject"`
-			Sender    string      `json:"sender"`
-			Summary   string      `json:"summary"`
-			RecvDate  json.Number `json:"receivedTime"`
-			Status2   string      `json:"status2"`
-			FolderID  string      `json:"folderId"`
-		} `json:"data"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
-		return nil, fmt.Errorf("zoho decode: %w", err)
-	}
-
+	// Zoho /messages/view caps at 200 per request; paginate via start (1-based)
+	const pageSize = 200
 	var emails []email.Email
-	for _, m := range result.Data {
-		recvMs, _ := m.RecvDate.Int64()
-		emails = append(emails, email.Email{
-			ID:      m.MessageID,
-			Subject: m.Subject,
-			From:    m.Sender,
-			Snippet: m.Summary,
-			Date:    time.UnixMilli(recvMs),
-			Unread:  m.Status2 == "1",
-		})
+	start := 1
+
+pagination:
+	for len(emails) < maxResults {
+		limit := pageSize
+		if remaining := maxResults - len(emails); remaining < limit {
+			limit = remaining
+		}
+
+		endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/messages/view?folderId=%s&start=%d&limit=%d&status=unread",
+			z.accountID, folderID, start, limit)
+
+		resp, err := z.doRequest(ctx, "GET", endpoint, nil)
+		if err != nil {
+			return nil, fmt.Errorf("zoho fetch: %w", err)
+		}
+
+		if resp.StatusCode >= 300 {
+			body, _ := io.ReadAll(resp.Body)
+			resp.Body.Close()
+			return nil, fmt.Errorf("zoho fetch status %d: %s", resp.StatusCode, string(body))
+		}
+
+		var result struct {
+			Data []struct {
+				MessageID string      `json:"messageId"`
+				Subject   string      `json:"subject"`
+				Sender    string      `json:"sender"`
+				Summary   string      `json:"summary"`
+				RecvDate  json.Number `json:"receivedTime"`
+				Status2   string      `json:"status2"`
+				FolderID  string      `json:"folderId"`
+			} `json:"data"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			resp.Body.Close()
+			return nil, fmt.Errorf("zoho decode: %w", err)
+		}
+		resp.Body.Close()
+
+		for _, m := range result.Data {
+			recvMs, _ := m.RecvDate.Int64()
+			ts := time.UnixMilli(recvMs)
+			if !cutoff.IsZero() && ts.Before(cutoff) {
+				break pagination
+			}
+			emails = append(emails, email.Email{
+				ID:      m.MessageID,
+				Subject: m.Subject,
+				From:    m.Sender,
+				Snippet: m.Summary,
+				Date:    ts,
+				Unread:  m.Status2 == "1",
+			})
+		}
+
+		if len(result.Data) < limit {
+			break
+		}
+		start += limit
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	return emails, nil
 }
 
 func (z *ZohoProvider) getInboxFolderID(ctx context.Context) (string, error) {
+	return z.getFolderIDByName(ctx, "Inbox")
+}
+
+func (z *ZohoProvider) getFolderIDByName(ctx context.Context, name string) (string, error) {
 	endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/folders", z.accountID)
 
 	resp, err := z.doRequest(ctx, "GET", endpoint, nil)
@@ -188,8 +224,8 @@ func (z *ZohoProvider) getInboxFolderID(ctx context.Context) (string, error) {
 	}
 
 	for _, f := range folders {
-		name, _ := f["folderName"].(string)
-		if strings.EqualFold(name, "Inbox") {
+		fname, _ := f["folderName"].(string)
+		if strings.EqualFold(fname, name) {
 			switch v := f["folderId"].(type) {
 			case string:
 				return v, nil
@@ -199,7 +235,7 @@ func (z *ZohoProvider) getInboxFolderID(ctx context.Context) (string, error) {
 		}
 	}
 
-	return "", fmt.Errorf("inbox folder not found")
+	return "", fmt.Errorf("%s folder not found", name)
 }
 
 func (z *ZohoProvider) DeleteEmails(ctx context.Context, ids []string) error {
@@ -207,22 +243,40 @@ func (z *ZohoProvider) DeleteEmails(ctx context.Context, ids []string) error {
 		return nil
 	}
 
-	// Zoho Mail API requires message ID in the URL path for updates
-	for _, id := range ids {
-		endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/messages/%s", z.accountID, id)
+	trashID, err := z.getFolderIDByName(ctx, "Trash")
+	if err != nil {
+		return fmt.Errorf("zoho delete: %w", err)
+	}
 
-		payload := `{"mode":"moveToTrash"}`
+	endpoint := fmt.Sprintf("https://mail.zoho.com/api/accounts/%s/updatemessage", z.accountID)
 
-		resp, err := z.doRequest(ctx, "PUT", endpoint, strings.NewReader(payload))
+	// Zoho's updatemessage endpoint accepts an array of messageIds. Batch to keep
+	// request bodies bounded and avoid hitting any undocumented server caps.
+	const batchSize = 200
+	for start := 0; start < len(ids); start += batchSize {
+		end := min(start+batchSize, len(ids))
+		batch := ids[start:end]
+
+		payload, err := json.Marshal(map[string]any{
+			"mode":         "moveMessage",
+			"destfolderId": trashID,
+			"messageId":    batch,
+		})
 		if err != nil {
-			return fmt.Errorf("zoho delete %s: %w", id, err)
+			return fmt.Errorf("zoho delete marshal: %w", err)
 		}
-		defer resp.Body.Close()
+
+		resp, err := z.doRequest(ctx, "PUT", endpoint, strings.NewReader(string(payload)))
+		if err != nil {
+			return fmt.Errorf("zoho delete batch [%d:%d]: %w", start, end, err)
+		}
 
 		if resp.StatusCode >= 300 {
 			respBody, _ := io.ReadAll(resp.Body)
-			return fmt.Errorf("zoho delete %s status %d: %s", id, resp.StatusCode, string(respBody))
+			resp.Body.Close()
+			return fmt.Errorf("zoho delete batch [%d:%d] status %d: %s", start, end, resp.StatusCode, string(respBody))
 		}
+		resp.Body.Close()
 	}
 
 	return nil
