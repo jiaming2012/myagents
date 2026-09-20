@@ -94,6 +94,16 @@ tasks:
     cmds:
       - python transaction_audit.py {{.CLI_ARGS}}
 
+  precode:
+    desc: "Dry-run Mercury -> Xero pre-coding (spends + transfers, merchants.yaml)"
+    cmds:
+      - python mercury_precode.py {{.CLI_ARGS}}
+
+  precode:apply:
+    desc: Apply Mercury -> Xero pre-coding (creates transactions)
+    cmds:
+      - python mercury_precode.py --apply {{.CLI_ARGS}}
+
   budget:
     desc: Monarch budget and goal tracker
     cmds:
