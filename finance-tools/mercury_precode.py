@@ -246,7 +246,10 @@ def spend_index(xero, bank_account_id, start, end):
     for bt in xero.bank_transactions(bank_account_id, start, end):
         ref = bt.get("Reference") or ""
         if ref.startswith("mercury:"):
+            # Claimed by exactly one Mercury txn via its ref; must not also
+            # satisfy a same-day same-amount twin through the signature.
             refs.add(ref)
+            continue
         if bt["Type"].endswith("-TRANSFER"):
             continue
         sign = -1 if bt["Type"].startswith("SPEND") else 1
@@ -255,18 +258,21 @@ def spend_index(xero, bank_account_id, start, end):
 
 
 def transfer_index(xero, start, end):
-    """Index all existing BankTransfers by mercury ref and (date, amount, from, to) count."""
-    refs, sigs = set(), defaultdict(int)
+    """Index existing BankTransfers: {mercury ref: key} plus (date, amount, from, to)
+    counts for the unreferenced (UI-created) ones. A ref'd transfer is claimed by
+    its own Mercury txn; a same-day same-amount twin must not dedup against it."""
+    refs, sigs, ref_keys = {}, defaultdict(int), {}
     for tr in xero.bank_transfers(start, end):
         ref = tr.get("Reference") or ""
-        if ref.startswith("mercury:"):
-            refs.add(ref)
         key = (
             xero_date(tr["Date"]),
             round(tr["Amount"], 2),
             tr["FromBankAccount"]["AccountID"],
             tr["ToBankAccount"]["AccountID"],
         )
+        if ref.startswith("mercury:"):
+            refs[ref] = key   # claimed by ref; its key is still owed to the mirror side
+            continue
         sigs[key] += 1
     return refs, sigs
 
@@ -350,9 +356,11 @@ def run(args):
             sys.exit(f"transfers: target Xero bank account not found: {target}")
 
     xfer_refs, xfer_sigs = transfer_index(xero, args.start, args.end)
-    planned_xfers = defaultdict(int)   # transfers queued this run, keyed like xfer_sigs
-    matched_mirror = defaultdict(int)  # sig matches consumed by one side; lets the
-                                       # other side of the same Mercury pair match too
+    # Keyed (xfer key, account that still owes its side): a transfer claimed by
+    # the txn on one account satisfies exactly one txn on the OTHER account --
+    # never a same-day same-amount twin on the same account.
+    planned_xfers = defaultdict(int)   # transfers queued this run
+    matched_mirror = defaultdict(int)  # existing transfers claimed this run
 
     new_txns, new_xfers, dupes, skipped, unmatched = [], [], [], [], []
 
@@ -403,20 +411,22 @@ def run(args):
             day, amt = t["postedAt"][:10], round(abs(t["amount"]), 2)
             frm, to = (bank_id, banks[target_name]) if t["amount"] < 0 else (banks[target_name], bank_id)
             key = (day, amt, frm, to)
+            other = to if bank_id == frm else frm
             if ref in xfer_refs:
+                matched_mirror[(xfer_refs[ref], other)] += 1
                 dupes.append((t, target_name, "already posted (mercury ref)"))
             elif xfer_sigs[key] > 0:
                 xfer_sigs[key] -= 1
-                matched_mirror[key] += 1
+                matched_mirror[(key, other)] += 1
                 dupes.append((t, target_name, "existing transfer same date+amount+direction"))
-            elif matched_mirror[key] > 0:
-                matched_mirror[key] -= 1
+            elif matched_mirror[(key, bank_id)] > 0:
+                matched_mirror[(key, bank_id)] -= 1
                 dupes.append((t, target_name, "mirror side of existing transfer"))
-            elif planned_xfers[key] > 0:
-                planned_xfers[key] -= 1
+            elif planned_xfers[(key, bank_id)] > 0:
+                planned_xfers[(key, bank_id)] -= 1
                 dupes.append((t, target_name, "other side already queued this run"))
             else:
-                planned_xfers[key] += 1
+                planned_xfers[(key, other)] += 1
                 new_xfers.append({
                     "FromBankAccount": {"AccountID": frm},
                     "ToBankAccount": {"AccountID": to},
