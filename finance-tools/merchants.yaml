@@ -48,6 +48,7 @@ merchants:
   - {pattern: "Giant Food",           account: "5000"}
   - {pattern: "ShopRite",             account: "5000"}
   - {pattern: "Trader Joe",           account: "5000"}
+  - {pattern: "Instacart",            account: "5000"}   # small top-up ingredient deliveries
   - {pattern: "HomeGoods",            account: "6350"}   # Supplies
   - {pattern: "The Restaurant Store", account: "5200"}   # COGS - Supplies
   - {pattern: "Restaurantsupply",     account: "5200"}
