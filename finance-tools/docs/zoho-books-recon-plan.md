@@ -24,7 +24,9 @@ Cap1, NavyFed, Chase Ink, Mercury personal) are phase 2 and reuse the same mecha
 | Mercury fetch + classify code | `finance-tools/mercury_precode.py` (`fetch_mercury`, `classify`, `merchant_name`) | copy the functions, swap the Xero sink for a Zoho sink |
 | Python interpreter | `PATH=~/miniconda3/bin:$PATH` | the bare `/usr/local/bin/python3` is 3.7 with no deps; every `task` target fails there |
 | **Books access (DONE 2026-10-15)** | `finance-tools/.env` → `ZOHO_BOOKS_REFRESH_TOKEN` (scope `ZohoBooks.fullaccess.all`), `ZOHO_BOOKS_ORG_ID=942990573` | org "Yumyums Kitchen LLC", plan PREMIUM TRIAL (10k calls/day), USD. §1 is complete; start at §2 |
-| Zoho bank accounts (feed active, last refresh 2026-10-15) | `1622286000000095122` Operations ••4613 (530 uncategorized) · `1622286000000095128` Outgoing ACH ••5396 (120) · `1622286000000095134` Taxes ••7818 (136) | book `balance` 0.00 on all three (nothing categorized yet, no opening balance); `bank_balance` 528.43 / 450.18 / 239.29. 786 feed lines total — more than 90 days' worth, so check `feed_start` per account before assuming a statement import is needed |
+| Zoho bank accounts (feed active, last refresh 2026-10-15) | `1622286000000095122` Operations ••4613 (530 uncategorized) · `1622286000000095128` Outgoing ACH ••5396 (120) · `1622286000000095134` Taxes ••7818 (136) | book `balance` 0.00 on all three (nothing categorized yet, no opening balance); `bank_balance` 528.43 / 450.18 / 239.29 |
+| **Feed coverage (verified 2026-10-15)** | operator set the feed start to **2026-01-01**; first feed line is 2026-01-02 (Mercury's first 2026 posting); uncategorized counts **530 / 120 / 136 equal Mercury's posted-txn counts 2026-01-01→today exactly** | the whole of 2026 is already in Zoho as feed lines; §3.3 is a verification, not an import. Operator goal: all of 2026 worked out in Zoho Books |
+| Feed line shape | `GET /banktransactions?account_id=…&filter_by=Status.Uncategorized` → `transaction_id` (the id used in categorize/match URLs), `date`, `amount`, `debit_or_credit`, `payee` (clean merchant, e.g. "Restaurant Depot"), `description` ("RESTAURANT DEPOT; Merchant name: Restaurant Depot" / "Percentage-based rule auto-transfer; Merchant name: Mercury Checking ••0551"), `reference_number` empty, `is_feed: true` | **`Status.All` and the unfiltered list return zero feed lines** — always filter `Status.Uncategorized` (or `status=uncategorized`, or `GET /banktransactions/uncategorized`). `debit_or_credit` follows the ledger: **credit = money out, debit = money in**. Mercury's txn id is not carried; match Mercury↔feed on date + amount + merchant name |
 
 ---
 
@@ -76,14 +78,13 @@ Run these and write the result to `finance-tools/docs/zoho-books-inventory.md`:
 | `GET /contacts?contact_type=vendor` | existing vendors (should be none) |
 
 Decide from this inventory:
-- **feed_start** per account (first feed line date). Everything 2026-01-01 → feed_start−1
-  must be *imported*; everything ≥ feed_start must be *categorized* against the feed.
+- **feed_start** per account. Already known: 2026-01-02 on all three, feed set to start
+  2026-01-01 — so nothing needs importing unless §3.3's diff finds a hole.
 - whether the chart needs seeding (§3.2).
 
-Also check how the Mercury feed line text looks (`payee`/`description`): internal
-transfers in Mercury surface as nicknames like `Taxes ••7818`; confirm the feed carries
-the counterparty name so `merchants.yaml` patterns still hit. If the feed only carries
-`bankDescription`, the classifier already falls back to that.
+Feed line text (verified): `payee` is the clean merchant name and `description` ends in
+`Merchant name: <Mercury counterparty>`, including the `••0551`-style nicknames for
+internal transfers, so `merchants.yaml` patterns hit against `description` unchanged.
 
 ---
 
@@ -169,9 +170,15 @@ Set each Mercury bank account's **opening balance** as of 2025-12-31 to the §3.
 (`PUT /bankaccounts/{id}` opening-balance fields, or the Opening Balances settings
 endpoint — confirm in step 2 which one the org exposes).
 
-### 3.3 Fill the pre-feed gap: import statements from the Mercury API
-Xero's biggest pain was that statement lines were not API-readable. Zoho has
-`POST /bankstatements`. For each account, for the window **2026-01-01 → feed_start−1**:
+### 3.3 Verify feed coverage against Mercury (import only if a hole is found)
+The feed already covers 2026-01-01 → today with counts equal to Mercury's. The job here
+is a **pairing diff**, which the later steps also depend on: for each account, pair
+every Mercury posted txn with exactly one feed line by (date, |amount|, money-in/out,
+then merchant name in `description`); allow ±1 day only when an exact-date pair is
+absent. The pairing table (`mercury_id → zoho transaction_id`) is the backbone of
+§3.4 and the checkpoint file. Expected result: 0 unpaired on both sides.
+
+If a hole does appear, fill it with `POST /bankstatements` (Xero had no such API):
 ```json
 { "account_id": "...", "start_date": "2026-01-01", "end_date": "<feed_start-1>",
   "transactions": [ { "transaction_id": "<mercury id>", "date": "YYYY-MM-DD",
@@ -179,15 +186,15 @@ Xero's biggest pain was that statement lines were not API-readable. Zoho has
       "payee": "<counterparty>", "description": "<bankDescription>",
       "reference_number": "mercury:<id>" } ] }
 ```
-Guard against overlap with the feed: before importing, diff the Mercury list against the
-feed lines (date ± 2 days, |amount|, then payee fuzzy) and **never import a Mercury txn
-that already has a feed line**. Any feed line with no Mercury twin, or Mercury txn inside
-the feed window with no feed line, goes to the report as a *feed gap* (that alone is a
-go/no-go signal for the switch).
+`debit_or_credit` uses the ledger convention (credit = money out). **Never import a
+Mercury txn that already has a feed line.** Any feed line with no Mercury twin, or
+Mercury txn with no feed line, goes to the report as a *feed gap* (a go/no-go signal
+for the switch).
 
-Result: every Mercury posted txn since 2026-01-01 exists as exactly one uncategorized
-line in Zoho, each carrying `reference_number mercury:<id>` (imported) or matched to one
-by the diff (feed).
+Result: every Mercury posted txn since 2026-01-01 is paired with exactly one Zoho line.
+Feed lines carry no reference, so the Mercury id goes onto the *created* document
+(expense / transfer / journal) as `reference_number mercury:<id>` — that is what makes
+re-runs idempotent.
 
 ### 3.4 Categorize every line (the "reconcile clicks")
 Walk accounts in `merchants.yaml` order (4613 first), lines oldest → newest. Decision per
@@ -266,7 +273,7 @@ imported statement, delete created accounts. No Xero state is touched.
 | Risk | Handling |
 |---|---|
 | Rate limits: 100 req/min/org; daily cap by plan (Free 1,000 · Standard 2,000 · Professional 5,000 · Premium+ 10,000; trial is normally Premium). ~500 Mercury txns since Jan → ~1,200–1,800 calls, plus ~140 Toast payouts × (journal + match) ≈ 300–450 more | throttle 90/min, back off on 429 (codes 44/45/1070), checkpoint progress in a local JSON so `--apply` resumes; on a Free plan split across two days |
-| Feed only covers ≤90 days | §3.3 imports the rest from Mercury — this is the feature Xero lacked |
+| Feed coverage | verified 2026-01-02 → today, counts equal Mercury; §3.3 re-checks by pairing and can import via `POST /bankstatements` if a hole appears |
 | Feed line text differs from Mercury API counterparty names | classifier falls back to description; unmatched lines are listed, not guessed |
 | Duplicate transfers (the Xero duplicate saga) | one source of truth = Mercury txn id in `reference_number`; match-before-categorize on the second side |
 | Opening balance wrong | derived from Mercury's own current balance minus posted txns; the §3.6 cent-equality check fails loudly if so |
