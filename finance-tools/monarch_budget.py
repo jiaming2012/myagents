@@ -27,6 +27,7 @@ try:
     from monarchmoney import MonarchMoney
     from monarchmoney.monarchmoney import MonarchMoneyEndpoints
     MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
+    from monarch_client import get_monarch_client
 except ImportError:
     MonarchMoney = None
 
@@ -60,11 +61,11 @@ async def _get_monarch_client():
     if MonarchMoney is None:
         print("Error: monarchmoney package not installed", file=sys.stderr)
         sys.exit(1)
-    token = os.environ.get("MONARCH_TOKEN")
-    if not token:
-        print("Error: MONARCH_TOKEN not set", file=sys.stderr)
+    mm = await get_monarch_client()
+    if mm is None:
+        print("Error: no Monarch credentials available", file=sys.stderr)
         sys.exit(1)
-    return MonarchMoney(token=token)
+    return mm
 
 
 async def fetch_budget_data(target_month=None):
