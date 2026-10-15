@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.jamal.finance-health</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/Users/jamal/miniconda3/bin/python3</string>
+        <string>/Users/jamal/projects/myagents/finance-tools/weekly_health.py</string>
+        <string>--email</string>
+    </array>
+    <key>WorkingDirectory</key>
+    <string>/Users/jamal/projects/myagents/finance-tools</string>
+    <!-- Monday 08:00: before the month's big autopays (Amex 16th, Truist 18th, Citi 22nd, WF 27th) -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Weekday</key>
+        <integer>1</integer>
+        <key>Hour</key>
+        <integer>8</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+    <key>RunAtLoad</key>
+    <false/>
+    <key>StandardOutPath</key>
+    <string>/Users/jamal/Library/Logs/finance-health.log</string>
+    <key>StandardErrPath</key>
+    <string>/Users/jamal/Library/Logs/finance-health.log</string>
+</dict>
+</plist>

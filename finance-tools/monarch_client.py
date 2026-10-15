@@ -102,6 +102,10 @@ def web_client_headers():
 LOGIN_HINT = "Run: task finance:balances:login  (from the myagents root)"
 
 
+class MonarchAuthError(RuntimeError):
+    """Monarch credentials are missing or were rejected (HTTP 401)."""
+
+
 def session_token():
     """Return the token stored in the saved session file, or None."""
     try:

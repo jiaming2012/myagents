@@ -116,6 +116,37 @@ Say you get a new $50/month subscription billed on the 15th, paid from your Capi
 
 3. **Verify:** Run `task forecast` — the new bill should appear under the Capital One account section.
 
+## What's Due (no logins)
+
+```bash
+task due                   # next 7 days from payments.yaml -- deterministic, no Monarch/Xero/Zoho
+task due:month             # next 30 days
+```
+
+`payments.yaml` is the source of truth. Balances are skipped, so the projected
+columns are meaningless; the payment list and dates are exact.
+
+## Registry Gaps (what the forecast can't see)
+
+```bash
+task gaps                  # live: Monarch + Xero + Zoho
+task gaps:offline          # registry-only
+```
+
+Flags: credit/loan accounts without a payment entry, Monarch liabilities the
+registry lacks, registry accounts that are closed or **stale** in Monarch (a
+balance not updated in 7 days), payments with no calendar event, Monarch/Xero
+outages, and Xero bank accounts with no transaction in 10 days. The same checks
+run as section 5 of `task health`, so drift shows up in the Monday email.
+
+Registry conventions that feed these checks:
+
+- `pays_account: <account id>` on a payment entry links it to the credit card or
+  loan it pays down (the name heuristic is the fallback).
+- `inactive: true` on an account excludes it from every check (closed cards).
+- `monarch_match` must be Monarch's exact display name; `®`/case differences are
+  tolerated, but an old hidden duplicate connection is not -- point at the live one.
+
 ## Other Commands
 
 ```bash
@@ -130,8 +161,11 @@ task balances              # Monarch Money account balances
 
 The forecast uses exit codes for scripting:
 - `0` — all clear, no issues
-- `1` — warnings only (accounts below min_balance threshold)
+- `1` — warnings only (accounts below min_balance threshold, or a balance that
+  could not be fetched: shown as `? BALANCE UNKNOWN ?`, never as a shortfall)
 - `2` — errors (negative projected balance)
+
+`--no-balances` always exits 0: without balances, severities mean nothing.
 
 ## Configuration
 

@@ -36,7 +36,8 @@ try:
     from monarchmoney import MonarchMoney
     from monarchmoney.monarchmoney import MonarchMoneyEndpoints
     MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
-    from monarch_client import get_monarch_client, is_auth_error, auth_error_message
+    from monarch_client import (get_monarch_client, is_auth_error, auth_error_message,
+                                MonarchAuthError, LOGIN_HINT)
 except ImportError:
     MonarchMoney = None
 
@@ -106,50 +107,72 @@ async def fetch_monarch_balances():
 
     mm = await get_monarch_client()
     if mm is None:
-        print("Warning: skipping Monarch balance lookup", file=sys.stderr)
-        return {}
+        raise MonarchAuthError(f"no Monarch credentials (no session file, MONARCH_TOKEN unset). {LOGIN_HINT}")
 
     try:
         data = await mm.get_accounts()
     except Exception as e:
         if is_auth_error(e):
-            print(f"Error: {auth_error_message()}", file=sys.stderr)
-            sys.exit(1)
+            raise MonarchAuthError(auth_error_message()) from e
         raise
 
     balances = {}
     for acct in data.get("accounts", []):
         name = acct.get("displayName", "")
-        balances[name] = {
+        entry = {
             "balance": acct.get("currentBalance", 0),
-            "type": acct.get("type", {}).get("name", ""),
+            "type": (acct.get("type") or {}).get("name", ""),
+            "hidden": bool(acct.get("isHidden")),
+            "deactivated": acct.get("deactivatedAt"),
+            "updated": acct.get("displayLastUpdatedAt") or acct.get("updatedAt"),
         }
+        existing = balances.get(name)
+        # The same display name can appear twice (e.g. an old deactivated card
+        # next to its replacement). Keep the active one.
+        if existing and not (existing["hidden"] or existing["deactivated"]) \
+                and (entry["hidden"] or entry["deactivated"]):
+            continue
+        balances[name] = entry
     return balances
 
 
 def resolve_balance(account, monarch_balances, xero_balances):
-    """Get the current balance for an account from available sources."""
+    """Get the current balance for an account from available sources.
+
+    Returns (balance, source) or (None, None) when no source can vouch for it.
+    A source that is entirely empty (login expired, org disconnected) yields
+    None, never a silent 0.0 -- callers treat None as "unknown", not "broke".
+    """
+    from registry_gaps import norm_name
+
     # Try Xero first (for business accounts with xero_account_id)
     xero_id = account.get("xero_account_id")
-    if xero_id and xero_balances is not None:
-        if xero_id in xero_balances:
-            return xero_balances[xero_id]["balance"], "xero"
-        # Account is configured for Xero but not in report — zero balance, not missing
-        return 0.0, "xero"
+    if xero_id:
+        if xero_balances:
+            if xero_id in xero_balances:
+                return xero_balances[xero_id]["balance"], "xero"
+            # Xero is up but this account is absent from the bank summary: zero balance
+            return 0.0, "xero"
+        return None, None
 
-    # Try Monarch
+    if not monarch_balances:
+        return None, None
+
+    # Exact (normalized) Monarch match -- ignores ®/™ and case differences
     monarch_match = account.get("monarch_match")
-    if monarch_match and monarch_balances is not None:
-        if monarch_match in monarch_balances:
-            return monarch_balances[monarch_match]["balance"], "monarch"
-        return 0.0, "monarch"
+    if monarch_match:
+        target = norm_name(monarch_match)
+        for name, data in monarch_balances.items():
+            if norm_name(name) == target:
+                return data["balance"], "monarch"
 
-    # Partial match on Monarch (displayName contains last4)
+    # Partial match on Monarch (displayName contains last4); prefer active accounts
     last4 = account.get("last4")
     if last4:
-        for name, data in monarch_balances.items():
-            if last4 in name:
-                return data["balance"], "monarch"
+        candidates = [(name, data) for name, data in monarch_balances.items() if last4 in name]
+        candidates.sort(key=lambda nd: (bool(nd[1].get("deactivated")), bool(nd[1].get("hidden"))))
+        if candidates:
+            return candidates[0][1]["balance"], "monarch"
 
     return None, None
 

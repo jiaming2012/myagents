@@ -7,6 +7,11 @@ Runs:
   2. Payment forecast (account balances, shortfalls, upcoming bills)
   3. Budget pacing (spending vs plan per category)
   4. Goal progress (savings contributions vs targets)
+  5. Registry gaps (liabilities the forecast cannot see; Monarch/Xero drift and outages)
+
+A failing data source (expired Monarch login, disconnected Xero org) no longer
+aborts the report: the affected section is empty and the outage is reported
+as a gap in section 5 and in the action items.
 
 Usage:
     python weekly_health.py                # Terminal report
@@ -27,11 +32,14 @@ except ImportError:
     pass
 
 from coverage_report import fetch_monarch_balances, load_payments_yaml
+from registry_gaps import run_checks, format_gaps
 
 try:
-    from xero_balances import fetch_xero_balances
+    from xero_balances import fetch_xero_balances, xero_connection_status, fetch_xero_latest_activity
 except ImportError:
     fetch_xero_balances = None
+    xero_connection_status = None
+    fetch_xero_latest_activity = None
 
 from transaction_audit import run_audit as run_transaction_audit
 from payment_forecast import build_forecast, determine_exit_code
@@ -64,41 +72,80 @@ if not sys.stdout.isatty():
     Color.disable()
 
 
+EMPTY_AUDIT = {
+    "monarch_uncategorized": {"needs_review": [], "uncategorized": []},
+    "xero_unreconciled": {"unreconciled": []},
+    "recurring_check": {"missing": [], "found": []},
+}
+
+
+async def _safe(label, coro, default, status):
+    """Await `coro`; on any failure record the reason in `status` and return `default`."""
+    try:
+        result = await coro
+        status[label] = "ok"
+        return result
+    except SystemExit as e:  # some fetchers sys.exit() on missing credentials
+        status[label] = f"exited with code {e.code}"
+    except Exception as e:
+        status[label] = f"{type(e).__name__}: {str(e)[:160]}"
+    return default
+
+
 async def gather_all_data():
     """Gather data from all sources concurrently where possible.
 
-    Returns dict with all raw data needed for the report.
+    Every source is optional: a failure is recorded in data["source_status"]
+    and surfaced as a registry gap instead of aborting the report.
     """
-    # Start async tasks
-    monarch_balances_task = fetch_monarch_balances()
-    transaction_audit_task = run_transaction_audit(days=7)
-    budget_data_task = fetch_budget_data()
-    categories_task = fetch_categories()
-
-    # Gather async results
+    status = {}
     monarch_balances, audit_result, budget_data, categories = await asyncio.gather(
-        monarch_balances_task,
-        transaction_audit_task,
-        budget_data_task,
-        categories_task,
+        _safe("monarch", fetch_monarch_balances(), {}, status),
+        _safe("audit", run_transaction_audit(days=7), EMPTY_AUDIT, status),
+        _safe("budget", fetch_budget_data(), None, status),
+        _safe("categories", fetch_categories(), None, status),
     )
 
-    # Sync calls
-    xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+    # Xero (sync)
+    xero_status = xero_connection_status() if xero_connection_status else "xero_balances module missing"
+    status["xero"] = xero_status
+    xero_balances = {}
+    xero_latest = None
+    if xero_status == "ok":
+        try:
+            xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+            xero_latest = fetch_xero_latest_activity() if fetch_xero_latest_activity else None
+        except Exception as e:
+            status["xero"] = f"{type(e).__name__}: {str(e)[:160]}"
 
     # Build forecast from balances
     config = load_payments_yaml()
     forecast = build_forecast(config, monarch_balances, xero_balances, days=30)
 
     # Analyze budget
-    budget_analysis = analyze_budget_pacing(budget_data, categories)
-    goal_progress = analyze_goal_progress(budget_data)
+    if budget_data is not None and categories is not None:
+        budget_analysis = analyze_budget_pacing(budget_data, categories)
+        goal_progress = analyze_goal_progress(budget_data)
+    else:
+        budget_analysis = {"categories": [], "month_pct": 0.0}
+        goal_progress = []
+
+    # Registry gaps (section 5). The Zoho calendar check is left to `task finance:gaps`.
+    gaps = run_checks(
+        config,
+        monarch_accounts=monarch_balances or None,
+        event_titles=None,
+        source_status={"monarch": status.get("monarch", "unknown"), "xero": xero_status},
+        xero_latest=xero_latest,
+    )
 
     return {
         "audit": audit_result,
         "forecast": forecast,
         "budget": budget_analysis,
         "goals": goal_progress,
+        "gaps": gaps,
+        "source_status": status,
         "run_at": datetime.now(),
     }
 
@@ -132,6 +179,8 @@ def count_action_items(data):
             items.append(f"SHORTFALL: {acct['name']} projected ${acct['projected_balance']:,.2f}")
         elif acct["severity"] == "warning":
             items.append(f"LOW: {acct['name']} projected ${acct['projected_balance']:,.2f} (min: ${acct['min_balance']:,.2f})")
+        elif acct["severity"] == "unknown":
+            items.append(f"UNKNOWN: {acct['name']} balance unavailable (source down or account unmapped)")
 
     # Budget items
     for cat in data["budget"]["categories"]:
@@ -142,6 +191,11 @@ def count_action_items(data):
     for g in data["goals"]:
         if g["status"] == "at_risk":
             items.append(f"Goal at risk: {g['name']} ({g['pct']:.0f}% of planned)")
+
+    # Registry gaps
+    for g in data.get("gaps", []):
+        tag = "GAP" if g["severity"] == "error" else "gap"
+        items.append(f"{tag}: {g['message']}")
 
     return items
 
@@ -204,6 +258,8 @@ def print_terminal_report(data):
             status = f"{Color.BOLD_RED}SHORTFALL{Color.RESET}"
         elif acct["severity"] == "warning":
             status = f"{Color.YELLOW}LOW{Color.RESET}"
+        elif acct["severity"] == "unknown":
+            status = f"{Color.YELLOW}UNKNOWN{Color.RESET}"
         else:
             status = f"{Color.GREEN}OK{Color.RESET}"
 
@@ -259,6 +315,12 @@ def print_terminal_report(data):
                 status = f"{Color.BOLD_RED}AT RISK{Color.RESET}"
             print(f"    {g['name']:<25} ${g['actual']:>8,.0f} / ${g['planned']:>8,.0f}  {status}")
 
+    # --- Section 5: Registry Gaps ---
+    gaps = data.get("gaps", [])
+    print(f"\n  {Color.BOLD}5. REGISTRY GAPS{Color.RESET} (what the forecast cannot see)")
+    print(f"  {'─' * 55}")
+    print(format_gaps(gaps, color=sys.stdout.isatty()))
+
     # --- Action Items ---
     items = count_action_items(data)
     print(f"\n{'━' * 70}")
@@ -302,7 +364,7 @@ def build_health_email_html(data):
         if acct["severity"] == "error":
             bg = "#fee2e2"
             weight = "font-weight: bold;"
-        elif acct["severity"] == "warning":
+        elif acct["severity"] in ("warning", "unknown"):
             bg = "#fef9c3"
             weight = ""
         else:
@@ -363,6 +425,30 @@ def build_health_email_html(data):
             f'<td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: center; color: {color};">{label}</td>'
             f'</tr>\n'
         )
+
+    # Registry gaps HTML
+    gap_rows = ""
+    for g in data.get("gaps", []):
+        bg = "#fee2e2" if g["severity"] == "error" else "#fef9c3"
+        fix = f'<br><span style="color: #6b7280; font-size: 12px;">fix: {g["fix"]}</span>' if g.get("fix") else ""
+        gap_rows += (
+            f'<tr style="background: {bg};">'
+            f'<td style="padding: 6px 8px; border: 1px solid #e5e7eb; white-space: nowrap;">{g["kind"]}</td>'
+            f'<td style="padding: 6px 8px; border: 1px solid #e5e7eb;">{g["message"]}{fix}</td>'
+            f'</tr>\n'
+        )
+    if gap_rows:
+        gaps_html = f"""
+<h3 style="color: #1f2937;">Registry Gaps ({len(data.get("gaps", []))})</h3>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+<tr style="background: #f3f4f6;">
+<th style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: left;">Kind</th>
+<th style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: left;">Gap</th>
+</tr>
+{gap_rows}</table>
+"""
+    else:
+        gaps_html = '<p style="color: #16a34a; margin-bottom: 16px;">Registry gaps: none</p>'
 
     # Action items HTML
     action_html = ""
@@ -440,6 +526,7 @@ def build_health_email_html(data):
 {goal_rows if goal_rows else '<tr><td colspan="4" style="padding: 6px 8px; border: 1px solid #e5e7eb; color: #9ca3af;">No active goals</td></tr>'}
 </table>
 
+{gaps_html}
 {action_html}
 
 <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">Generated by Banking Payment Forecaster</p>

@@ -56,6 +56,26 @@ tasks:
     cmds:
       - python payment_forecast.py --days 30
 
+  due:
+    desc: "Everything due in the next 7 days from payments.yaml -- deterministic, no logins"
+    cmds:
+      - python payment_forecast.py --days 7 --no-balances --timeline
+
+  due:month:
+    desc: "Everything due in the next 30 days from payments.yaml -- deterministic, no logins"
+    cmds:
+      - python payment_forecast.py --days 30 --no-balances --timeline
+
+  gaps:
+    desc: "Registry gap check: liabilities without payment entries, Monarch/Xero/Zoho drift, source outages"
+    cmds:
+      - python registry_gaps.py {{.CLI_ARGS}}
+
+  gaps:offline:
+    desc: Registry-only gap check (no network)
+    cmds:
+      - python registry_gaps.py --offline
+
   forecast:email:
     desc: Email forecast summary (default 30 days)
     cmds:
@@ -123,6 +143,21 @@ tasks:
     desc: Preview weekly health report as HTML
     cmds:
       - python weekly_health.py --dry-run
+
+  health:schedule:
+    desc: Install the launchd agent that emails the weekly health report (Mon 08:00)
+    cmds:
+      - cp launchd/com.jamal.finance-health.plist ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - launchctl unload ~/Library/LaunchAgents/com.jamal.finance-health.plist 2>/dev/null || true
+      - launchctl load ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - 'echo "Installed com.jamal.finance-health (Mon 08:00). Log: ~/Library/Logs/finance-health.log"'
+
+  health:unschedule:
+    desc: Remove the weekly health launchd agent
+    cmds:
+      - launchctl unload ~/Library/LaunchAgents/com.jamal.finance-health.plist 2>/dev/null || true
+      - rm -f ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - echo "Removed com.jamal.finance-health"
 
   test:
     desc: Run integration tests (requires valid .env credentials)

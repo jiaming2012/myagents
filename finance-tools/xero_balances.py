@@ -241,6 +241,68 @@ def fetch_xero_balances():
 # --- Standalone mode ---
 
 
+def _xero_api():
+    """Return (AccountingApi, tenant_id). Raises RuntimeError with a reason on any failure."""
+    if AccountingApi is None:
+        raise RuntimeError("xero-python not installed")
+    if not CLIENT_ID or not CLIENT_SECRET:
+        raise RuntimeError("XERO_CLIENT_ID/SECRET not set")
+    token = load_token()
+    if not token:
+        raise RuntimeError("no Xero token; re-authorize via yumyums app.py")
+    token = refresh_token(token)
+    api_client = ApiClient(
+        Configuration(oauth2_token=OAuth2Token(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)),
+        oauth2_token_getter=load_token,
+        oauth2_token_saver=save_token,
+    )
+    api_client.set_oauth2_token(token)
+    connections = IdentityApi(api_client).get_connections()
+    if not connections:
+        raise RuntimeError(
+            "no Xero organisation connected to this app (token refreshes but /connections is empty); "
+            "re-consent: cd ~/projects/yumyums/accounting/xero && python app.py, then open "
+            "http://localhost:9091/login"
+        )
+    return AccountingApi(api_client), connections[0].tenant_id
+
+
+def xero_connection_status():
+    """'ok', or a short reason the Xero API is unusable right now. Never raises."""
+    try:
+        _xero_api()
+        return "ok"
+    except Exception as e:
+        return str(e)[:220]
+
+
+def fetch_xero_latest_activity(days=120):
+    """{bank account name: date of its most recent bank transaction, or None} over the last N days.
+
+    Used by the registry gap check to flag accounts whose books are behind.
+    """
+    from datetime import date, timedelta
+
+    api, tenant = _xero_api()
+    since = date.today() - timedelta(days=days)
+    latest = {a.name: None for a in api.get_accounts(tenant, where='Type=="BANK"').accounts}
+    page = 1
+    while True:
+        batch = api.get_bank_transactions(
+            tenant, where=f"Date >= DateTime({since.year},{since.month},{since.day})", page=page
+        ).bank_transactions
+        if not batch:
+            break
+        for t in batch:
+            name = t.bank_account.name
+            if t.date and (latest.get(name) is None or t.date > latest[name]):
+                latest[name] = t.date
+        if len(batch) < 100:
+            break
+        page += 1
+    return latest
+
+
 def main():
     """Fetch and display Xero balances."""
     balances = fetch_xero_balances()
