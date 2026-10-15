@@ -23,6 +23,14 @@ Usage:
     python registry_gaps.py              # all checks (needs Monarch/Xero/Zoho creds)
     python registry_gaps.py --offline    # registry-only checks, no network
     python registry_gaps.py --no-calendar
+    python registry_gaps.py --category personal   # personal accounts/payments only
+    python registry_gaps.py --category business   # business only
+
+--category narrows the registry BEFORE the checks run and contacts only the
+sources the narrowed registry still needs: a personal run never touches Xero,
+a business run only logs in to Monarch if a business account has a
+monarch_match. Monarch liabilities the registry does not know about carry no
+category; Monarch is the personal ledger here, so they count as personal.
 """
 
 import argparse
@@ -30,6 +38,7 @@ import asyncio
 import sys
 from datetime import datetime, timedelta
 
+CATEGORIES = ("personal", "business")
 XERO_STALE_DAYS = 10
 MONARCH_STALE_DAYS = 7
 CALENDAR_WINDOW_DAYS = 31
@@ -55,6 +64,81 @@ def _gap(severity, kind, message, fix=""):
 def _liability_accounts(config):
     return [a for a in config.get("accounts", [])
             if a.get("type") in ("credit", "loan") and not a.get("inactive")]
+
+
+def payment_category(payment, accounts):
+    """personal | business | None for a payment.
+
+    Explicit `category` wins; otherwise inherit from the account it pays down,
+    then from its funding account.
+    """
+    if payment.get("category"):
+        return payment["category"]
+    by_id = {a["id"]: a for a in accounts}
+    for acct_id in (payment_pays_account(payment, accounts), payment.get("funding_account")):
+        acct = by_id.get(acct_id) if acct_id else None
+        if acct and acct.get("category"):
+            return acct["category"]
+    return None
+
+
+def filter_config(config, category):
+    """Narrow the registry to one category. `category=None` returns it unchanged.
+
+    Accounts without a category and payments whose category cannot be resolved
+    drop out of a filtered view; `check_uncategorized` reports them so nothing
+    can silently fall out of both views.
+    """
+    if category is None:
+        return config
+    if category not in CATEGORIES:
+        raise ValueError(f"category must be one of {CATEGORIES}, got {category!r}")
+    accounts = config.get("accounts", [])
+    out = dict(config)
+    out["accounts"] = [a for a in accounts if a.get("category") == category]
+    out["payments"] = [p for p in config.get("payments", [])
+                       if payment_category(p, accounts) == category]
+    return out
+
+
+def sources_needed(config):
+    """Which live sources the (possibly filtered) registry actually depends on."""
+    needed = set()
+    for a in config.get("accounts", []):
+        if a.get("inactive"):
+            continue
+        if a.get("monarch_match"):
+            needed.add("monarch")
+        if a.get("xero_account_id"):
+            needed.add("xero")
+    if config.get("payments"):
+        needed.add("zoho")
+    return needed
+
+
+def check_uncategorized(config):
+    """Active accounts and payments that no --category view would ever show."""
+    accounts = config.get("accounts", [])
+    gaps = []
+    for a in accounts:
+        if a.get("inactive") or a.get("category") in CATEGORIES:
+            continue
+        gaps.append(_gap(
+            "warning", "uncategorized",
+            f"{a.get('name', a['id'])} ({a['id']}) has no category; it is invisible to "
+            f"--category personal and --category business alike.",
+            "Set category: personal or category: business on the account.",
+        ))
+    for p in config.get("payments", []):
+        if payment_category(p, accounts) in CATEGORIES:
+            continue
+        gaps.append(_gap(
+            "warning", "uncategorized",
+            f"'{p.get('name')}' has no category and neither pays_account nor funding_account "
+            f"resolves one; it is invisible to every --category view.",
+            "Set category: on the payment, or point funding_account at a categorized account.",
+        ))
+    return gaps
 
 
 def payment_pays_account(payment, accounts):
@@ -253,11 +337,17 @@ def check_xero_staleness(latest_by_account, threshold_days=XERO_STALE_DAYS, toda
 
 
 def run_checks(config, monarch_accounts=None, event_titles=None, source_status=None,
-               xero_latest=None):
+               xero_latest=None, category=None):
+    """Run every check. `category` narrows the registry first (see filter_config);
+    passing an already-filtered config is fine, filtering is idempotent."""
+    config = filter_config(config, category)
     gaps = []
     gaps += check_sources(source_status)
     gaps += check_liabilities_without_payment(config)
-    gaps += check_monarch_unknown_liabilities(config, monarch_accounts)
+    if category != "business":
+        # Unknown Monarch liabilities carry no registry category. Monarch is the
+        # personal ledger here, so they belong to the personal and full views.
+        gaps += check_monarch_unknown_liabilities(config, monarch_accounts)
     gaps += check_registry_closed_in_monarch(config, monarch_accounts)
     gaps += check_monarch_stale(config, monarch_accounts)
     gaps += check_calendar_coverage(config, event_titles)
@@ -269,72 +359,92 @@ def run_checks(config, monarch_accounts=None, event_titles=None, source_status=N
 # Data gathering (I/O)
 # ---------------------------------------------------------------------------
 
-async def gather(config, offline=False, calendar=True):
-    """Collect live inputs for run_checks, recording each source's status."""
-    source_status = {}
-    monarch_accounts = None
-    xero_latest = None
-    event_titles = None
+ALL_SOURCES = frozenset({"monarch", "xero", "zoho"})
 
-    if offline:
-        return dict(config=config, monarch_accounts=None, event_titles=None,
-                    source_status=None, xero_latest=None)
 
-    # Monarch
+async def _gather_monarch(source_status):
     try:
         from coverage_report import fetch_monarch_balances
         from monarch_client import MonarchAuthError
         try:
-            monarch_accounts = await fetch_monarch_balances()
-            source_status["monarch"] = "ok" if monarch_accounts else "no accounts returned"
+            accounts = await fetch_monarch_balances()
+            source_status["monarch"] = "ok" if accounts else "no accounts returned"
+            return accounts
         except MonarchAuthError as e:
             source_status["monarch"] = str(e)
         except Exception as e:  # network etc.
             source_status["monarch"] = f"{type(e).__name__}: {e}"[:160]
     except ImportError as e:
         source_status["monarch"] = f"import failed: {e}"
+    return None
 
-    # Xero
+
+def _gather_xero(source_status):
     try:
         from xero_balances import xero_connection_status, fetch_xero_latest_activity
         status = xero_connection_status()
         source_status["xero"] = status
         if status == "ok":
             try:
-                xero_latest = fetch_xero_latest_activity()
+                return fetch_xero_latest_activity()
             except Exception as e:
                 source_status["xero"] = f"activity fetch failed: {e}"[:160]
     except ImportError as e:
         source_status["xero"] = f"import failed: {e}"
+    return None
 
-    # Zoho calendar
-    if calendar:
-        try:
-            import os
-            from zoho_calendar_payments import get_access_token, fetch_events
-            needed = ("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN", "ZOHO_CALENDAR_ID")
-            if all(os.environ.get(k) for k in needed):
-                token = get_access_token(os.environ["ZOHO_CLIENT_ID"], os.environ["ZOHO_CLIENT_SECRET"],
-                                         os.environ["ZOHO_REFRESH_TOKEN"])
-                start = datetime.now()
-                events = fetch_events(token, os.environ["ZOHO_CALENDAR_ID"], start,
-                                      start + timedelta(days=CALENDAR_WINDOW_DAYS))
-                event_titles = [e.get("title", "") for e in events]
-                source_status["zoho"] = "ok"
-            else:
-                source_status["zoho"] = "credentials not set (calendar check skipped)"
-        except Exception as e:
-            source_status["zoho"] = f"{type(e).__name__}: {e}"[:160]
+
+def _gather_zoho(source_status):
+    try:
+        import os
+        from zoho_calendar_payments import get_access_token, fetch_events
+        needed = ("ZOHO_CLIENT_ID", "ZOHO_CLIENT_SECRET", "ZOHO_REFRESH_TOKEN", "ZOHO_CALENDAR_ID")
+        if all(os.environ.get(k) for k in needed):
+            token = get_access_token(os.environ["ZOHO_CLIENT_ID"], os.environ["ZOHO_CLIENT_SECRET"],
+                                     os.environ["ZOHO_REFRESH_TOKEN"])
+            start = datetime.now()
+            events = fetch_events(token, os.environ["ZOHO_CALENDAR_ID"], start,
+                                  start + timedelta(days=CALENDAR_WINDOW_DAYS))
+            source_status["zoho"] = "ok"
+            return [e.get("title", "") for e in events]
+        source_status["zoho"] = "credentials not set (calendar check skipped)"
+    except Exception as e:
+        source_status["zoho"] = f"{type(e).__name__}: {e}"[:160]
+    return None
+
+
+async def gather(config, offline=False, calendar=True, sources=None):
+    """Collect live inputs for run_checks, recording each source's status.
+
+    `sources` limits which live sources are contacted (default: all). A source
+    that is not needed is neither fetched nor reported as unavailable, so a
+    business-only run never logs in to Monarch unless a business account maps
+    to it, and a personal-only run never touches Xero.
+    """
+    if offline:
+        return dict(config=config, monarch_accounts=None, event_titles=None,
+                    source_status=None, xero_latest=None)
+
+    sources = ALL_SOURCES if sources is None else set(sources)
+    source_status = {}
+    monarch_accounts = await _gather_monarch(source_status) if "monarch" in sources else None
+    xero_latest = _gather_xero(source_status) if "xero" in sources else None
+    event_titles = _gather_zoho(source_status) if calendar and "zoho" in sources else None
 
     return dict(config=config, monarch_accounts=monarch_accounts, event_titles=event_titles,
                 source_status=source_status, xero_latest=xero_latest)
 
 
-async def run_all(offline=False, calendar=True):
+async def run_all(offline=False, calendar=True, category=None):
     from coverage_report import load_payments_yaml
     config = load_payments_yaml()
-    inputs = await gather(config, offline=offline, calendar=calendar)
-    return run_checks(**inputs)
+    # Only a filtered run reports uncategorized entries: in the full view they
+    # are checked like everything else, so they are not a gap there.
+    gaps = check_uncategorized(config) if category else []
+    config = filter_config(config, category)
+    inputs = await gather(config, offline=offline, calendar=calendar,
+                          sources=sources_needed(config))
+    return gaps + run_checks(category=category, **inputs)
 
 
 # ---------------------------------------------------------------------------
@@ -361,11 +471,15 @@ def main():
     parser = argparse.ArgumentParser(description="Find what payments.yaml does not know about.")
     parser.add_argument("--offline", action="store_true", help="Registry-only checks, no network")
     parser.add_argument("--no-calendar", action="store_true", help="Skip the Zoho calendar check")
+    parser.add_argument("--category", choices=CATEGORIES,
+                        help="Only check this category's accounts and payments")
     args = parser.parse_args()
 
-    gaps = asyncio.run(run_all(offline=args.offline, calendar=not args.no_calendar))
+    gaps = asyncio.run(run_all(offline=args.offline, calendar=not args.no_calendar,
+                               category=args.category))
     errors = sum(1 for g in gaps if g["severity"] == "error")
-    print(f"\nREGISTRY GAP CHECK  ({len(gaps)} gap(s), {errors} error(s))")
+    scope = f"  [{args.category}]" if args.category else ""
+    print(f"\nREGISTRY GAP CHECK{scope}  ({len(gaps)} gap(s), {errors} error(s))")
     print("-" * 70)
     print(format_gaps(gaps, color=sys.stdout.isatty()))
     sys.exit(1 if gaps else 0)

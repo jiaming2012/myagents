@@ -76,6 +76,16 @@ tasks:
     cmds:
       - python registry_gaps.py --offline
 
+  gaps:personal:
+    desc: "Gap check for personal accounts/payments only (Monarch + Zoho; never touches Xero)"
+    cmds:
+      - python registry_gaps.py --category personal {{.CLI_ARGS}}
+
+  gaps:business:
+    desc: "Gap check for business accounts/payments only (Xero + Zoho; Monarch only if a business account maps to it)"
+    cmds:
+      - python registry_gaps.py --category business {{.CLI_ARGS}}
+
   forecast:email:
     desc: Email forecast summary (default 30 days)
     cmds:
