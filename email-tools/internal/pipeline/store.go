@@ -76,7 +76,7 @@ func LoadInsightsManifest(root string) (*InsightsManifest, error) {
 
 // SaveInsightsManifest atomically writes insights.json.
 func SaveInsightsManifest(root string, m *InsightsManifest) error {
-	m.UpdatedAt = time.Now()
+	m.UpdatedAt = FlexTime{Time: time.Now()}
 	return atomicWriteJSON(insightsPath(root), m)
 }
 
