@@ -6,5 +6,7 @@ __pycache__/
 *.pyc
 .pytest_cache/
 .alert_state.json
+.zoho_books_token.json
+.zoho_recon_state.json
 forecast_preview.html
 .mm
