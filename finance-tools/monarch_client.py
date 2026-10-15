@@ -25,11 +25,10 @@ except ImportError:
 
 try:
     from monarchmoney import MonarchMoney
-    from monarchmoney.monarchmoney import MonarchMoneyEndpoints, RequireMFAException
+    from monarchmoney.monarchmoney import MonarchMoneyEndpoints
     MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
 except ImportError:
     MonarchMoney = None
-    RequireMFAException = Exception
 
 SESSION_FILE = Path(__file__).parent / ".mm" / "mm_session.pickle"
 LOGIN_HINT = "Run: task finance:balances:login  (from the myagents root)"
@@ -111,16 +110,94 @@ def masked_input(prompt, mask="*"):
     return "".join(chars)
 
 
+MFA_MARKERS = ("mfa", "multi-factor", "multi factor", "two-factor", "2fa", "totp", "one-time")
+
+
+def classify_login_response(status, body):
+    """Turn a raw /auth/login/ response into ("ok", token) | ("mfa", msg) | ("error", msg).
+
+    The upstream library treats *every* 403 as "MFA required". Monarch also
+    returns 403 for device/bot protection and other refusals, so we read the
+    body and only ask for a 2FA code when Monarch actually says so.
+    """
+    detail = ""
+    code = ""
+    if isinstance(body, dict):
+        detail = str(body.get("detail") or body.get("message") or body.get("error") or "")
+        code = str(body.get("error_code") or body.get("code") or "")
+        if not detail and body:
+            detail = str(body)
+    elif body:
+        detail = str(body)
+    detail = detail.strip()[:300]
+
+    if status == 200 and isinstance(body, dict) and body.get("token"):
+        return "ok", body["token"]
+
+    text = f"{code} {detail}".lower()
+    if status == 403 and any(m in text for m in MFA_MARKERS):
+        return "mfa", detail or code
+    msg = f"HTTP {status}"
+    if code:
+        msg += f" [{code}]"
+    if detail:
+        msg += f": {detail}"
+    return "error", msg
+
+
+async def _post_login(mm, payload):
+    """POST to Monarch's login endpoint with the library's headers; return (status, body)."""
+    from aiohttp import ClientSession
+    headers = dict(getattr(mm, "_headers", None) or {})
+    headers.pop("Authorization", None)
+    async with ClientSession(headers=headers) as session:
+        async with session.post(MonarchMoneyEndpoints.getLoginEndpoint(), json=payload) as resp:
+            try:
+                body = await resp.json(content_type=None)
+            except Exception:
+                body = (await resp.text())[:500]
+            return resp.status, body
+
+
 async def interactive_login(mm):
-    """Prompt for email, masked password and (if required) the 2FA code."""
+    """Prompt for email, masked password and (only if Monarch asks) the 2FA code.
+
+    Unlike the library's interactive_login, a 403 that is *not* an MFA
+    challenge is reported with Monarch's own error text instead of a
+    misleading "Two Factor Code" prompt.
+    """
     email = input("Email: ").strip()
     password = masked_input("Password: ")
-    try:
-        await mm.login(email, password, use_saved_session=False, save_session=True)
-    except RequireMFAException:
+    payload = {
+        "password": password,
+        "supports_mfa": True,
+        "trusted_device": False,
+        "username": email,
+    }
+    status, body = await _post_login(mm, payload)
+    kind, info = classify_login_response(status, body)
+
+    if kind == "ok":
+        mm.set_token(info)
+        mm._headers["Authorization"] = f"Token {info}"
+        mm.save_session()
+        return
+
+    if kind == "mfa":
+        print(f"Monarch requires a second factor: {info}")
         code = input("Two Factor Code: ").strip()
         await mm.multi_factor_authenticate(email, password, code)
         mm.save_session()
+        return
+
+    print(f"Error: Monarch login failed. {info}", file=sys.stderr)
+    if status == 403:
+        print("Monarch refused this login and did not ask for a 2FA code. This is usually "
+              "device/bot protection on the unofficial API.\n"
+              "Workaround: copy the 'Authorization: Token ...' value from a Monarch web "
+              "request in your browser's DevTools into MONARCH_TOKEN in finance-tools/.env.",
+              file=sys.stderr)
+    sys.exit(1)
 
 
 async def get_monarch_client(force_login=False):
