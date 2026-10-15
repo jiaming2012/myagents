@@ -89,7 +89,7 @@ accounts:
     last4: "8513"
     type: depository
     category: personal
-    monarch_match: "360 Checking (...8513)"
+    monarch_match: "Income (...8513)"   # was "360 Checking (...8513)": an old hidden connection last updated 2025-03-23
     nicknames: ["Cap1 Income", "Cap1 8513", "Capital One 8513", "360 Checking Income"]
     min_balance: 200
     alert_on: error
@@ -100,7 +100,7 @@ accounts:
     last4: "4354"
     type: depository
     category: personal
-    monarch_match: "360 Checking (...4354)"
+    monarch_match: "Recurring ACH (...4354)"   # was "360 Checking (...4354)": old hidden connection, balance frozen since 2025-03-23
     nicknames: ["Cap1 Recurring", "Cap1 4354", "Capital One 4354", "360 Checking Recurring"]
     min_balance: 500
     alert_on: warning
@@ -111,7 +111,7 @@ accounts:
     last4: "5550"
     type: depository
     category: personal
-    monarch_match: "360 Performance Savings (...5550)"
+    monarch_match: "Goals, 360 Savings (...5550)"   # was "360 Performance Savings (...5550)": old hidden connection
     nicknames: ["Cap1 Savings", "Cap1 5550", "Capital One 5550", "360 Savings"]
 
   - id: cap1-quicksilver-0732
@@ -259,7 +259,7 @@ accounts:
     last4: "1008"
     type: credit
     category: personal
-    monarch_match: "Delta SkyMiles Gold Card (...1008)"
+    monarch_match: "Delta SkyMiles® Gold Card (...1008)"   # Monarch name includes ®
     nicknames: ["Amex", "Amex Delta", "Amex 1008", "Delta SkyMiles", "American Express 1008"]
 
   - id: amex-platinum-2004
@@ -268,7 +268,7 @@ accounts:
     last4: "2004"
     type: credit
     category: personal
-    monarch_match: "Platinum Card (...2004)"
+    monarch_match: "Platinum Card® (...2004)"   # Monarch name includes ®
     nicknames: ["Amex Platinum", "Amex 2004", "Platinum Card", "American Express 2004"]
 
   # --- Wells Fargo ---
@@ -279,6 +279,7 @@ accounts:
     type: credit
     category: personal
     monarch_match: "BILT WORLD ELITE MASTERCARD (...XXXX-XXXX-XXXX-4607)"
+    inactive: true   # deactivated in Monarch 2026-02-28 (gap check 2026-10-15)
     nicknames: ["BILT", "BILT 4607", "Wells Fargo 4607", "BILT Mastercard"]
 
   # --- Apple / Goldman Sachs ---
@@ -360,6 +361,17 @@ accounts:
     category: personal
     monarch_match: "Cash Management (...*****0789)"
     nicknames: ["Fidelity", "Fidelity 0789", "Fidelity Cash", "Cash Management"]
+
+  # --- Wells Fargo ---
+  - id: wells-autograph-8694
+    name: "Autograph Visa"
+    institution: "Wells Fargo"
+    last4: "8694"
+    type: credit
+    category: personal
+    monarch_match: "WELLS FARGO AUTOGRAPH VISA CARD (...8694)"
+    nicknames: ["Wells Fargo Autograph", "WF Autograph", "Wells 8694", "WF 8694"]
+    # Added 2026-10-15: found via Monarch (balance -$4,411), absent from registry.
 
   # --- Loans ---
   - id: truist-auto-1001
@@ -495,6 +507,7 @@ payments:
     amount: 1801.00
     day_of_month: 18
     funding_account: cap1-recurring-4354
+    pays_account: boa-plat2-7250   # name heuristic missed this card; Monarch shows a $42.80 "Pending Payment" on the 9th -- CONFIRM amount/type
     autopay: true
     autopay_type: full
     category: personal
@@ -532,7 +545,7 @@ payments:
 
   - name: "Citi Rewards+ (full)"
     amount: 556.68
-    day_of_month: 1
+    day_of_month: 22   # was 1; Monarch shows AUTOPAY on the 21st (card) / 22nd-23rd (bank), Jun-Oct 2026
     funding_account: cap1-recurring-4354
     autopay: true
     autopay_type: full
@@ -589,6 +602,82 @@ payments:
     category: null
     zoho_match: null
     notes: ""
+
+  # --- Added 2026-10-15 from Monarch history (Jun-Oct 2026); all debit Recurring ACH 4354 ---
+  - name: "Truist Auto Loan"
+    amount: 702.91
+    day_of_month: 18
+    funding_account: cap1-recurring-4354
+    pays_account: truist-auto-1001
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Truist"
+    notes: "Posted 18th-25th each month; $809.36 once (Jun). Monarch stream: 18th."
+
+  - name: "US Dept of Education (student loan)"
+    amount: 156.30
+    day_of_month: 24
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Dept of Education"
+    notes: "Posted 22nd-24th as $156.30; Monarch stream predicts $167.24. No loan account in registry yet."
+
+  - name: "Perkins Loan"
+    amount: 42.43
+    day_of_month: 2
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Perkins"
+    notes: "Posted 2nd (5th once). No loan account in registry yet."
+
+  - name: "Amex Platinum (full)"
+    amount: 0.00
+    day_of_month: 16
+    funding_account: cap1-recurring-4354
+    pays_account: amex-platinum-2004
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: "Amex Platinum"
+    notes: "AUTOPAY on the 16th for the statement balance ($246-$1,450 Jun-Sep). Returned twice (Jun, Jul) with $29 fee each; carrying ~$73/mo interest."
+
+  - name: "Amex Delta (full)"
+    amount: 0.00
+    day_of_month: 5
+    funding_account: cap1-recurring-4354
+    pays_account: amex-delta-1008
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: "Amex Delta"
+    notes: "Autopay on the 5th; balance usually ~$0."
+
+  - name: "Quicksilver (full)"
+    amount: 0.00
+    day_of_month: 11
+    funding_account: cap1-recurring-4354
+    pays_account: cap1-quicksilver-0732
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: "Quicksilver"
+    notes: "Monarch stream: ~$70 on the 11th; balance $0 as of Oct 2026."
+
+  - name: "Wells Fargo Autograph (full)"
+    amount: 0.00
+    day_of_month: 27
+    funding_account: cap1-recurring-4354
+    pays_account: wells-autograph-8694
+    autopay: true
+    autopay_type: full
+    category: personal
+    zoho_match: "Wells Fargo"
+    notes: "Autopay 27th. Aug payment of $2,109.96 was reversed; late fee Sep 27; balance $4,411 (Oct 2026). CONFIRM funding account (only one $349.67 debit seen from 4354)."
 
 # =============================================================
 # Transfer Rules
