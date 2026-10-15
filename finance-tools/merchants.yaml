@@ -101,7 +101,7 @@ merchants:
   - {pattern: "Unique",               account: "6350"}   # thrift store -- pots/pans (confirmed supplies)
   - {pattern: "••5237",               account: "3200"}   # transfer to personal Mercury savings = owner draw
 
-  # --- added 2026-10-15 (Claude picked; operator said "code to 6xxx, pick sensible ones" -- re-code in Xero if wrong) ---
+  # --- added 2026-10-15 ---
   - {pattern: "Public Storage",       account: "6310"}   # Rent - Other: storage unit
-  - {pattern: "Commerce Management",  account: "6300"}   # Rent - Real Estate: $1,000 to a property-management co (review if it's a deposit)
-  - {pattern: "Jd Transport",         account: "6270"}   # Postage and Delivery: hauling/transport paid via Square (review: 6090 Contract Labor if it's a person)
+  - {pattern: "Commerce Management",  account: "6300"}   # Rent - Real Estate (confirmed by operator 2026-10-15)
+  - {pattern: "Jd Transport",         account: "6440"}   # Vehicle Expense: mechanic, truck repairs, paid via Square (confirmed by operator 2026-10-15)
