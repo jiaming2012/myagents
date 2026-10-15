@@ -47,6 +47,7 @@ except ImportError:
 
 try:
     from coverage_report import fetch_monarch_balances, resolve_balance
+    from monarch_client import MonarchAuthError
 except ImportError:
     print("Error: coverage_report.py must be in the same directory", file=sys.stderr)
     sys.exit(1)
@@ -272,7 +273,11 @@ async def resolve_variable_amounts(payments, config):
     if not variable:
         return payments
 
-    monarch_balances = await fetch_monarch_balances()
+    try:
+        monarch_balances = await fetch_monarch_balances()
+    except MonarchAuthError as e:
+        print(f"Warning: {e}; variable amounts fall back to calendar titles", file=sys.stderr)
+        monarch_balances = {}
     xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
 
     # Build lookup from source_account nickname to account config

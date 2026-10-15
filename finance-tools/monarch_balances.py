@@ -3,7 +3,8 @@
 Fetch and display account balances from Monarch Money.
 
 First run requires interactive login (email + password + MFA if enabled).
-Session is saved to .mm/mm_session.pickle for subsequent runs.
+Session is saved to .mm/mm_session.pickle and is used by every finance
+script; MONARCH_TOKEN in .env is only a fallback when no session exists.
 
 Usage:
     python monarch_balances.py              # All accounts
@@ -32,38 +33,22 @@ except ImportError:
 # Library still uses old URL; Monarch migrated to api.monarch.com
 MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
 
-SESSION_FILE = ".mm/mm_session.pickle"
-
-
-async def get_client(force_login=False):
-    """Get an authenticated Monarch Money client."""
-    # Check for token in env first
-    token = os.environ.get("MONARCH_TOKEN")
-    if token:
-        mm = MonarchMoney(token=token)
-        return mm
-
-    mm = MonarchMoney(session_file=SESSION_FILE)
-
-    if not force_login:
-        try:
-            mm.load_session()
-            return mm
-        except Exception:
-            pass
-
-    print("Logging in to Monarch Money...")
-    await mm.interactive_login()
-    mm.save_session()
-    print("Session saved.\n")
-    return mm
+from monarch_client import get_monarch_client, is_auth_error, auth_error_message
 
 
 async def fetch_and_display(force_login=False, account_type=None):
     """Fetch accounts and display balances."""
-    mm = await get_client(force_login)
+    mm = await get_monarch_client(force_login)
+    if mm is None:
+        sys.exit(1)
 
-    data = await mm.get_accounts()
+    try:
+        data = await mm.get_accounts()
+    except Exception as e:
+        if is_auth_error(e):
+            print(f"Error: {auth_error_message()}", file=sys.stderr)
+            sys.exit(1)
+        raise
     accounts = data.get("accounts", [])
 
     if account_type:

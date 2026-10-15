@@ -305,8 +305,9 @@ class TestBuildForecastBalanceFetchFailure(unittest.TestCase):
 
     @patch("payment_forecast.resolve_balance")
     @patch("payment_forecast.get_payment_dates_in_horizon")
-    def test_unknown_balance_sets_error_severity(self, mock_dates, mock_balance):
-        """When resolve_balance returns None, balance=0.0, source='unknown', severity='error'."""
+    def test_unknown_balance_sets_unknown_severity(self, mock_dates, mock_balance):
+        """When resolve_balance returns None: balance=0.0, source='unknown', severity='unknown'
+        (a source outage is a gap to fix, not a shortfall; exit code is WARNING, not ERROR)."""
         from payment_forecast import build_forecast
 
         mock_balance.return_value = (None, None)
@@ -326,7 +327,9 @@ class TestBuildForecastBalanceFetchFailure(unittest.TestCase):
         acct = result["accounts"][0]
         self.assertAlmostEqual(acct["current_balance"], 0.0)
         self.assertEqual(acct["balance_source"], "unknown")
-        self.assertEqual(acct["severity"], "error")
+        self.assertEqual(acct["severity"], "unknown")
+        from payment_forecast import determine_exit_code, EXIT_WARNING
+        self.assertEqual(determine_exit_code(result), EXIT_WARNING)
 
 
 if __name__ == "__main__":

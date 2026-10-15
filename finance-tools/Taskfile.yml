@@ -56,6 +56,26 @@ tasks:
     cmds:
       - python payment_forecast.py --days 30
 
+  due:
+    desc: "Everything due in the next 7 days from payments.yaml -- deterministic, no logins"
+    cmds:
+      - python payment_forecast.py --days 7 --no-balances --timeline
+
+  due:month:
+    desc: "Everything due in the next 30 days from payments.yaml -- deterministic, no logins"
+    cmds:
+      - python payment_forecast.py --days 30 --no-balances --timeline
+
+  gaps:
+    desc: "Registry gap check: liabilities without payment entries, Monarch/Xero/Zoho drift, source outages"
+    cmds:
+      - python registry_gaps.py {{.CLI_ARGS}}
+
+  gaps:offline:
+    desc: Registry-only gap check (no network)
+    cmds:
+      - python registry_gaps.py --offline
+
   forecast:email:
     desc: Email forecast summary (default 30 days)
     cmds:
@@ -94,6 +114,16 @@ tasks:
     cmds:
       - python transaction_audit.py {{.CLI_ARGS}}
 
+  precode:
+    desc: "Dry-run Mercury -> Xero pre-coding (spends + transfers, merchants.yaml)"
+    cmds:
+      - python mercury_precode.py {{.CLI_ARGS}}
+
+  precode:apply:
+    desc: Apply Mercury -> Xero pre-coding (creates transactions)
+    cmds:
+      - python mercury_precode.py --apply {{.CLI_ARGS}}
+
   budget:
     desc: Monarch budget and goal tracker
     cmds:
@@ -113,6 +143,21 @@ tasks:
     desc: Preview weekly health report as HTML
     cmds:
       - python weekly_health.py --dry-run
+
+  health:schedule:
+    desc: "Install the launchd agent that emails the weekly health report (daily 08:00 + login trigger, sends once per 6 days)"
+    cmds:
+      - cp launchd/com.jamal.finance-health.plist ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - launchctl unload ~/Library/LaunchAgents/com.jamal.finance-health.plist 2>/dev/null || true
+      - launchctl load ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - 'echo "Installed com.jamal.finance-health (daily 08:00 + at login; weekly guard). Log: ~/Library/Logs/finance-health.log"'
+
+  health:unschedule:
+    desc: Remove the weekly health launchd agent
+    cmds:
+      - launchctl unload ~/Library/LaunchAgents/com.jamal.finance-health.plist 2>/dev/null || true
+      - rm -f ~/Library/LaunchAgents/com.jamal.finance-health.plist
+      - echo "Removed com.jamal.finance-health"
 
   test:
     desc: Run integration tests (requires valid .env credentials)

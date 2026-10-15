@@ -104,6 +104,8 @@ are missing):
 
 | Task | What it does |
 |------|--------------|
+| `finance:due` / `:month` | **Everything due in the next 7 / 30 days from `payments.yaml` — deterministic, no logins.** Balances are not fetched, so only the list and dates are meaningful |
+| `finance:gaps` / `:offline` | Registry gap check: credit/loan accounts with no payment entry, Monarch liabilities missing from the registry, closed or stale Monarch links, payments with no Zoho event, Monarch/Xero outages, stale Xero books. Exit 1 if anything is found |
 | `finance:balances` | Monarch Money account balances |
 | `finance:payments:today` | Today's scheduled payments |
 | `finance:payments` / `:month` | Payment events for next 7 / 30 days |
@@ -112,10 +114,11 @@ are missing):
 | `finance:bill-map` / `:month` | Bills mapped to funding accounts with balances |
 | `finance:budget` | Monarch budget + goals tracker |
 | `finance:health` | Weekly financial health check (all checks) |
-| `finance:health:email` / `:preview` | Email or HTML preview of the health report |
+| `finance:health:email` / `:preview` | Email or HTML preview of the health report (now includes section 5, registry gaps; a dead Monarch/Xero login is reported as a gap instead of crashing) |
+| `finance:health:schedule` / `:unschedule` | Install / remove the launchd agent that emails the health report every Monday 08:00 |
 | `finance:audit` | 7-day transaction coverage audit |
 | `finance:report` / `:week` | Coverage report |
-| `finance:balances:login` | Re-login to Monarch (interactive) |
+| `finance:balances:login` | Re-login to Monarch (interactive; email one-time code or authenticator code). Optional in `.env`: `MONARCH_DEVICE_UUID` (browser's trusted device id), `MONARCH_MFA_SECRET` (prompt-free login) |
 | `finance:xero:auth` | Xero OAuth flow |
 
 ---

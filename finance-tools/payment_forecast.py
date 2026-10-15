@@ -33,8 +33,11 @@ except ImportError:
 
 try:
     from coverage_report import fetch_monarch_balances, resolve_balance, load_payments_yaml
-except ImportError:
-    print("Error: coverage_report.py must be in the same directory", file=sys.stderr)
+    from monarch_client import MonarchAuthError
+    from registry_gaps import check_liabilities_without_payment
+except ImportError as e:
+    print(f"Error: coverage_report.py / monarch_client.py / registry_gaps.py must be in the same directory ({e})",
+          file=sys.stderr)
     sys.exit(1)
 
 try:
@@ -190,6 +193,14 @@ def _find_credit_card_for_payment(payment, accounts):
     Returns:
         Account dict if found, None otherwise.
     """
+    # Explicit mapping wins (payments.yaml: pays_account: <account id>)
+    explicit = payment.get("pays_account")
+    if explicit:
+        for acct in accounts:
+            if acct.get("id") == explicit and acct.get("type") == "credit":
+                return acct
+        return None
+
     autopay_type = payment.get("autopay_type")
     if not autopay_type:
         return None
@@ -207,7 +218,7 @@ def _find_credit_card_for_payment(payment, accounts):
     return None
 
 
-def build_forecast(config, monarch_balances, xero_balances, days=30):
+def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missing=True):
     """Build the complete forecast: per-account projected balances after deducting scheduled payments.
 
     Args:
@@ -261,8 +272,9 @@ def build_forecast(config, monarch_balances, xero_balances, days=30):
         # Resolve current balance
         balance, source = resolve_balance(account, monarch_balances, xero_balances)
         if balance is None:
-            print(f"Warning: Could not fetch balance for {account.get('name', acct_id)}, "
-                  f"defaulting to 0.0", file=sys.stderr)
+            if warn_missing:
+                print(f"Warning: Could not fetch balance for {account.get('name', acct_id)}, "
+                      f"defaulting to 0.0", file=sys.stderr)
             balance = 0.0
             source = "unknown"
 
@@ -299,9 +311,10 @@ def build_forecast(config, monarch_balances, xero_balances, days=30):
         else:
             severity = "ok"
 
-        # Unknown balance always error (can't verify solvency)
+        # Unknown balance: the source is down or the account is unmapped. That is
+        # a gap to fix, not a shortfall -- flagging it as one buries real shortfalls.
         if balance_source == "unknown":
-            severity = "error"
+            severity = "unknown"
 
         total_outgoing += total_payments
         if current_balance > 0:
@@ -369,6 +382,8 @@ def print_grouped_view(forecast, days):
         elif acct["severity"] == "warning":
             print(f"  {Color.YELLOW}{proj_str} * LOW BALANCE *{Color.RESET}")
             print(f"  (threshold: ${acct['min_balance']:,.2f})")
+        elif acct["severity"] == "unknown":
+            print(f"  {Color.YELLOW}{proj_str} ? BALANCE UNKNOWN (source unavailable) ?{Color.RESET}")
         else:
             print(f"  {Color.GREEN}{proj_str}{Color.RESET}")
 
@@ -465,14 +480,15 @@ def determine_exit_code(forecast):
 
     Returns:
         EXIT_OK (0) if all accounts are ok.
-        EXIT_WARNING (1) if any account is below min_balance but not negative.
+        EXIT_WARNING (1) if any account is below min_balance but not negative,
+                         or its balance could not be fetched (unknown).
         EXIT_ERROR (2) if any account has negative projected balance.
     """
     worst = EXIT_OK
     for acct in forecast["accounts"]:
         if acct["severity"] == "error":
             return EXIT_ERROR
-        elif acct["severity"] == "warning":
+        elif acct["severity"] in ("warning", "unknown"):
             worst = EXIT_WARNING
     return worst
 
@@ -501,6 +517,11 @@ async def main():
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Export email as forecast_preview.html instead of sending"
+    )
+    parser.add_argument(
+        "--no-balances", action="store_true",
+        help="Skip Monarch/Xero entirely: list the scheduled payments with every balance "
+             "treated as $0 (deterministic; use when a login is broken)"
     )
     args = parser.parse_args()
 
@@ -533,27 +554,31 @@ async def main():
               file=sys.stderr)
         sys.exit(EXIT_ERROR)
 
-    # Warn about credit accounts with no associated payment
-    all_accounts = config.get("accounts", [])
-    credit_ids_with_payments = set()
-    for p in all_payments:
-        credit_acct = _find_credit_card_for_payment(p, all_accounts)
-        if credit_acct:
-            credit_ids_with_payments.add(credit_acct["id"])
-    for acct in all_accounts:
-        if acct.get("type") == "credit" and acct["id"] not in credit_ids_with_payments:
-            print(f"WARNING: Credit account {acct['id']} ({acct.get('name', '?')}) "
-                  f"has no payment event in Zoho Calendar. Add a recurring event with "
-                  f"the bill amount in the title and funding account in notes.", file=sys.stderr)
+    # Registry gaps that make this forecast incomplete (offline check; full set: task finance:gaps)
+    for gap in check_liabilities_without_payment(config):
+        print(f"WARNING: {gap['message']} {gap['fix']}", file=sys.stderr)
 
     # Fetch balances
-    print("Fetching balances...", end=" ", flush=True)
-    monarch_balances = await fetch_monarch_balances()
-    xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
-    print("")
+    if args.no_balances:
+        print("Balances skipped (--no-balances): every starting balance is $0, so projected "
+              "balances and shortfall flags below are NOT meaningful. The payment list and dates are.",
+              file=sys.stderr)
+        monarch_balances, xero_balances = {}, {}
+    else:
+        print("Fetching balances...", end=" ", flush=True)
+        try:
+            monarch_balances = await fetch_monarch_balances()
+        except MonarchAuthError as e:
+            print(f"\nError: {e}", file=sys.stderr)
+            print("Re-run with --no-balances to see the payment schedule without balances.",
+                  file=sys.stderr)
+            sys.exit(EXIT_ERROR)
+        xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+        print("")
 
     # Build forecast
-    forecast = build_forecast(config, monarch_balances, xero_balances, days=args.days)
+    forecast = build_forecast(config, monarch_balances, xero_balances, days=args.days,
+                              warn_missing=not args.no_balances)
 
     # Display output
     if args.timeline:
@@ -619,6 +644,8 @@ async def main():
             subject, html_body = build_summary_html(forecast)
             export_preview(html_body)
 
+    if args.no_balances:
+        sys.exit(EXIT_OK)  # severities are meaningless without balances
     sys.exit(determine_exit_code(forecast))
 
 

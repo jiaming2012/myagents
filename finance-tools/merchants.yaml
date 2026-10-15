@@ -1,0 +1,102 @@
+# Merchant -> Xero account-code mapping for mercury_precode.py
+# (same pattern as payments.yaml: one YAML, edit freely, script re-reads each run)
+#
+# Matching: `pattern` is a case-insensitive substring tested against the Mercury
+# counterparty name, falling back to the bank description. First match wins,
+# in order: skip -> transfers -> merchants. Unmatched transactions are never
+# posted -- they land in the dry-run review list.
+
+# Todoist project the weekly agent files action tasks into ("Bookkeeping")
+todoist_project_id: "6hXPPX7qRMJpfg49"
+
+# Mercury accounts to pre-code, each mapped to its Xero bank account.
+# Order matters a little: list 4613 first so internal transfers are created
+# from its side and the other accounts' sides dedup against them.
+accounts:
+  - mercury_account_id: "9553aae6-abe5-11ed-99c1-97cfb7de9b47"   # Mercury Checking ..4613
+    xero_bank_account: "Mercury: Operations (4613)"
+  - mercury_account_id: "739dbde6-ad85-11ed-9df0-fb27d7a74c22"   # Mercury Checking ..5396
+    xero_bank_account: "Mercury: Outgoing ACH (5396)"
+  - mercury_account_id: "955515ac-abe5-11ed-99c4-5322552875b7"   # Mercury Savings ..7818
+    xero_bank_account: "Mercury: Profit (7818)"
+
+# Never touched by this script
+skip:
+  - pattern: TOAST
+    direction: credit          # Toast payouts are posted by toast_xero `task apply`
+    reason: handled by toast_xero
+
+# Mercury counterparties that are our own accounts -> Xero BankTransfer
+# (value must exactly match the Xero bank account name). Internal transfers
+# surface under user-set nicknames ("Taxes ••7818"), so match the ••suffix.
+transfers:
+  "••4613": "Mercury: Operations (4613)"
+  "••7818": "Mercury: Profit (7818)"
+  "••5396": "Mercury: Outgoing ACH (5396)"
+  "••0551": "Mercury: Operations (0551) * Closed"
+  "Yumyums Kitchen LLC": "BoA: Business Checking (1778)"   # Send Money wires to own BoA
+
+merchants:
+  # --- food & COGS ---
+  - {pattern: "Save A Lot",           account: "5000"}   # Cost of Goods Sold
+  - {pattern: "Restaurant Depot",     account: "5000"}
+  - {pattern: "Shoppers Food",        account: "5000"}
+  - {pattern: "Harris Teeter",        account: "5000"}
+  - {pattern: "Verchio",              account: "5000"}   # produce outlet
+  - {pattern: "Amoretti",             account: "5000"}
+  - {pattern: "Groceryeshop",         account: "5000"}
+  - {pattern: "Giant Food",           account: "5000"}
+  - {pattern: "ShopRite",             account: "5000"}
+  - {pattern: "Trader Joe",           account: "5000"}
+  - {pattern: "Instacart",            account: "5000"}   # small top-up ingredient deliveries
+  - {pattern: "HomeGoods",            account: "6350"}   # Supplies
+  - {pattern: "The Restaurant Store", account: "5200"}   # COGS - Supplies
+  - {pattern: "Restaurantsupply",     account: "5200"}
+  - {pattern: "Thompson",             account: "6430"}   # ThompsonGas propane -> Utilities (review: could be COGS)
+
+  # --- owner ---
+  - {pattern: "Jamal Cole",           account: "3200"}   # Owner's Draws
+  - {pattern: "Latanya Mcgriff",      account: "6240"}   # expense reimbursement (review)
+
+  # --- operating expenses ---
+  - {pattern: "Tanger",               account: "6300"}   # Rent - Real Estate
+  - {pattern: "CubeSmart",            account: "6310"}   # Rent - Other (storage)
+  - {pattern: "Fiverr",               account: "6090"}   # Contract Labor
+  - {pattern: "Facebook",             account: "6000"}   # Advertising
+  - {pattern: "TikTok",               account: "6000"}
+  - {pattern: "Google Workspace",     account: "6340"}   # Software & Web
+  - {pattern: "Sling",                account: "6340"}
+  - {pattern: "SignalWire",           account: "6340"}
+  - {pattern: "TODOIST",              account: "6340"}
+  - {pattern: "Mint Mobile",          account: "6390"}   # Telephone and Internet
+  - {pattern: "Staples",              account: "6250"}   # Office Expense
+  - {pattern: "Digital Room",         account: "6280"}   # Printing and Stationary
+  - {pattern: "UPrinting",            account: "6280"}
+  - {pattern: "Backblaze",            account: "6340"}
+  - {pattern: "Progressive",          account: "6210"}   # Insurance - Other (review: vehicle policy?)
+  - {pattern: "Pgc Dpie",             account: "6160"}   # PG County DPIE -> Licenses and Fees
+  - {pattern: "First American Payment", account: "6040"} # Merchant Fees (PGC DPIE svc fee)
+  - {pattern: "Tractor Supply",       account: "6140"}   # Equipment & Tools
+  - {pattern: "FedEx",                account: "6270"}   # Postage and Delivery
+  - {pattern: "Roses Discount",       account: "6350"}   # Supplies
+  - {pattern: "Dollar Tree",          account: "6350"}
+  - {pattern: "Amazon",               account: "6350"}   # Supplies (review individual items)
+  - {pattern: "The Home Depot",       account: "6140"}   # Equipment & Tools
+  - {pattern: "Vf Washing",           account: "6060"}   # Cleaning and Maintenance
+
+  # --- fuel ---
+  - {pattern: "ExxonMobil",           account: "6440"}   # Vehicle Expense
+  - {pattern: "Royal Farms",          account: "6440"}
+  - {pattern: "Sunoco",               account: "6440"}
+  - {pattern: "Shell",                account: "6440"}
+
+  # --- payroll (order matters: TS/DDS before the generic OnPay fallback) ---
+  - {pattern: "PayrollTS",            account: "6360"}   # OnPay payroll taxes -> Taxes - Payroll
+  - {pattern: "PayrollDDS",           account: "6450"}   # OnPay direct deposits -> Wages and Salaries
+  - {pattern: "OnPay",                account: "6450"}   # other OnPay debits (plain PAYROLL, fees)
+  - {pattern: "Cash App",             account: "6450"}   # Wages and Salaries (per-person payroll, confirmed 2026-09-19)
+  - {pattern: "DaMarien Lee Banks",   account: "6450"}   # Send Money wage payment
+
+  # --- one-offs ---
+  - {pattern: "Unique",               account: "6350"}   # thrift store -- pots/pans (confirmed supplies)
+  - {pattern: "••5237",               account: "3200"}   # transfer to personal Mercury savings = owner draw
