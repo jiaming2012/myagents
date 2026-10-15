@@ -30,6 +30,7 @@ proposes changes to a JSON file in `.cache/`; you review before any
 | `productivity:todoist:pull` | Fetch today / tomorrow / overdue tasks + tasks completed today → `.cache/todoist/snapshot.json` |
 | `productivity:todoist:discuss` | Pull + interactive Claude REPL: feasibility read on today's plan, INBOX TRIAGE of unsorted captures, and constraint-shaping conversation. Read-only by default. |
 | `productivity:todoist:discuss -- --triage` | Same as `discuss`, but Claude ends the session by writing reshuffle proposals to `.cache/todoist/reschedules.json` — review, then run `todoist:reschedule` |
+| `productivity:todoist:triage` | Shortcut for `todoist:discuss -- --triage` — same session, no flag to remember |
 | `productivity:todoist:evening` | Pull + Claude reviews the day: DONE vs NOT DONE, proposes reschedules for incomplete non-recurring tasks, suggests `grp_*` labels for natural batches → writes `.cache/todoist/reschedules.json` |
 | `productivity:todoist:view` | Interactive TUI over `reschedules.json` — scope tabs (All / Inbox / Overdue / Labeled / Recurring), batch tabs (per `grp_*`), per-item checkbox + detail pane, `u` applies selected directly to Todoist (no `reschedule` call needed) |
 | `productivity:todoist:reschedule` | Non-interactive batch apply of the reviewed proposals (priority order, p1 first); merges new labels with existing ones; archives the file on success |
@@ -138,7 +139,7 @@ task email:inbox             # download + Claude triage + TUI to skim urgent ite
 task productivity:calendars:pull DAYS=1
 
 # 3. What did I commit to doing?
-task productivity:todoist:discuss -- --triage
+task productivity:todoist:triage      # shortcut for: todoist:discuss -- --triage
 #   → Claude opens an interactive feasibility chat:
 #     - opening read: overdue debt, p1+p2 count, hour budget vs ~6h day
 #     - INBOX TRIAGE: unsorted captures — pick a project, a date,
@@ -219,7 +220,7 @@ mutates a live system without you reading the proposal first:
 
 | Domain   | pull                       | analyze (Claude)                | proposal file                                  | apply                           |
 |----------|----------------------------|---------------------------------|-----------------------------------------------|---------------------------------|
-| Todoist  | `todoist:pull`             | `todoist:analyze:evening` or `todoist:discuss -- --triage` | `.cache/todoist/reschedules.json`             | `todoist:view` (interactive) or `todoist:reschedule` (batch) |
+| Todoist  | `todoist:pull`             | `todoist:analyze:evening` or `todoist:triage`              | `.cache/todoist/reschedules.json`             | `todoist:view` (interactive) or `todoist:reschedule` (batch) |
 | Calendar | `calendars:pull`           | conversational ("schedule X")   | `.cache/calendars/proposals.json`             | `calendars:apply`               |
 | Email    | `inbox:download`           | `inbox:analyze`                 | `.cache/inbox/insights.json` (read-only meta) | (no destructive apply — view in TUI) |
 
