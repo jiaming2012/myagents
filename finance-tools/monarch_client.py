@@ -70,6 +70,23 @@ def device_uuid():
     return new
 
 
+def totp_from_secret():
+    """Current 6-digit code from MONARCH_MFA_SECRET (Monarch Settings -> Security ->
+    Enable MFA -> the setup key). Lets the login run with no prompt and marks the
+    device trusted, which also sidesteps the email-code and CAPTCHA challenges.
+    Returns None when the secret is not set."""
+    secret = os.environ.get("MONARCH_MFA_SECRET", "").replace(" ", "").strip()
+    if not secret:
+        return None
+    try:
+        import oathtool
+    except ImportError:
+        print("Warning: MONARCH_MFA_SECRET set but 'oathtool' is not installed; ignoring it",
+              file=sys.stderr)
+        return None
+    return oathtool.generate_otp(secret)
+
+
 def web_client_headers():
     """Headers the Monarch web app sends; required to pass the login version gate."""
     return {
@@ -237,8 +254,12 @@ async def interactive_login(mm):
         "trusted_device": True,
         "supports_mfa": True,
         "supports_email_otp": True,
-        "supports_recaptcha": True,
+        # Deliberately NOT supports_recaptcha: a script cannot answer one, and
+        # declaring support invites the challenge.
     }
+    totp = totp_from_secret()
+    if totp:
+        payload["totp"] = totp
     status, body = await _post_login(mm, payload)
     kind, info = classify_login_response(status, body)
 
@@ -268,7 +289,17 @@ async def interactive_login(mm):
         sys.exit(1)
 
     print(f"Error: Monarch login failed. {info}", file=sys.stderr)
-    if status == 403:
+    if status == 429 or "captcha" in info.lower():
+        print("Monarch is rate-limiting this account after repeated login attempts and now wants a "
+              "CAPTCHA, which a script cannot answer. Do not retry in a loop. Wait 30-60 minutes, "
+              "then before the next attempt do ONE of:\n"
+              "  - set MONARCH_DEVICE_UUID in finance-tools/.env to the Device-Uuid your browser "
+              "sends (DevTools -> any api.monarch.com request -> Request Headers), so Monarch sees "
+              "a device it already trusts; or\n"
+              "  - enable MFA in Monarch (Settings -> Security) and put its setup key in "
+              "MONARCH_MFA_SECRET so the login is fully trusted and non-interactive.",
+              file=sys.stderr)
+    elif status == 403:
         print("Monarch refused this login. To skip device verification entirely, copy the "
               "Device-Uuid header your browser sends (DevTools -> any api.monarch.com request -> "
               "Request Headers) into MONARCH_DEVICE_UUID in finance-tools/.env and re-run.",
