@@ -1,0 +1,168 @@
+# Credit Card Rewards Registry
+# Read by rewards.py. Edit this file directly when a card's terms change.
+#
+# Each card is keyed by its `account` id from payments.yaml, so the card
+# itself (institution, last4, Monarch name) is defined exactly once.
+#
+# Card fields:
+#   account:          id from payments.yaml (required)
+#   program:          cash | points | miles
+#   currency:         display name of the reward unit (e.g. "MR", "miles", "$")
+#   cents_per_point:  valuation used to roll everything up to dollars.
+#                     1.0 for cash back. Be conservative for points.
+#   annual_fee:       dollars
+#   anniversary:      YYYY-MM-DD the fee posts (null = unknown, fee shown without a date)
+#   earn:             ORDERED list of earn rules. First match wins, like merchants.yaml.
+#     name:           label
+#     rate:           multiplier (points per dollar) or percent-as-decimal for cash
+#     merchant:       list of case-insensitive substrings tested against the Monarch
+#                     merchant name, then the raw bank description
+#     category:       list of Monarch category names (exact, case-insensitive)
+#     cap:            {amount: dollars, period: monthly|quarterly|semiannual|annual}
+#                     spend above the cap earns the card's base rate
+#     The last rule should have no merchant/category: it is the base rate.
+#   credits:          statement credits worth tracking. Each has:
+#     name:           label
+#     amount:         dollars per period
+#     period:         monthly | quarterly | semiannual | annual
+#     merchant:       substrings that identify QUALIFYING SPEND on the card
+#     posted:         substrings that identify the issuer's STATEMENT CREDIT line
+#                     (positive amount). A posted credit counts as proof of use,
+#                     so a Resy restaurant you forgot to list still shows "used".
+#                     Posted credits never earn or claw back points.
+#     enrolled:       false = you have not enrolled yet (reported as a warning)
+#     note:           free text
+#     Credits are calendar-based (Jan-Mar is Q1, Jan-Jun is H1) unless the
+#     issuer says otherwise; Amex credits are calendar-based.
+#   signup_bonus:     null, or {opened: date, spend_target: $, deadline: date,
+#                     bonus: points, note: text}
+#   balances:         list of balances you typed in from the issuer site, newest last.
+#                     {as_of: YYYY-MM-DD, points: N}
+#                     Two readings let the script compare computed earnings to the
+#                     real delta; one reading gives an "expected balance now".
+#
+# Sign convention: Monarch exports purchases as negative amounts and
+# refunds/credits as positive. rewards.py handles that; nothing to do here.
+
+# Transactions that are never spend: card payments, refunds of payments, transfers.
+# Tested against every card before earn rules. Merchant substrings and Monarch
+# category names, case-insensitive.
+exclude:
+  category: ["Credit Card Payment", "Transfer", "Payment", "Interest", "Financial Fees"]
+  merchant: ["AUTOPAY", "PAYMENT - THANK YOU", "PAYMENT THANK YOU", "ONLINE PAYMENT",
+             "MOBILE PAYMENT", "INTEREST CHARGE", "ANNUAL MEMBERSHIP FEE"]
+
+cards:
+  # --- Amex Platinum (2025 refresh: $895 fee, Lululemon/Resy quarterly credits) ---
+  # VERIFY against your Amex benefits page: the lineup below is the public
+  # post-September-2025 Platinum. Delete credits you do not have; add any
+  # that differ. Earn rates are the standard Platinum rates.
+  - account: amex-platinum-2004
+    program: points
+    currency: MR
+    cents_per_point: 1.0          # conservative; transfers to partners often get 1.5-2.0
+    annual_fee: 895
+    anniversary: null             # fill in from the statement that shows the fee
+    earn:
+      - name: "Flights booked direct or via Amex Travel"
+        rate: 5
+        cap: {amount: 500000, period: annual}
+        merchant:
+          - "AMEX TRAVEL"
+          - "AMEXTRAVEL"
+          - "AMERICAN AIRLINES"
+          - "DELTA AIR"
+          - "UNITED AIRLINES"
+          - "UNITED.COM"
+          - "SOUTHWEST"
+          - "JETBLUE"
+          - "ALASKA AIR"
+          - "SPIRIT AIR"
+          - "FRONTIER AIR"
+          - "HAWAIIAN AIR"
+          - "BRITISH AIRWAYS"
+          - "AIR FRANCE"
+          - "LUFTHANSA"
+      - name: "Prepaid hotels via Amex Travel"
+        rate: 5
+        merchant:
+          - "AMEX TRAVEL HOTEL"
+          - "AMEXTRAVEL HOTEL"
+          - "FINE HOTELS"
+      - name: "Everything else"
+        rate: 1
+    credits:
+      - name: "Lululemon"
+        amount: 75
+        period: quarterly
+        merchant: ["LULULEMON"]
+        posted: ["PLATINUM LULULEMON CREDIT"]
+        enrolled: true
+      - name: "Resy restaurants"
+        amount: 100
+        period: quarterly
+        merchant: ["RESY"]     # Resy restaurants post under the restaurant's name;
+        posted: ["PLATINUM RESY CREDIT"]   # the posted credit is the reliable signal
+        enrolled: true
+      - name: "Uber Cash"
+        amount: 15
+        period: monthly
+        merchant: ["UBER"]
+        posted: ["PLATINUM UBER CASH CREDIT"]   # never posts; Uber Cash loads in-app
+        enrolled: true
+        note: "$35 in December. Loads to the Uber app, so only spend is visible here."
+      - name: "Uber One membership"
+        amount: 9.99
+        period: monthly
+        merchant: ["UBER ONE"]
+        posted: ["PLATINUM UBER ONE CREDIT"]
+        enrolled: true
+      - name: "Digital entertainment"
+        amount: 25
+        period: monthly
+        merchant: ["DISNEY", "HULU", "ESPN", "PEACOCK", "NYTIMES", "NEW YORK TIMES",
+                   "WALL STREET JOURNAL", "WSJ", "DOW JONES", "BARRON", "PARAMOUNT"]
+        posted: ["PLATINUM DIGITAL ENTERTAINMENT CREDIT"]
+        enrolled: true
+      - name: "Walmart+"
+        amount: 12.95
+        period: monthly
+        merchant: ["WALMART+", "WALMART PLUS", "WMT PLUS"]
+        posted: ["PLATINUM WALMART+ CREDIT", "PLATINUM WALMART PLUS CREDIT"]
+        enrolled: false        # no Walmart+ charge or credit all of 2026; flip if you enroll
+      - name: "Hotel credit (FHR / Hotel Collection via Amex Travel)"
+        amount: 300
+        period: semiannual
+        merchant: ["AMEX TRAVEL HOTEL", "AMEXTRAVEL HOTEL", "FINE HOTELS"]
+        posted: ["PLATINUM HOTEL CREDIT"]
+        enrolled: true
+      - name: "Airline incidental fees"
+        amount: 200
+        period: annual
+        merchant: ["DELTA AIR", "AMERICAN AIRLINES", "UNITED AIRLINES", "SOUTHWEST",
+                   "JETBLUE", "ALASKA AIR"]
+        posted: ["PLATINUM AIRLINE FEE CREDIT"]
+        enrolled: true
+        note: "Only the airline selected on the Amex site qualifies; narrow this list to it."
+      - name: "Equinox"
+        amount: 300
+        period: annual
+        merchant: ["EQUINOX"]
+        posted: ["PLATINUM EQUINOX CREDIT"]
+        enrolled: false
+      - name: "CLEAR Plus"
+        amount: 209
+        period: annual
+        merchant: ["CLEAR"]
+        posted: ["PLATINUM CLEAR CREDIT"]
+        enrolled: true
+      - name: "Oura Ring"
+        amount: 200
+        period: annual
+        merchant: ["OURA"]
+        posted: ["PLATINUM OURA CREDIT"]
+        enrolled: false
+    signup_bonus: null
+    balances: []
+    # balances:
+    #   - {as_of: 2026-10-01, points: 123456}

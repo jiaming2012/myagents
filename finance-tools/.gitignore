@@ -8,3 +8,4 @@ __pycache__/
 .alert_state.json
 forecast_preview.html
 .mm
+.rewards_snapshot.json

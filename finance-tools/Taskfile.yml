@@ -169,6 +169,31 @@ tasks:
       - rm -f ~/Library/LaunchAgents/com.jamal.finance-health.plist
       - echo "Removed com.jamal.finance-health"
 
+  rewards:
+    desc: "Credit card rewards: earn, statement credits, balance check (pulls Monarch, saves snapshot)"
+    cmds:
+      - python rewards.py {{.CLI_ARGS}}
+
+  rewards:offline:
+    desc: "Rewards report from the last snapshot -- deterministic, no network"
+    cmds:
+      - python rewards.py --offline {{.CLI_ARGS}}
+
+  rewards:amex:
+    desc: "Rewards report for the Amex Platinum only"
+    cmds:
+      - python rewards.py --card amex-platinum-2004 {{.CLI_ARGS}}
+
+  rewards:json:
+    desc: "Rewards report as JSON from the last snapshot"
+    cmds:
+      - python rewards.py --offline --json {{.CLI_ARGS}}
+
+  rewards:test:
+    desc: "Unit tests for the rewards calculator (no network)"
+    cmds:
+      - python -m pytest tests/test_rewards.py -q
+
   test:
     desc: Run integration tests (requires valid .env credentials)
     cmds:

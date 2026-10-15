@@ -160,6 +160,34 @@ Registry conventions that feed these checks:
 - `monarch_match` must be Monarch's exact display name; `®`/case differences are
   tolerated, but an old hidden duplicate connection is not -- point at the live one.
 
+## Credit Card Rewards (deterministic)
+
+```bash
+task rewards               # all cards in rewards.yaml, current year, pulls Monarch, saves snapshot
+task rewards:amex          # Amex Platinum only
+task rewards:offline       # re-run from the last snapshot, no network
+task rewards:json          # same, as JSON
+task rewards:test          # unit tests, no network
+```
+
+`rewards.yaml` holds the rules; `rewards.py` applies them. Cards are keyed by
+their `payments.yaml` account id, so the card itself is defined once. Per card:
+an **ordered** list of earn rules (first match wins, last rule is the base
+rate, optional spend caps per calendar period), the statement credits worth
+tracking (amount + monthly/quarterly/semiannual/annual + merchant patterns),
+an optional sign-up bonus, and rewards balances you type in from the issuer.
+
+The report shows points earned per rule, each credit period as `used`,
+`partial`, `MISSED` or `open` (with days left), sign-up bonus pace, and the
+expected balance now. With two typed-in balances it also shows the drift
+between what the issuer actually granted and what the rules computed; that
+drift is how you find merchants the issuer codes differently from Monarch.
+
+Every live run writes `.rewards_snapshot.json`; `--offline` reuses it and
+`--as-of YYYY-MM-DD` pins "today" so a report can be reproduced exactly.
+Card payments and transfers are excluded by the `exclude:` block at the top of
+`rewards.yaml`.
+
 ## Other Commands
 
 ```bash
