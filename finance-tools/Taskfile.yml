@@ -145,12 +145,12 @@ tasks:
       - python weekly_health.py --dry-run
 
   health:schedule:
-    desc: Install the launchd agent that emails the weekly health report (Mon 08:00)
+    desc: "Install the launchd agent that emails the weekly health report (daily 08:00 + login trigger, sends once per 6 days)"
     cmds:
       - cp launchd/com.jamal.finance-health.plist ~/Library/LaunchAgents/com.jamal.finance-health.plist
       - launchctl unload ~/Library/LaunchAgents/com.jamal.finance-health.plist 2>/dev/null || true
       - launchctl load ~/Library/LaunchAgents/com.jamal.finance-health.plist
-      - 'echo "Installed com.jamal.finance-health (Mon 08:00). Log: ~/Library/Logs/finance-health.log"'
+      - 'echo "Installed com.jamal.finance-health (daily 08:00 + at login; weekly guard). Log: ~/Library/Logs/finance-health.log"'
 
   health:unschedule:
     desc: Remove the weekly health launchd agent

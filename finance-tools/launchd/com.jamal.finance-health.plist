@@ -9,21 +9,23 @@
         <string>/Users/jamal/miniconda3/bin/python3</string>
         <string>/Users/jamal/projects/myagents/finance-tools/weekly_health.py</string>
         <string>--email</string>
+        <string>--weekly-guard</string>
     </array>
     <key>WorkingDirectory</key>
     <string>/Users/jamal/projects/myagents/finance-tools</string>
-    <!-- Monday 08:00: before the month's big autopays (Amex 16th, Truist 18th, Citi 22nd, WF 27th) -->
+    <!-- Fires DAILY at 08:00 and at login; the script's weekly guard sends at most
+         once per 6 days. launchd drops a calendar trigger missed while powered
+         off (it only catches up after sleep), so a daily trigger + guard makes
+         a Monday power-off self-heal on the next morning the Mac is on. -->
     <key>StartCalendarInterval</key>
     <dict>
-        <key>Weekday</key>
-        <integer>1</integer>
         <key>Hour</key>
         <integer>8</integer>
         <key>Minute</key>
         <integer>0</integer>
     </dict>
     <key>RunAtLoad</key>
-    <false/>
+    <true/>
     <key>StandardOutPath</key>
     <string>/Users/jamal/Library/Logs/finance-health.log</string>
     <key>StandardErrPath</key>

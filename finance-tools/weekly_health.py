@@ -17,13 +17,19 @@ Usage:
     python weekly_health.py                # Terminal report
     python weekly_health.py --email        # Send HTML email report
     python weekly_health.py --dry-run      # Save HTML to file for preview
+    python weekly_health.py --email --weekly-guard
+        # For a DAILY launchd trigger: send only if the last send was >= 6 days
+        # ago, otherwise exit 0 quietly. A Mac that is powered off on Monday
+        # then catches up on the next morning it is on (launchd drops missed
+        # calendar triggers after a shutdown; it only catches up after sleep).
 """
 
 import argparse
 import asyncio
 import os
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
+from pathlib import Path
 
 try:
     from dotenv import load_dotenv
@@ -50,6 +56,26 @@ try:
     _has_email = True
 except ImportError:
     _has_email = False
+
+
+LAST_SENT_FILE = Path(__file__).parent / ".cache" / "health_last_sent"
+WEEKLY_GUARD_DAYS = 6
+
+
+def weekly_guard_should_send(now=None, last_sent_file=LAST_SENT_FILE, min_days=WEEKLY_GUARD_DAYS):
+    """True if no report was sent in the last `min_days` days (or none ever)."""
+    now = now or datetime.now()
+    try:
+        last = datetime.fromisoformat(last_sent_file.read_text().strip())
+    except (OSError, ValueError):
+        return True
+    return now - last >= timedelta(days=min_days)
+
+
+def weekly_guard_record_sent(now=None, last_sent_file=LAST_SENT_FILE):
+    now = now or datetime.now()
+    last_sent_file.parent.mkdir(parents=True, exist_ok=True)
+    last_sent_file.write_text(now.isoformat(timespec="seconds"))
 
 
 # ANSI colors
@@ -539,6 +565,15 @@ def build_health_email_html(data):
 
 async def main_async(args):
     """Async entry point."""
+    if args.weekly_guard:
+        if not args.email:
+            print("Error: --weekly-guard only makes sense with --email", file=sys.stderr)
+            sys.exit(2)
+        if not weekly_guard_should_send():
+            last = LAST_SENT_FILE.read_text().strip()
+            print(f"Weekly guard: report already sent {last}; nothing to do.")
+            return
+
     print("Gathering financial data...", end=" ", flush=True)
     data = await gather_all_data()
     print("done\n")
@@ -561,6 +596,8 @@ async def main_async(args):
             recipient = get_alert_recipient()
             send_email(subject, html, recipient, smtp_config)
             print(f"\nReport emailed to {recipient}")
+            if args.weekly_guard:
+                weekly_guard_record_sent()
 
 
 def main():
@@ -574,6 +611,10 @@ def main():
     parser.add_argument(
         "--dry-run", action="store_true",
         help="Save HTML report to health_preview.html"
+    )
+    parser.add_argument(
+        "--weekly-guard", action="store_true",
+        help="With --email: send only if the last send was >= 6 days ago (for a daily launchd trigger)"
     )
     args = parser.parse_args()
 

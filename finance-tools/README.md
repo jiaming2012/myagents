@@ -139,6 +139,12 @@ balance not updated in 7 days), payments with no calendar event, Monarch/Xero
 outages, and Xero bank accounts with no transaction in 10 days. The same checks
 run as section 5 of `task health`, so drift shows up in the Monday email.
 
+`task health:schedule` installs a launchd agent that fires **daily** at 08:00
+and at login, and `weekly_health.py --email --weekly-guard` sends only if the
+last send was 6+ days ago (`.cache/health_last_sent`). This is deliberate:
+launchd silently drops a calendar trigger missed while the Mac was powered off
+(it only catches up after sleep), so a Monday-only trigger could skip a week.
+
 Registry conventions that feed these checks:
 
 - `pays_account: <account id>` on a payment entry links it to the credit card or
