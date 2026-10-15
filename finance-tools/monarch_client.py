@@ -15,6 +15,7 @@ import getpass
 import os
 import pickle
 import sys
+import uuid
 from pathlib import Path
 
 try:
@@ -31,6 +32,46 @@ except ImportError:
     MonarchMoney = None
 
 SESSION_FILE = Path(__file__).parent / ".mm" / "mm_session.pickle"
+DEVICE_UUID_FILE = SESSION_FILE.parent / "device_uuid"
+
+# Monarch's login endpoint rejects clients it considers out of date
+# ("Please update to the latest version of the app to continue login").
+# The upstream library identifies itself as a generic old client, so we
+# present the same client headers the Monarch web app sends. Bump the
+# version via MONARCH_CLIENT_VERSION in .env if Monarch raises the bar again
+# (DevTools -> any api.monarch.com request -> Monarch-Client-Version).
+DEFAULT_CLIENT_VERSION = "v1.0.5310"
+
+
+def device_uuid():
+    """Stable per-machine device id so Monarch sees one device, not a new one per login."""
+    try:
+        existing = DEVICE_UUID_FILE.read_text().strip()
+        if existing:
+            return existing
+    except OSError:
+        pass
+    new = str(uuid.uuid4())
+    try:
+        DEVICE_UUID_FILE.parent.mkdir(parents=True, exist_ok=True)
+        DEVICE_UUID_FILE.write_text(new)
+    except OSError:
+        pass
+    return new
+
+
+def web_client_headers():
+    """Headers the Monarch web app sends; required to pass the login version gate."""
+    return {
+        "Client-Platform": "web",
+        "Monarch-Client": "monarch-core-web-app-graphql",
+        "Monarch-Client-Version": os.environ.get("MONARCH_CLIENT_VERSION", DEFAULT_CLIENT_VERSION),
+        "Device-Uuid": device_uuid(),
+        "Origin": "https://app.monarch.com",
+        "Referer": "https://app.monarch.com/",
+        "User-Agent": ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+                       "(KHTML, like Gecko) Chrome/154.0.0.0 Safari/537.36"),
+    }
 LOGIN_HINT = "Run: task finance:balances:login  (from the myagents root)"
 
 
@@ -166,6 +207,10 @@ async def interactive_login(mm):
     challenge is reported with Monarch's own error text instead of a
     misleading "Two Factor Code" prompt.
     """
+    if getattr(mm, "_headers", None) is None:
+        mm._headers = {}
+    mm._headers.update(web_client_headers())
+
     email = input("Email: ").strip()
     password = masked_input("Password: ")
     payload = {
@@ -191,12 +236,13 @@ async def interactive_login(mm):
         return
 
     print(f"Error: Monarch login failed. {info}", file=sys.stderr)
-    if status == 403:
-        print("Monarch refused this login and did not ask for a 2FA code. This is usually "
-              "device/bot protection on the unofficial API.\n"
-              "Workaround: copy the 'Authorization: Token ...' value from a Monarch web "
-              "request in your browser's DevTools into MONARCH_TOKEN in finance-tools/.env.",
-              file=sys.stderr)
+    if "update to the latest version" in info.lower():
+        print("Monarch is rejecting our client version. In the Monarch web app open DevTools -> "
+              "Network -> any api.monarch.com request -> Request Headers, copy the "
+              "Monarch-Client-Version value (e.g. v1.0.5310) and set MONARCH_CLIENT_VERSION=<that> "
+              "in finance-tools/.env, then re-run the login.", file=sys.stderr)
+    elif status == 403:
+        print("Monarch refused this login and did not ask for a 2FA code.", file=sys.stderr)
     sys.exit(1)
 
 
