@@ -85,6 +85,58 @@ the counterparty name so `merchants.yaml` patterns still hit. If the feed only c
 
 ---
 
+## 2a. Spike S-1 — prove the Toast payout split in Zoho (before any bulk write)
+
+The operator wants Toast payouts broken out exactly as toast_xero does in Xero (sales,
+sales tax, tips, Toast fees, unpaid orders → 1310, customer deposits → 2050, clearing
+1320). Before the one-shot run, prove on **two real payouts** that Zoho can hold that
+split and still reconcile the feed line. The spike is throwaway; only its findings
+survive, in `finance-tools/docs/zoho-books-spike-toast-split.md`.
+
+**Pick the two payouts.** Both inside the feed window (so no statement import is
+needed), both untouched in Zoho (if the operator already split two by hand in the UI,
+leave those alone and use them as the reference for line shapes):
+1. a clean single-day payout (one Mercury credit = one Toast sales day);
+2. a **split payout** (one sales day paid as two Mercury credits, e.g. the 8/21
+   $402.58 + $16.24 pattern) — the case that needed the clearing account in Xero.
+
+**Split amounts** come from toast_xero, not Mercury: run its parser over the exports in
+`~/projects/yumyums/accounting/xero` `inputs/` for those sales days (or read the line
+items of the BankTransaction it already posted to Xero for that payout — same numbers,
+Xero org is reconnected as of 2026-10-15). Reuse its account codes verbatim.
+
+**Approach A — journal matched to the feed line (try first).**
+1. Seed only the accounts the two payouts need (`POST /chartofaccounts`, same codes as
+   Xero: Sales, Sales Tax Payable, Tips Payable, Toast fees, 1310, 2050, 1320).
+2. `POST /journals` per Mercury credit: debit the Mercury bank account for the net
+   payout; credit Sales / Sales Tax Payable / Tips Payable; debit Toast fees; 1310/2050
+   lines as toast_xero would post; for the split payout, each credit gets its own journal
+   and the sales-day totals route through 1320 so the cluster nets 0.00 (toast_xero's
+   per-event deposit rule). `reference_number = "toast:<payout-id>"`.
+3. `GET /banktransactions/uncategorized/{feed_line_id}/match` — **the spike's key
+   question: does the journal appear as a candidate?** If yes,
+   `POST …/match {transactions_to_be_matched:[{transaction_id:<journal>, transaction_type:"journal"}]}`.
+4. Verify: feed line status `matched`; `GET /bankaccounts/{id}` book balance unchanged
+   vs Mercury; Balance Sheet shows the tax and tips liabilities; P&L shows sales and fees.
+5. Reversibility: `POST …/unmatch`, `DELETE /journals/{id}` → line is uncategorized again.
+
+**Approach B — clearing account, always works (fallback, and arguably cleaner).**
+Bank side: categorize the feed line as a `deposit` to **1320 Toast Clearing** (pure
+Mercury-driven, fits the one shot). Revenue side: `POST /journals` per sales day
+*from 1320* to Sales / tax / tips / fees / 1310 / 2050. The journal never touches the
+bank account, so matching is not involved and split payouts need no special case; the
+check is simply that 1320 nets to 0.00 per sales-day cluster. Verify the same reports.
+
+**Pass criteria (any one approach):** both payouts reconciled, Mercury balance equality
+holds, liabilities and revenue land on the right accounts, every write reversible by
+API, and the per-payout call count is known (budget for §6). Record which approach
+passed; that becomes the Toast row in §3.4 and the default for O-1.
+
+**Fail:** neither approach matches or the reports are wrong → stop, report, operator
+decides between the clearing deposit without split (trial only) and abandoning Zoho.
+
+---
+
 ## 3. Reconcile in one shot — `finance-tools/zoho_books_recon.py`
 
 One script, `--dry-run` default, `--apply` to write. Mirrors `mercury_precode.py`
@@ -145,7 +197,7 @@ line, exactly the `mercury_precode.py` classifier:
 | **Transfer to own BoA** (`Yumyums Kitchen LLC`) | `transfer_fund` to the BoA bank account if it exists in Zoho, else to a `BoA clearing` asset | phase 2 links BoA and matches the other side |
 | **Spend** (`merchants:` hit) | `POST …/categorize/expenses` `{account_id:<code map>, date, amount, paid_through_account_id:<bank>, reference_number, description, [vendor_id]}` | vendor optional; create vendors (`POST /contacts`) only if the operator wants vendor reports |
 | **Owner draw** (`Jamal Cole` → 3200) | `categorize` with `transaction_type:"owner_drawings"` | personal-Mercury `••5237` transfers likewise |
-| **Toast payout** (credit, pattern TOAST) | `categorize` as `deposit` to **1320 Toast Clearing** (or `sales_without_invoices` to Sales) | **Operator decision O-1** (§5). One-shot ≠ port of toast_xero |
+| **Toast payout** (credit, pattern TOAST) | whichever approach passed spike S-1 (§2a): A = journal per Mercury credit + match; B = `deposit` to **1320 Toast Clearing** + journal per sales day from 1320 | split amounts from the toast_xero parser over `inputs/`; payouts whose Toast export is missing get the bank-side deposit only and are listed for `task toast:export` |
 | **Refund / credit from a merchant** | `categorize` `expense_refund` to the merchant's code | |
 | **Unmatched** | leave uncategorized; list in report with suggested pattern | same as precode's review list; operator answers once, rerun |
 
@@ -181,6 +233,8 @@ send via `alert_email.py` like the weekly agent.
 ```
 [op]    grant code                                  2 min
 [agent] token exchange, org id, inventory (§1-2)    ~10 min, read-only
+[agent] spike S-1: two Toast payouts split+matched  ~30 min; writes a findings doc; stops on fail
+[op]    read spike findings (approach A or B)       or "stop"
 [agent] zoho_books_recon.py --dry-run               prints: imports planned, categorize plan,
                                                     unmatched merchants, feed gaps, balance math
 [op]    one reply: O-1 Toast treatment, O-2 any "unmatched" patterns (or "proceed")
@@ -195,10 +249,10 @@ imported statement, delete created accounts. No Xero state is touched.
 
 ## 5. Operator decisions (asked once, in the dry-run reply)
 
-- **O-1 Toast payouts.** (a) one-line deposit to `1320 Toast Clearing` per payout — fast,
-  balances reconcile, revenue detail deferred (recommended for the trial); (b) deposit to
-  Sales income — simplest books, loses tips/fees split; (c) port toast_xero's
-  per-sales-day split — only if the switch is decided.
+- **O-1 Toast payouts.** Default = the full split (sales / sales tax / tips / fees /
+  1310 / 2050) via the approach spike S-1 proved. Only if the spike fails does the
+  operator choose between a plain deposit to `1320 Toast Clearing` (trial only) and
+  stopping.
 - **O-2 Unmatched merchants** — the dry-run prints them with a suggested `merchants.yaml`
   line each; answer or say "leave uncategorized".
 - **O-3 Vendors** — create vendor contacts from merchant names (yes/no). Default no.
@@ -209,7 +263,7 @@ imported statement, delete created accounts. No Xero state is touched.
 
 | Risk | Handling |
 |---|---|
-| Rate limits: 100 req/min/org; daily cap by plan (Free 1,000 · Standard 2,000 · Professional 5,000 · Premium+ 10,000; trial is normally Premium). ~500 Mercury txns since Jan → ~1,200–1,800 calls | throttle 90/min, back off on 429 (codes 44/45/1070), checkpoint progress in a local JSON so `--apply` resumes; on a Free plan split across two days |
+| Rate limits: 100 req/min/org; daily cap by plan (Free 1,000 · Standard 2,000 · Professional 5,000 · Premium+ 10,000; trial is normally Premium). ~500 Mercury txns since Jan → ~1,200–1,800 calls, plus ~140 Toast payouts × (journal + match) ≈ 300–450 more | throttle 90/min, back off on 429 (codes 44/45/1070), checkpoint progress in a local JSON so `--apply` resumes; on a Free plan split across two days |
 | Feed only covers ≤90 days | §3.3 imports the rest from Mercury — this is the feature Xero lacked |
 | Feed line text differs from Mercury API counterparty names | classifier falls back to description; unmatched lines are listed, not guessed |
 | Duplicate transfers (the Xero duplicate saga) | one source of truth = Mercury txn id in `reference_number`; match-before-categorize on the second side |
@@ -218,8 +272,9 @@ imported statement, delete created accounts. No Xero state is touched.
 
 ## 7. Switch criteria (what the trial must show)
 
-1. Zero manual clicks in Zoho beyond the two operator replies.
-2. All three accounts reconcile to Mercury to the cent, Jan→Sep 2026 records created.
+1. Zero manual clicks in Zoho beyond the operator replies (spike findings, dry run).
+2. All three accounts reconcile to Mercury to the cent, Jan→Sep 2026 records created,
+   with Toast payouts split like Xero (spike S-1 passed and the bulk run used it).
 3. Feed gaps = 0 inside the feed window (otherwise Zoho's Mercury feed is not trustworthy).
 4. Bank rules make the Monday run a no-op in a normal week.
 If all four hold, phase 2 = link the other banks, import their history the same way, and
