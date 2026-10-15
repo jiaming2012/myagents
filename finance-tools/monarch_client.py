@@ -44,7 +44,17 @@ DEFAULT_CLIENT_VERSION = "v1.0.5310"
 
 
 def device_uuid():
-    """Stable per-machine device id so Monarch sees one device, not a new one per login."""
+    """Device id sent as Device-Uuid.
+
+    Precedence: MONARCH_DEVICE_UUID in .env (copy the value your browser sends,
+    DevTools -> Request Headers -> Device-Uuid, or run
+    localStorage.getItem('monarchDeviceUUID') in the console) so Monarch treats
+    this script as an already-trusted device and skips the email code; else a
+    per-machine id persisted in .mm/device_uuid; else a fresh one.
+    """
+    env = os.environ.get("MONARCH_DEVICE_UUID", "").strip()
+    if env:
+        return env
     try:
         existing = DEVICE_UUID_FILE.read_text().strip()
         if existing:
@@ -151,7 +161,11 @@ def masked_input(prompt, mask="*"):
     return "".join(chars)
 
 
-MFA_MARKERS = ("mfa", "multi-factor", "multi factor", "two-factor", "2fa", "totp", "one-time")
+MFA_MARKERS = ("mfa", "multi-factor", "multi factor", "two-factor", "2fa", "totp", "otp", "one-time",
+               "verification code")
+# Monarch answers a login from a client that does not declare supports_email_otp
+# with this text; it is the email-OTP challenge in disguise.
+UPDATE_APP_TEXT = "update to the latest version of the app"
 
 
 def classify_login_response(status, body):
@@ -176,8 +190,12 @@ def classify_login_response(status, body):
         return "ok", body["token"]
 
     text = f"{code} {detail}".lower()
-    if status == 403 and any(m in text for m in MFA_MARKERS):
-        return "mfa", detail or code
+    if status == 403 and (any(m in text for m in MFA_MARKERS) or UPDATE_APP_TEXT in text):
+        kind = "email" if ("email" in text or UPDATE_APP_TEXT in text) else "totp"
+        label = detail or code
+        if code and code.lower() not in label.lower():
+            label = f"{code}: {label}"
+        return "mfa", f"{kind}|{label}"
     msg = f"HTTP {status}"
     if code:
         msg += f" [{code}]"
@@ -214,35 +232,47 @@ async def interactive_login(mm):
     email = input("Email: ").strip()
     password = masked_input("Password: ")
     payload = {
-        "password": password,
-        "supports_mfa": True,
-        "trusted_device": False,
         "username": email,
+        "password": password,
+        "trusted_device": True,
+        "supports_mfa": True,
+        "supports_email_otp": True,
+        "supports_recaptcha": True,
     }
     status, body = await _post_login(mm, payload)
     kind, info = classify_login_response(status, body)
+
+    if kind == "mfa":
+        channel, label = info.split("|", 1)
+        if channel == "email":
+            print(f"Monarch sent a one-time code to {email}. ({label})")
+            code = input("Email code: ").strip()
+            payload["email_otp"] = code
+        else:
+            print(f"Monarch requires your authenticator code. ({label})")
+            code = input("Two Factor Code: ").strip()
+            payload["totp"] = code
+        status, body = await _post_login(mm, payload)
+        kind, info = classify_login_response(status, body)
 
     if kind == "ok":
         mm.set_token(info)
         mm._headers["Authorization"] = f"Token {info}"
         mm.save_session()
+        print(f"Session saved to {SESSION_FILE}")
         return
 
     if kind == "mfa":
-        print(f"Monarch requires a second factor: {info}")
-        code = input("Two Factor Code: ").strip()
-        await mm.multi_factor_authenticate(email, password, code)
-        mm.save_session()
-        return
+        # second challenge after a code was submitted: the code was wrong/expired
+        print(f"Error: Monarch did not accept the code. {info.split('|', 1)[1]}", file=sys.stderr)
+        sys.exit(1)
 
     print(f"Error: Monarch login failed. {info}", file=sys.stderr)
-    if "update to the latest version" in info.lower():
-        print("Monarch is rejecting our client version. In the Monarch web app open DevTools -> "
-              "Network -> any api.monarch.com request -> Request Headers, copy the "
-              "Monarch-Client-Version value (e.g. v1.0.5310) and set MONARCH_CLIENT_VERSION=<that> "
-              "in finance-tools/.env, then re-run the login.", file=sys.stderr)
-    elif status == 403:
-        print("Monarch refused this login and did not ask for a 2FA code.", file=sys.stderr)
+    if status == 403:
+        print("Monarch refused this login. To skip device verification entirely, copy the "
+              "Device-Uuid header your browser sends (DevTools -> any api.monarch.com request -> "
+              "Request Headers) into MONARCH_DEVICE_UUID in finance-tools/.env and re-run.",
+              file=sys.stderr)
     sys.exit(1)
 
 
@@ -261,7 +291,6 @@ async def get_monarch_client(force_login=False):
         mm = MonarchMoney(session_file=str(SESSION_FILE))
         print("Logging in to Monarch Money...")
         await interactive_login(mm)
-        print(f"Session saved to {SESSION_FILE}\n")
         return mm
 
     token, source = resolve_token()
