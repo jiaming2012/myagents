@@ -106,6 +106,7 @@ are missing):
 |------|--------------|
 | `finance:due` / `:month` | **Everything due in the next 7 / 30 days from `payments.yaml` — deterministic, no logins.** Balances are not fetched, so only the list and dates are meaningful |
 | `finance:gaps` / `:offline` | Registry gap check: credit/loan accounts with no payment entry, Monarch liabilities missing from the registry, closed or stale Monarch links, payments with no Zoho event, Monarch/Xero outages, stale Xero books. Exit 1 if anything is found |
+| `finance:gaps:personal` / `:business` | Same check narrowed to one `category:` from `payments.yaml`. Only the sources that side needs are contacted (personal never touches Xero; business only logs in to Monarch if a business account has a `monarch_match`). Also warns about entries with no category, which neither view would show |
 | `finance:balances` | Monarch Money account balances |
 | `finance:payments:today` | Today's scheduled payments |
 | `finance:payments` / `:month` | Payment events for next 7 / 30 days |

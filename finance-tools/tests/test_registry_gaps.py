@@ -5,6 +5,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import pytest  # noqa: E402
+
 from registry_gaps import (  # noqa: E402
     check_calendar_coverage,
     check_liabilities_without_payment,
@@ -12,10 +14,14 @@ from registry_gaps import (  # noqa: E402
     check_monarch_unknown_liabilities,
     check_registry_closed_in_monarch,
     check_sources,
+    check_uncategorized,
     check_xero_staleness,
+    filter_config,
     norm_name,
+    payment_category,
     payment_pays_account,
     run_checks,
+    sources_needed,
 )
 from coverage_report import resolve_balance  # noqa: E402
 
@@ -190,3 +196,87 @@ def test_xero_staleness_distinguishes_empty_from_behind():
 def test_run_checks_offline_only_uses_registry():
     gaps = run_checks(_config())
     assert {g["kind"] for g in gaps} == {"no_payment_entry"}
+
+
+# ---------------------------------------------------------------------------
+# --category personal | business
+# ---------------------------------------------------------------------------
+
+def _categorized():
+    return {
+        "accounts": [
+            {"id": "p-chk", "name": "Personal Checking", "type": "depository",
+             "category": "personal", "monarch_match": "Personal Checking (...1)"},
+            {"id": "p-card", "name": "P Card", "type": "credit", "category": "personal",
+             "monarch_match": "P Card (...2)"},
+            {"id": "b-chk", "name": "Biz Checking", "type": "depository",
+             "category": "business", "xero_account_id": "Biz Checking"},
+            {"id": "b-card", "name": "B Card", "type": "credit", "category": "business",
+             "xero_account_id": "B Card"},
+            {"id": "b-dead", "name": "Old Biz", "type": "credit", "category": "business",
+             "inactive": True, "monarch_match": "Old Biz (...9)"},
+            {"id": "nocat", "name": "Unsorted", "type": "depository"},
+        ],
+        "payments": [
+            {"name": "P Card (full)", "day_of_month": 3, "autopay_type": "full",
+             "funding_account": "p-chk", "category": "personal", "zoho_match": "P Card"},
+            {"name": "Rent", "day_of_month": 1, "funding_account": "b-chk",
+             "category": "personal", "zoho_match": "Rent"},          # explicit wins
+            {"name": "Payroll", "day_of_month": 2, "funding_account": "b-chk",
+             "zoho_match": "Payroll"},                              # inherits business
+            {"name": "B Card (full)", "day_of_month": 9, "autopay_type": "full",
+             "pays_account": "b-card", "zoho_match": "B Card"},     # inherits via pays_account
+            {"name": "Orphan", "day_of_month": 4, "funding_account": "nocat",
+             "zoho_match": "Orphan"},                               # unresolvable
+        ],
+    }
+
+
+def test_payment_category_explicit_then_pays_then_funding():
+    c = _categorized()
+    by = {p["name"]: payment_category(p, c["accounts"]) for p in c["payments"]}
+    assert by == {"P Card (full)": "personal", "Rent": "personal", "Payroll": "business",
+                  "B Card (full)": "business", "Orphan": None}
+
+
+def test_filter_config_splits_accounts_and_payments():
+    c = _categorized()
+    personal = filter_config(c, "personal")
+    business = filter_config(c, "business")
+    assert [a["id"] for a in personal["accounts"]] == ["p-chk", "p-card"]
+    assert [p["name"] for p in personal["payments"]] == ["P Card (full)", "Rent"]
+    assert [a["id"] for a in business["accounts"]] == ["b-chk", "b-card", "b-dead"]
+    assert [p["name"] for p in business["payments"]] == ["Payroll", "B Card (full)"]
+    assert filter_config(c, None) is c
+    assert filter_config(personal, "personal") == personal  # idempotent
+    with pytest.raises(ValueError):
+        filter_config(c, "corporate")
+
+
+def test_sources_needed_follows_the_filtered_registry():
+    c = _categorized()
+    assert sources_needed(filter_config(c, "personal")) == {"monarch", "zoho"}
+    # inactive b-dead's monarch_match must not drag Monarch into a business run
+    assert sources_needed(filter_config(c, "business")) == {"xero", "zoho"}
+    assert sources_needed({"accounts": [], "payments": []}) == set()
+
+
+def test_check_uncategorized_reports_what_no_view_shows():
+    gaps = check_uncategorized(_categorized())
+    assert [g["kind"] for g in gaps] == ["uncategorized", "uncategorized"]
+    assert "Unsorted" in gaps[0]["message"]
+    assert "Orphan" in gaps[1]["message"]
+    assert check_uncategorized(filter_config(_categorized(), "personal")) == []
+
+
+def test_run_checks_business_skips_unknown_monarch_liabilities():
+    c = _categorized()
+    monarch = {"Stray Card (...7)": {"type": "credit", "balance": -50.0}}
+    full = {g["kind"] for g in run_checks(c, monarch_accounts=monarch)}
+    personal = {g["kind"] for g in run_checks(c, monarch_accounts=monarch, category="personal")}
+    business = {g["kind"] for g in run_checks(c, monarch_accounts=monarch, category="business")}
+    assert "monarch_unknown_liability" in full
+    assert "monarch_unknown_liability" in personal
+    assert "monarch_unknown_liability" not in business
+    # B Card and P Card both have payment entries, so no liability gaps either side
+    assert "no_payment_entry" not in personal and "no_payment_entry" not in business

@@ -131,7 +131,14 @@ columns are meaningless; the payment list and dates are exact.
 ```bash
 task gaps                  # live: Monarch + Xero + Zoho
 task gaps:offline          # registry-only
+task gaps:personal         # personal accounts/payments only (Monarch + Zoho)
+task gaps:business         # business only (Xero + Zoho; Monarch only if mapped)
 ```
+
+The `:personal` / `:business` views filter on `category:` in `payments.yaml`. A
+payment with no `category` inherits one from `pays_account`, then
+`funding_account`; anything still unresolved is reported as `uncategorized` so
+it cannot hide from both views. Unknown Monarch liabilities count as personal.
 
 Flags: credit/loan accounts without a payment entry, Monarch liabilities the
 registry lacks, registry accounts that are closed or **stale** in Monarch (a
