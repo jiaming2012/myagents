@@ -235,12 +235,19 @@ def check_xero_staleness(latest_by_account, threshold_days=XERO_STALE_DAYS, toda
         else:
             age = (today - latest).days
         if age is None or age > threshold_days:
-            when = "never" if latest is None else f"{latest} ({age}d ago)"
+            if latest is None:
+                # No transaction ever -- an empty shell, not a reconciliation backlog.
+                when = "never"
+                fix = ("Import this account's transactions in Xero, or archive the account "
+                       "there if it is not in use.")
+            else:
+                when = f"{latest} ({age}d ago)"
+                fix = "Reconcile/import this account in Xero."
             gaps.append(_gap(
                 "warning", "xero_stale",
                 f"Xero bank account '{name}': latest transaction {when}; books are behind, "
                 f"business liabilities are under-reported.",
-                "Reconcile/import this account in Xero.",
+                fix,
             ))
     return gaps
 

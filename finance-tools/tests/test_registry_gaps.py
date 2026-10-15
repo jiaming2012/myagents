@@ -166,6 +166,27 @@ def test_xero_staleness():
     assert check_xero_staleness({}) == []
 
 
+def test_xero_staleness_distinguishes_empty_from_behind():
+    """'never' is for an account with no transaction ever, and says so differently.
+
+    A dated-but-old account needs reconciling; an empty one needs an import or an
+    archive. Collapsing both into 'never' once reported 133 transactions as nothing.
+    """
+    today = date(2026, 10, 15)
+    by_name = {
+        g["message"].split("'")[1]: g
+        for g in check_xero_staleness(
+            {"Behind": date(2026, 6, 2), "Empty": None}, threshold_days=10, today=today
+        )
+    }
+    assert "2026-06-02 (135d ago)" in by_name["Behind"]["message"]
+    assert "never" not in by_name["Behind"]["message"]
+    assert "Reconcile" in by_name["Behind"]["fix"]
+
+    assert "never" in by_name["Empty"]["message"]
+    assert "archive" in by_name["Empty"]["fix"]
+
+
 def test_run_checks_offline_only_uses_registry():
     gaps = run_checks(_config())
     assert {g["kind"] for g in gaps} == {"no_payment_entry"}

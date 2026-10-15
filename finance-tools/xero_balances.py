@@ -277,15 +277,25 @@ def xero_connection_status():
 
 
 def fetch_xero_latest_activity(days=120):
-    """{bank account name: date of its most recent bank transaction, or None} over the last N days.
+    """{bank account name: date of its most recent bank transaction, or None if it has none ever}.
 
     Used by the registry gap check to flag accounts whose books are behind.
+
+    Only ACTIVE bank accounts are reported. Xero's Accounts endpoint returns archived
+    accounts too, so without the status filter an account archived precisely because it
+    is dormant would be flagged as stale forever, and archiving it could never clear it.
+
+    The bulk sweep only covers the last N days, which is cheap but cannot tell "no
+    transaction ever" from "nothing recent". Any account with nothing in that window
+    therefore gets one targeted newest-first lookup, so a None return means the account
+    is genuinely empty -- the gap check words those two cases very differently.
     """
     from datetime import date, timedelta
 
     api, tenant = _xero_api()
     since = date.today() - timedelta(days=days)
-    latest = {a.name: None for a in api.get_accounts(tenant, where='Type=="BANK"').accounts}
+    accounts = api.get_accounts(tenant, where='Type=="BANK"&&Status=="ACTIVE"').accounts
+    latest = {a.name: None for a in accounts}
     page = 1
     while True:
         batch = api.get_bank_transactions(
@@ -295,11 +305,25 @@ def fetch_xero_latest_activity(days=120):
             break
         for t in batch:
             name = t.bank_account.name
-            if t.date and (latest.get(name) is None or t.date > latest[name]):
+            # `name not in latest` means an archived account: skip, don't resurrect it.
+            if name in latest and t.date and (latest[name] is None or t.date > latest[name]):
                 latest[name] = t.date
         if len(batch) < 100:
             break
         page += 1
+
+    for a in accounts:
+        if latest[a.name] is not None:
+            continue
+        rows = api.get_bank_transactions(
+            tenant,
+            where=f'BankAccount.AccountID==Guid("{a.account_id}")',
+            order="Date DESC",
+            page=1,
+            page_size=1,
+        ).bank_transactions
+        if rows and rows[0].date:
+            latest[a.name] = rows[0].date
     return latest
 
 
