@@ -127,6 +127,7 @@ class Zoho:
             sys.exit("ZOHO_BOOKS_REFRESH_TOKEN / ZOHO_BOOKS_ORG_ID not set in finance-tools/.env")
         self.access = self._token()
         self.calls = 0
+        self.capped = False
 
     def _token(self):
         if TOKEN_CACHE.exists():
@@ -152,7 +153,12 @@ class Zoho:
             r = requests.request(method, f"{BASE}{path}", params=params, json=body, timeout=60,
                                  headers={"Authorization": f"Zoho-oauthtoken {self.access}"})
             if r.status_code == 429:
-                time.sleep(20 * (attempt + 1))
+                if '"code":45' in r.text.replace(" ", ""):
+                    # daily cap for the org (1,000 calls/day on the trial tier): no point retrying
+                    self.capped = True
+                    raise ZohoError(f"{method} {path}: Zoho daily API cap reached — resume tomorrow")
+                print(f"  429 on {method} {path}: {r.text[:160]} (attempt {attempt + 1})", flush=True)
+                time.sleep(30 * (attempt + 1))
                 continue
             if r.status_code == 401:
                 TOKEN_CACHE.unlink(missing_ok=True)
@@ -164,7 +170,7 @@ class Zoho:
                 d = {"raw": r.text[:500]}
             if r.status_code >= 300:
                 raise ZohoError(f"{method} {path} -> {r.status_code}: {json.dumps(d)[:500]}")
-            time.sleep(0.65)  # ~90 req/min, under the 100/min cap
+            time.sleep(1.0)  # ~60 req/min, well under the 100/min cap
             return d
         raise ZohoError(f"{method} {path}: retries exhausted")
 
@@ -408,11 +414,101 @@ def journal_lines(dep, by_code, bank_or_clearing_id, total):
 
 
 def post_toast_journal(z, dep, by_code, debit_account_id, line, t):
+    # idempotent: a journal with this reference may exist from an interrupted run
+    found = z.get("/journals", reference_number=ref(t)).get("journals", [])
+    found = [j for j in found if j.get("reference_number") == ref(t)]
+    if found:
+        return z.get(f"/journals/{found[0]['journal_id']}")["journal"]
     total = money(dep["total_payouts"])
     body = {"journal_date": line["date"], "reference_number": ref(t),
             "notes": f"Toast payout settled {dep['settle_date']} for sales {', '.join(dep['sales_dates'])}",
             "line_items": journal_lines(dep, by_code, debit_account_id, total)}
     return z.post("/journals", body)["journal"]
+
+
+# --- monthly reconciliation records ---------------------------------------------
+
+
+def month_ends(start, end):
+    d = date.fromisoformat(start).replace(day=1)
+    last = date.fromisoformat(end)
+    while True:
+        nxt = (d.replace(day=28) + timedelta(days=4)).replace(day=1)
+        me = nxt - timedelta(days=1)
+        if me > last:
+            return
+        yield d, me
+        d = nxt
+
+
+def reconcile(z, accounts, openings, apply, log):
+    """One reconciliation record per full month: closing balance from Mercury
+    (opening + posted txns through month end), transactions = every categorized
+    or matched document dated in the month. Zoho reports the difference."""
+    log("## Monthly reconciliation records")
+    log("| account | month | Mercury closing | docs | Zoho difference | status |")
+    log("|---|---|---|---|---|---|")
+    for acct in accounts:
+        zid = acct["zoho_id"]
+        name = BANK_NAMES[acct["xero_bank_account"]]
+        existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
+        docs = list(z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"))
+        docs = [d for d in docs if d.get("status") in ("categorized", "matched", "reconciled")]
+        bal = openings[zid]
+        for first, last in month_ends(START_DEFAULT, date.today().isoformat()):
+            bal += sum(money(t["amount"]) for t in acct["txns_2026"] if first <= eastern_date(t["postedAt"]) <= last)
+            month_docs = [d for d in docs if first.isoformat() <= d["date"] <= last.isoformat()]
+            if first.isoformat() in existing:
+                r = existing[first.isoformat()]
+                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | {r.get('difference')} | exists: {r.get('status')} |")
+                continue
+            if not apply:
+                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | — | dry run |")
+                continue
+            body = {"start_date": first.isoformat(), "end_date": last.isoformat(),
+                    "closing_balance": float(bal), "save_option": "reconcile",
+                    "transactions_to_be_reconciled": [{"transaction_id": d["transaction_id"]} for d in month_docs]}
+            try:
+                r = z.post(f"/bankaccounts/{zid}/reconciliations", body)
+                rec = r.get("reconciliation", r)
+                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | {rec.get('difference', '?')} | {rec.get('status', r.get('message'))} |")
+            except ZohoError as e:
+                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | FAILED | {str(e)[:160]} |")
+
+
+# --- bank rules for future feed lines ------------------------------------------
+
+
+def seed_rules(z, cfg, accounts, by_code, apply, log):
+    """One withdrawal rule per merchants.yaml pattern so future feed lines
+    auto-categorize. Transfers and Toast payouts stay script-driven (a rule on
+    both sides of a transfer would post it twice; Toast needs the journal)."""
+    existing = {r["rule_name"] for r in z.get("/bankaccounts/rules").get("rules", [])}
+    account_ids = ",".join(a["zoho_id"] for a in accounts)
+    log("## Bank rules")
+    n = 0
+    for m in cfg["merchants"]:
+        code = m["account"]
+        name = f"mercury: {m['pattern']} -> {code}"
+        if name in existing:
+            continue
+        record_as = "owner_drawings" if code in EQUITY_CODES else "expense"
+        body = {"rule_name": name, "rule_category": "selected_accounts", "account_ids": account_ids,
+                "apply_to": "withdrawals", "criteria_type": "and",
+                "criterion": [{"field": "description", "comparator": "contains", "value": m["pattern"]}],
+                "record_as": record_as, "account_id": by_code[code]["account_id"],
+                "auto_categorize": "autocategorize", "reference_number": "from_statement"}
+        log(f"  rule: {name}" + ("" if apply else " (dry run)"))
+        if apply:
+            try:
+                z.post("/bankaccounts/rules", body)
+                n += 1
+            except ZohoError as e:
+                log(f"    FAILED: {str(e)[:200]}")
+                if n == 0:
+                    log("    stopping after first failure; fix the body shape and re-run --rules")
+                    return
+    log(f"  {n} rules created\n")
 
 
 # --- main --------------------------------------------------------------------
@@ -429,6 +525,7 @@ def main():
                     help="A = journal on the bank account + match; B = deposit to 1320 + journal from 1320")
     ap.add_argument("--limit", type=int, default=0, help="stop after N writes (apply)")
     ap.add_argument("--reconcile", action="store_true", help="create monthly reconciliation records")
+    ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml")
     ap.add_argument("--report", default=str(HERE / "docs/zoho-books-recon-report.md"))
     args = ap.parse_args()
     apply = args.apply
@@ -481,6 +578,7 @@ def main():
         unpaired_z += [(acct, ln) for ln in un_z]
         cur = mbal[acct["mercury_account_id"]]["currentBalance"]
         all_2026 = mp.fetch_mercury(acct["mercury_account_id"], START_DEFAULT, date.today().isoformat())
+        acct["txns_2026"] = all_2026
         openings[zid] = money(cur) - sum(money(t["amount"]) for t in all_2026)
         log(f"| {zoho_name} | {len(txns)} | {len(lines)} | {len(paired)} | {len(un_m_unknown)} | {len(un_z)} | {openings[zid]} |")
 
@@ -603,6 +701,14 @@ def main():
             log(f"- {eastern_date(t['postedAt'])} {t['amount']:>10.2f}  (export the sales day: task toast:export)")
     log()
 
+    if args.reconcile or args.rules:
+        if args.rules:
+            seed_rules(z, cfg, accounts, by_code, apply, log)
+        if args.reconcile:
+            reconcile(z, accounts, openings, apply, log)
+        Path(args.report).write_text("\n".join(out))
+        return
+
     if not apply:
         Path(args.report).write_text("\n".join(out))
         log(f"dry run only — report at {args.report}; Zoho calls: {z.calls}")
@@ -617,12 +723,14 @@ def main():
         save_state(state)
 
     def budget():
-        return args.limit and writes >= args.limit
+        return z.capped or (args.limit and writes >= args.limit)
 
     # opening balances (once)
     if not args.spike and not state.get("_opening"):
+        currency_id = banks[BANK_NAMES[accounts[0]["xero_bank_account"]]].get("currency_id")
         ob = {"date": OPENING_DATE, "accounts": [
-            {"account_id": zid, "debit_or_credit": "debit", "exchange_rate": 1, "amount": float(bal)}
+            {"account_id": zid, "debit_or_credit": "debit", "exchange_rate": 1,
+             "currency_id": currency_id, "amount": float(bal)}
             for zid, bal in openings.items()]}
         try:
             existing = z.get("/settings/openingbalances").get("opening_balance") or {}
@@ -732,9 +840,11 @@ def main():
 
     # --- verify ---
     log("\n## Verification")
+    if z.capped:
+        log("Zoho daily API cap reached — run stopped early; re-run `--apply` tomorrow (state is checkpointed).")
     log("| account | Zoho book balance | Zoho feed balance | Mercury current | uncategorized left |")
     log("|---|---|---|---|---|")
-    banks = bank_index(z)
+    banks = bank_index(z) if not z.capped else banks
     for acct in accounts:
         b = banks[BANK_NAMES[acct["xero_bank_account"]]]
         cur = mbal[acct["mercury_account_id"]]["currentBalance"]
