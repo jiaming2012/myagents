@@ -36,6 +36,7 @@ try:
     from monarchmoney import MonarchMoney
     from monarchmoney.monarchmoney import MonarchMoneyEndpoints
     MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
+    from monarch_client import get_monarch_client, is_auth_error, auth_error_message
 except ImportError:
     MonarchMoney = None
 
@@ -103,13 +104,18 @@ async def fetch_monarch_balances():
         print("Warning: monarchmoney not installed, skipping balance lookup", file=sys.stderr)
         return {}
 
-    token = os.environ.get("MONARCH_TOKEN")
-    if not token:
-        print("Warning: MONARCH_TOKEN not set, skipping balance lookup", file=sys.stderr)
+    mm = await get_monarch_client()
+    if mm is None:
+        print("Warning: skipping Monarch balance lookup", file=sys.stderr)
         return {}
 
-    mm = MonarchMoney(token=token)
-    data = await mm.get_accounts()
+    try:
+        data = await mm.get_accounts()
+    except Exception as e:
+        if is_auth_error(e):
+            print(f"Error: {auth_error_message()}", file=sys.stderr)
+            sys.exit(1)
+        raise
 
     balances = {}
     for acct in data.get("accounts", []):

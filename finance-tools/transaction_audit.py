@@ -30,6 +30,7 @@ try:
     from monarchmoney import MonarchMoney
     from monarchmoney.monarchmoney import MonarchMoneyEndpoints
     MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
+    from monarch_client import get_monarch_client
 except ImportError:
     MonarchMoney = None
 
@@ -63,14 +64,13 @@ if not sys.stdout.isatty():
 
 
 async def _get_monarch_client():
-    """Get an authenticated Monarch Money client."""
+    """Get an authenticated Monarch Money client (shared precedence: session > env)."""
     if MonarchMoney is None:
         return None
-    token = os.environ.get("MONARCH_TOKEN")
-    if not token:
-        print("Warning: MONARCH_TOKEN not set, skipping Monarch audit", file=sys.stderr)
-        return None
-    return MonarchMoney(token=token)
+    mm = await get_monarch_client()
+    if mm is None:
+        print("Warning: skipping Monarch audit", file=sys.stderr)
+    return mm
 
 
 async def fetch_uncategorized_monarch(days=7):
