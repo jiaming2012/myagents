@@ -23,6 +23,8 @@ Cap1, NavyFed, Chase Ink, Mercury personal) are phase 2 and reuse the same mecha
 | Classification rules | `finance-tools/merchants.yaml` → `skip:`, `transfers:`, `merchants:` | pattern → Xero account **code**; reuse verbatim, only the target id changes |
 | Mercury fetch + classify code | `finance-tools/mercury_precode.py` (`fetch_mercury`, `classify`, `merchant_name`) | copy the functions, swap the Xero sink for a Zoho sink |
 | Python interpreter | `PATH=~/miniconda3/bin:$PATH` | the bare `/usr/local/bin/python3` is 3.7 with no deps; every `task` target fails there |
+| **Books access (DONE 2026-10-15)** | `finance-tools/.env` → `ZOHO_BOOKS_REFRESH_TOKEN` (scope `ZohoBooks.fullaccess.all`), `ZOHO_BOOKS_ORG_ID=942990573` | org "Yumyums Kitchen LLC", plan PREMIUM TRIAL (10k calls/day), USD. §1 is complete; start at §2 |
+| Zoho bank accounts (feed active, last refresh 2026-10-15) | `1622286000000095122` Operations ••4613 (530 uncategorized) · `1622286000000095128` Outgoing ACH ••5396 (120) · `1622286000000095134` Taxes ••7818 (136) | book `balance` 0.00 on all three (nothing categorized yet, no opening balance); `bank_balance` 528.43 / 450.18 / 239.29. 786 feed lines total — more than 90 days' worth, so check `feed_start` per account before assuming a statement import is needed |
 
 ---
 
