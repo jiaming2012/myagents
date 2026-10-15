@@ -272,7 +272,7 @@ imported statement, delete created accounts. No Xero state is touched.
 
 | Risk | Handling |
 |---|---|
-| Rate limits: 100 req/min/org; daily cap by plan (Free 1,000 · Standard 2,000 · Professional 5,000 · Premium+ 10,000; trial is normally Premium). ~500 Mercury txns since Jan → ~1,200–1,800 calls, plus ~140 Toast payouts × (journal + match) ≈ 300–450 more | throttle 90/min, back off on 429 (codes 44/45/1070), checkpoint progress in a local JSON so `--apply` resumes; on a Free plan split across two days |
+| Rate limits: 100 req/min/org; **daily cap on this org is 1,000 calls (error code 45), verified 2026-10-15 — the Premium trial does not get Premium's 10,000**. The full run needs ~1,250 calls (786 lines: 1 per spend, 3 per transfer pair, 3 per Toast payout) plus ~250 for inventory/rules/reconciliation | the script stops cleanly on code 45 and resumes from its checkpoint next day; after the catch-up a normal week is ~60 calls | throttle 90/min, back off on 429 (codes 44/45/1070), checkpoint progress in a local JSON so `--apply` resumes; on a Free plan split across two days |
 | Feed coverage | verified 2026-01-02 → today, counts equal Mercury; §3.3 re-checks by pairing and can import via `POST /bankstatements` if a hole appears |
 | Feed line text differs from Mercury API counterparty names | classifier falls back to description; unmatched lines are listed, not guessed |
 | Duplicate transfers (the Xero duplicate saga) | one source of truth = Mercury txn id in `reference_number`; match-before-categorize on the second side |

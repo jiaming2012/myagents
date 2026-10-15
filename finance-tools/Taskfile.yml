@@ -124,6 +124,31 @@ tasks:
     cmds:
       - python mercury_precode.py --apply {{.CLI_ARGS}}
 
+  zoho:toast-dump:
+    desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json"
+    cmds:
+      - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json
+
+  zoho:recon:
+    desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md)"
+    cmds:
+      - python zoho_books_recon.py --toast .toast_preview_2026.json {{.CLI_ARGS}}
+
+  zoho:recon:apply:
+    desc: "Apply Mercury -> Zoho Books reconciliation (resumes from .zoho_recon_state.json; stops at the 1,000/day API cap)"
+    cmds:
+      - python zoho_books_recon.py --apply --toast .toast_preview_2026.json {{.CLI_ARGS}}
+
+  zoho:rules:
+    desc: Create Zoho bank rules from merchants.yaml (dry run unless -- --apply)
+    cmds:
+      - python zoho_books_recon.py --rules {{.CLI_ARGS}}
+
+  zoho:reconcile:
+    desc: Create monthly Zoho reconciliation records against Mercury month-end balances (dry run unless -- --apply)
+    cmds:
+      - python zoho_books_recon.py --reconcile {{.CLI_ARGS}}
+
   budget:
     desc: Monarch budget and goal tracker
     cmds:

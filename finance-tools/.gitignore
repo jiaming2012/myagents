@@ -8,5 +8,6 @@ __pycache__/
 .alert_state.json
 .zoho_books_token.json
 .zoho_recon_state.json
+.toast_preview_*.json
 forecast_preview.html
 .mm
