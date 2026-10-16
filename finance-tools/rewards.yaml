@@ -10,6 +10,8 @@
 #   currency:         display name of the reward unit (e.g. "MR", "miles", "$")
 #   cents_per_point:  valuation used to roll everything up to dollars.
 #                     1.0 for cash back. Be conservative for points.
+#   points_expire:    free text shown in the SUMMARY, e.g. "never while the
+#                     account is open" or "18 months after earning". Optional.
 #   annual_fee:       dollars
 #   anniversary:      YYYY-MM-DD the fee posts (null = unknown, fee shown without a date)
 #   earn:             ORDERED list of earn rules. First match wins, like merchants.yaml.
@@ -61,6 +63,7 @@ cards:
     program: points
     currency: MR
     cents_per_point: 1.0          # conservative; transfers to partners often get 1.5-2.0
+    points_expire: "never while the account is open and in good standing"
     annual_fee: 895
     anniversary: null             # fill in from the statement that shows the fee
     earn:

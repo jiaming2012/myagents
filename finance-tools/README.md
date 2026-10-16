@@ -177,9 +177,13 @@ rate, optional spend caps per calendar period), the statement credits worth
 tracking (amount + monthly/quarterly/semiannual/annual + merchant patterns),
 an optional sign-up bonus, and rewards balances you type in from the issuer.
 
-The report shows points earned per rule, each credit period as `used`,
-`partial`, `MISSED` or `open` (with days left), sign-up bonus pace, and the
-expected balance now. With two typed-in balances it also shows the drift
+Each card opens with a **SUMMARY** (points earned and their dollar value,
+credits used, total earned = points + credits, fee, net, and when the points
+themselves expire per `points_expire`) and an **EXPIRING** block that lists
+every unused enrolled credit grouped by deadline, soonest first, with days
+left and the total dollars still on the table. Below that: points earned per
+rule, each credit period as `used`, `partial`, `MISSED` or `open` (with days
+left), sign-up bonus pace, and the expected balance now. With two typed-in balances it also shows the drift
 between what the issuer actually granted and what the rules computed; that
 drift is how you find merchants the issuer codes differently from Monarch.
 

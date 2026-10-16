@@ -13,6 +13,7 @@ from rewards import (  # noqa: E402
     build_report,
     credit_usage,
     earn_summary,
+    expiring_credits,
     load_registry,
     load_rewards,
     period_bounds,
@@ -205,7 +206,51 @@ def test_build_report_filters_card_excludes_payments_and_pending():
     card = report["cards"][0]
     assert card["transactions"] == 1
     assert card["earn"]["total_points"] == 100.0
+    assert card["total_value"] == pytest.approx(1.0 + 0.0)
     assert card["net_value"] == pytest.approx(1.0 + 0.0 - 895.0)
+
+
+# --- expiring credits -----------------------------------------------------------
+
+def test_expiring_groups_open_credits_by_deadline_soonest_first():
+    card = _card()
+    card["credits"].append({"name": "Walmart+", "amount": 12.95, "period": "monthly",
+                            "merchant": ["WALMART+"], "enrolled": False})
+    txns = [_txn("2026-10-03", -14.91, merchant="Uber")]           # $0.09 of Uber Cash left
+    credits = credit_usage(card, txns, 2026, TODAY)
+    groups = expiring_credits(credits, TODAY)
+    assert [g["end"] for g in groups] == ["2026-10-31", "2026-12-31"]
+    assert [g["days_left"] for g in groups] == [16, 77]
+    assert groups[0]["items"] == [{"name": "Uber Cash", "remaining": pytest.approx(0.09)}]
+    assert groups[1]["items"] == [{"name": "Lululemon", "remaining": 75.0}]
+    assert groups[1]["total"] == 75.0
+    names = {i["name"] for g in groups for i in g["items"]}
+    assert "Walmart+" not in names, "unenrolled credits are not 'expiring'"
+
+
+def test_expiring_omits_fully_used_open_periods():
+    card = _card()
+    txns = [_txn("2026-10-03", -20.0, merchant="Uber"), _txn("2026-10-04", -80.0, merchant="Lululemon")]
+    credits = credit_usage(card, txns, 2026, TODAY)
+    assert expiring_credits(credits, TODAY) == []
+
+
+def test_report_summary_and_expiring_render():
+    from rewards import render_text
+    card = {k: v for k, v in _card().items() if k != "_account"}
+    card["points_expire"] = "never while open"
+    rewards_cfg = {"exclude": EXCLUDE, "cards": [card]}
+    registry = {"amex-platinum-2004": _card()["_account"]}
+    txns = [_txn("2026-03-01", -100.0, merchant="Whole Foods")]
+    report = build_report(rewards_cfg, registry, txns, 2026, TODAY)
+    r = report["cards"][0]
+    assert r["expiring_total"] == pytest.approx(90.0)             # $75 Lululemon Q4 + $15 Uber Oct
+    text = render_text(report, TODAY)
+    assert "Total earned:         $1.00  (points + credits)" in text
+    assert "MR expire:       never while open" in text
+    assert " 16 days  by 2026-10-31      $15.00" in text
+    assert " 77 days  by 2026-12-31      $75.00" in text
+    assert "total on the table                  $90.00" in text
 
 
 def test_build_report_unknown_card_fails_loudly():

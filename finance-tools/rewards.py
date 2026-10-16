@@ -364,6 +364,31 @@ def fee_info(card, today):
     return info
 
 
+def expiring_credits(credits, today):
+    """Enrolled credits with money still on the table in an open period,
+    grouped by the day the period ends, soonest first.
+
+    Returns a list of {end, days_left, items: [{name, remaining}], total}.
+    """
+    by_end = defaultdict(list)
+    for c in credits:
+        if not c["enrolled"]:
+            continue
+        for p in c["periods"]:
+            if p["status"] == "open" and p["remaining"] > 0.005:
+                by_end[p["end"]].append({"name": c["name"], "remaining": p["remaining"]})
+    out = []
+    for end in sorted(by_end):
+        items = by_end[end]
+        out.append({
+            "end": end,
+            "days_left": (date.fromisoformat(end) - today).days,
+            "items": items,
+            "total": sum(i["remaining"] for i in items),
+        })
+    return out
+
+
 # ---------------------------------------------------------------------------
 # Report assembly
 # ---------------------------------------------------------------------------
@@ -378,18 +403,23 @@ def analyze_card(card, txns, exclude, year, today):
     credits_used = sum(c["year_used"] for c in credits if c["enrolled"])
     credits_available = sum(c["year_available"] for c in credits if c["enrolled"])
     fee = fee_info(card, today)
+    expiring = expiring_credits(credits, today)
     return {
         "account": card["account"],
         "name": card["_account"].get("name"),
         "program": card.get("program"),
         "currency": card.get("currency", "pts"),
         "cents_per_point": float(card.get("cents_per_point", 1.0)),
+        "points_expire": card.get("points_expire"),
         "year": year,
         "transactions": len(in_year),
         "earn": earn,
         "credits": credits,
         "credits_used": credits_used,
         "credits_available": credits_available,
+        "total_value": earn["total_value"] + credits_used,
+        "expiring": expiring,
+        "expiring_total": sum(g["total"] for g in expiring),
         "signup_bonus": signup_progress(card, ctx, today),
         "balance": balance_check(card, apply_earn(card, earnable), today),
         "fee": fee,
@@ -411,11 +441,34 @@ def render_text(report, today):
         lines.append("=" * 72)
         lines.append(f"Transactions in year: {r['transactions']}")
         lines.append("")
+        e, fee = r["earn"], r["fee"]
+        lines.append("SUMMARY")
+        lines.append(f"  Points earned:   {e['total_points']:>10,.0f} {cur}  = {_money(e['total_value'])}"
+                     f" at {r['cents_per_point']:.2f} cpp")
+        lines.append(f"  Credits used:    {_money(r['credits_used']):>10}  of {_money(r['credits_available'])} enrolled")
+        lines.append(f"  Total earned:    {_money(r['total_value']):>10}  (points + credits)")
+        if fee:
+            when = (f"next {fee['anniversary']}, {fee['days_until']} days" if fee["anniversary"]
+                    else "anniversary unknown")
+            lines.append(f"  Annual fee:      {_money(fee['annual_fee']):>10}  {when}")
+        lines.append(f"  Net:             {_money(r['net_value']):>10}")
+        if r["points_expire"]:
+            lines.append(f"  {cur + ' expire:':<17}{r['points_expire']}")
+        lines.append("")
+        lines.append("EXPIRING  (unused credits, soonest deadline first)")
+        if not r["expiring"]:
+            lines.append("  nothing open; every enrolled credit for the current periods is used")
+        for g in r["expiring"]:
+            lines.append(f"  {g['days_left']:>3} days  by {g['end']}  {_money(g['total']):>10}")
+            for i in g["items"]:
+                lines.append(f"      {i['name']:<54} {_money(i['remaining']):>10}")
+        if r["expiring"]:
+            lines.append(f"  {'total on the table':<32}{_money(r['expiring_total']):>10}")
+        lines.append("")
         lines.append("EARN")
         for row in r["earn"]["rows"]:
             capped = f"  (over cap: {_money(row['capped_spend'])})" if row["capped_spend"] else ""
             lines.append(f"  {row['rule']:<44} {_money(row['spend']):>12}  {row['points']:>10,.0f} {cur}{capped}")
-        e = r["earn"]
         lines.append(f"  {'TOTAL':<44} {_money(e['total_spend']):>12}  {e['total_points']:>10,.0f} {cur}"
                      f"  = {_money(e['total_value'])} at {r['cents_per_point']:.2f} cpp"
                      f"  ({e['effective_rate'] * 100:.2f}% effective)")
@@ -452,7 +505,6 @@ def render_text(report, today):
                 lines.append(f"  {bal['previous_as_of']} -> {bal['as_of']}: issuer delta {bal['actual_delta']:,.0f}, "
                              f"computed {bal['computed_delta']:,.0f}, drift {bal['drift']:+,.0f}")
             lines.append("")
-        fee = r["fee"]
         if fee:
             when = f" (next {fee['anniversary']}, {fee['days_until']} days)" if fee["anniversary"] else " (anniversary unknown)"
             lines.append(f"FEE  {_money(fee['annual_fee'])}{when}")
