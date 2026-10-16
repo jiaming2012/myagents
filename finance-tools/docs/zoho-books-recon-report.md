@@ -15,6 +15,23 @@ Script: `zoho_books_recon.py` (`task zoho:recon`, `task zoho:recon:apply`, `task
 
 All three accounts equal Mercury to the cent with nothing uncategorized.
 
+### The closed 0551 account (added 2026-10-16)
+
+0551 was the main spending account from Jan 1 until it was swept to zero and archived
+on 2026-06-02; only its transfer legs had reached Zoho, leaving a 12,374.84 balance on
+the placeholder. Its 253 Mercury postings were imported as one statement
+(`POST /bankstatements`), then 124 transfer lines matched to the documents the live
+accounts already had, 129 spends categorized (six new merchants mapped), the 371.11
+opening balance posted as a journal against Opening Balance Offset (the org's
+opening-balance record is reconciled and immutable), and Jan–Jun records reconciled.
+It ends at **0.00** and is **marked inactive**, which removes it from the bank-balance
+view without losing the ~12.6k of first-half expenses it carried. 0551 lives under
+`zoho_only_accounts` in merchants.yaml so the Xero pre-coder never touches it.
+
+| account | Zoho book | Mercury | uncategorized |
+|---|---|---|---|
+| Operations ••0551 (closed) | 0.00 (inactive) | 0.00 (archived) | 0 |
+
 **Documents posted:** 150 internal transfers (created once, matched from the other
 side), 192 expenses, 21 owner draws, 2 expense refunds, 144 Toast payout journals
 (sales / sales tax / tips / fees / cash / 1310 / 2050 / 1320 split from toast_xero),
