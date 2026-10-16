@@ -5,16 +5,15 @@ Runs: 2026-10-15 (spike + bulk apply, stopped by the 1,000/day API cap at 754/78
 Script: `zoho_books_recon.py` (`task zoho:recon`, `task zoho:recon:apply`, `task zoho:rules`,
 `task zoho:reconcile`). Checkpoint: `finance-tools/.zoho_recon_state.json`.
 
-## Outcome
+## Outcome (after the merchant mapping on 2026-10-16)
 
 | account | Mercury posted 2026 | feed lines | categorized / matched | left uncategorized | Zoho book balance | Mercury current |
 |---|---|---|---|---|---|---|
-| Operations ••4613 | 533 | 533 | 530 | 3 (unmapped merchants) | 920.74 | 47.24 |
-| Outgoing ACH ••5396 | 120 | 120 | 119 | 1 (unmapped merchant) | 1450.18 | 450.18 |
+| Operations ••4613 | 533 | 533 | 533 | 0 | 47.24 | 47.24 |
+| Outgoing ACH ••5396 | 120 | 120 | 120 | 0 | 450.18 | 450.18 |
 | Taxes ••7818 | 137 | 137 | 137 | 0 | 214.29 | 214.29 |
 
-The book-minus-Mercury gap on 4613 (873.50) and 5396 (1,000.00) is exactly the sum of
-the uncategorized lines below. Everything else reconciles to the cent.
+All three accounts equal Mercury to the cent with nothing uncategorized.
 
 **Documents posted:** 150 internal transfers (created once, matched from the other
 side), 192 expenses, 21 owner draws, 2 expense refunds, 144 Toast payout journals
@@ -22,17 +21,18 @@ side), 192 expenses, 21 owner draws, 2 expense refunds, 144 Toast payout journal
 3 opening balances as of 2025-12-31 (388.69 / 207.00 / 37.21), 52 bank rules,
 27 monthly reconciliation records.
 
-## Left for the operator (O-2): four merchants not in merchants.yaml
+## O-2: the four merchants that were missing from merchants.yaml (mapped 2026-10-16)
 
-| date | account | amount | merchant | suggested line |
+| date | account | amount | merchant | mapped to |
 |---|---|---|---|---|
-| 2026-10-02 | 5396 | −1,000.00 | Commerce Management | `- {pattern: "Commerce Management", account: "????"}` |
-| 2026-10-04 | 4613 | −338.00 | Jd Transport | `- {pattern: "Jd Transport", account: "????"}` |
-| 2026-10-11 | 4613 | −53.31 | Public Storage | `- {pattern: "Public Storage", account: "6310"}` (Rent - Other, like CubeSmart?) |
-| 2026-10-16 | 4613 | −482.19 | Cummins Sales and Service | `- {pattern: "Cummins", account: "????"}` |
+| 2026-10-02 | 5396 | −1,000.00 | Commerce Management | 6300 Rent - Real Estate — food truck location rent (operator) |
+| 2026-10-04 | 4613 | −338.00 | Jd Transport | 6090 Contract Labor (Square-paid hauling; review) |
+| 2026-10-11 | 4613 | −53.31 | Public Storage | 6310 Rent - Other (storage, like CubeSmart) |
+| 2026-10-16 | 4613 | −482.19 | Cummins Sales and Service | 6140 Equipment & Tools (engine/generator service; review) |
 
-Add the lines to `merchants.yaml`, run `task zoho:recon:apply`, and the lines categorize
-(the bank rules only fire on future feed imports). No vendor contacts were created (O-3).
+Posted to Zoho and added as bank rules. The same `merchants.yaml` drives the Xero
+pre-coder, so the Monday Xero run will code these the same way. No vendor contacts were
+created (O-3).
 
 ## Monthly reconciliation records (all 27 created, status `reconciled`)
 

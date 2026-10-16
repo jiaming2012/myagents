@@ -100,3 +100,9 @@ merchants:
   # --- one-offs ---
   - {pattern: "Unique",               account: "6350"}   # thrift store -- pots/pans (confirmed supplies)
   - {pattern: "••5237",               account: "3200"}   # transfer to personal Mercury savings = owner draw
+
+  # --- added 2026-10-16 from the Zoho recon review list ---
+  - {pattern: "Public Storage",       account: "6310"}   # Rent - Other (storage unit, like CubeSmart)
+  - {pattern: "Cummins",              account: "6140"}   # Equipment & Tools (engine/generator service; review)
+  - {pattern: "Jd Transport",         account: "6090"}   # Contract Labor (Square-paid hauling/delivery service; review)
+  - {pattern: "Commerce Management",  account: "6300"}   # Rent - Real Estate: food truck location rent (operator, 2026-10-16)
