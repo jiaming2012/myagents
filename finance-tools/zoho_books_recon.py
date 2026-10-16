@@ -317,6 +317,41 @@ def pair(mercury, lines):
     return paired, un_m, un_z
 
 
+def import_statement(z, zid, zoho_name, txns, state, apply, log):
+    """No-feed account: push the Mercury history in as a bank statement, once.
+    Lines are dated by Mercury's Eastern posting date so nothing straddles a month."""
+    key = f"_imported:{zid}"
+    if state.get(key):
+        return
+    # NB: the import endpoint uses the bank-statement convention (credit = money in),
+    # the opposite of the listing convention (debit = money in). Verified 2026-10-16.
+    rows = [{"transaction_id": t["id"], "date": eastern_date(t["postedAt"]).isoformat(),
+             "debit_or_credit": "credit" if t["amount"] > 0 else "debit",
+             "amount": float(money(abs(t["amount"]))), "payee": mp.merchant_name(t)[:100],
+             "description": (t.get("bankDescription") or mp.merchant_name(t))[:200],
+             "reference_number": ref(t)} for t in sorted(txns, key=lambda t: t["postedAt"])]
+    if not rows:
+        return
+    log(f"  statement import for '{zoho_name}': {len(rows)} lines {rows[0]['date']} → {rows[-1]['date']}"
+        + ("" if apply else " (dry run)"))
+    if not apply:
+        return
+    body = {"account_id": zid, "start_date": rows[0]["date"], "end_date": rows[-1]["date"], "transactions": rows}
+    r = z.post("/bankstatements", body)
+    st = r.get("statement") or r.get("bankstatement") or r
+    sid = st.get("statement_id") or z.get(f"/bankaccounts/{zid}/statement/lastimported").get("statement", {}).get("statement_id")
+    state[key] = {"statement_id": sid, "lines": len(rows)}
+    save_state(state)
+    # direction sanity check: a money-out Mercury txn must come back as a credit line
+    out = next((t for t in txns if t["amount"] < 0), None)
+    if out:
+        ln = next((x for x in feed_lines(z, zid) if x.get("reference_number") == ref(out)
+                   or (x["date"] == eastern_date(out["postedAt"]).isoformat() and money(x["amount"]) == money(abs(out["amount"])))), None)
+        if ln and ln.get("debit_or_credit") != "credit":
+            sys.exit(f"statement import direction reversed (line {ln['transaction_id']} is {ln.get('debit_or_credit')}); "
+                     f"delete statement {st.get('statement_id')} and fix import_statement()")
+
+
 def load_toast(path):
     if not path:
         return []
@@ -372,7 +407,9 @@ def match_line(z, line, want_ref=None, want_type=None):
     if pick is None and want_type:
         same = [c for c in cands if c.get("transaction_type") == want_type
                 and money(c.get("amount", 0)) == money(line["amount"])]
-        if len(same) == 1:
+        # identical same-day candidates are interchangeable; Zoho only offers unmatched ones
+        same.sort(key=lambda c: 0 if c.get("date") == line["date"] else 1)
+        if same:
             pick = same[0]
     if pick is None:
         return None, cands
@@ -484,6 +521,8 @@ def reconcile(z, accounts, openings, apply, log):
                     if r.get("status") == "reconciled" and first.isoformat() <= d["date"] <= last.isoformat():
                         d["_rec"] = True
                 continue
+            if not sel and acct.get("closed") and first.isoformat() > acct["closed"]:
+                continue  # closed account, nothing after the closure
             if not apply:
                 log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | dry run |")
             else:
@@ -502,6 +541,43 @@ def reconcile(z, accounts, openings, apply, log):
                 d["_rec"] = True
             for d in straddle:
                 log(f"    straddle: Zoho {d['date']} / Mercury {d['_mdate']} {d['_signed']} {d.get('transaction_type')}")
+
+
+# --- repair: re-run match-first for transfers created from one account --------------
+
+
+def undo_created_transfers(z, state, from_id, log):
+    """For every transfer document this script created from account `from_id`'s
+    side, uncategorize the statement line (which deletes the document) and match the
+    line to the document the other side already had; re-create only if Zoho offers
+    no candidate. Used after the 0551 import created duplicates of 5396's transfers."""
+    todo = [(m, rec) for m, rec in state.items()
+            if isinstance(rec, dict) and rec.get("op") == "transfer_fund" and rec.get("from") == from_id]
+    log(f"## Undo {len(todo)} transfers created from {from_id[-6:]}")
+    n_match = n_keep = n_fail = 0
+    for mid, rec in todo:
+        line_id, to = rec["line"], rec["to"]
+        try:
+            z.post(f"/banktransactions/{line_id}/uncategorize")
+        except ZohoError as e:
+            log(f"  {mid[:8]}: uncategorize failed: {str(e)[-90:]}")
+            n_fail += 1
+            continue
+        line = next((ln for ln in feed_lines(z, from_id) if ln["transaction_id"] == line_id), None)
+        if line is None:
+            log(f"  {mid[:8]}: line {line_id} not found after uncategorize")
+            n_fail += 1
+            continue
+        pick, cands = match_line(z, line, want_type="transfer_fund")
+        if pick is None:
+            t = {"id": mid, "bankDescription": line.get("description"), "counterpartyName": line.get("payee")}
+            categorize_transfer(z, line, from_id, to, t)
+            n_keep += 1
+        else:
+            state[mid] = {"op": "match", "line": line_id, "to": pick["transaction_id"]}
+            n_match += 1
+        save_state(state)
+    log(f"  matched {n_match}, re-created {n_keep}, failed {n_fail}\n")
 
 
 # --- bank rules for future feed lines ------------------------------------------
@@ -555,6 +631,8 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="stop after N writes (apply)")
     ap.add_argument("--reconcile", action="store_true", help="create monthly reconciliation records")
     ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml")
+    ap.add_argument("--undo-created-transfers", metavar="ZOHO_ACCOUNT_ID",
+                    help="repair: re-match transfers this script created from that account's side")
     ap.add_argument("--report", default=str(HERE / "docs/zoho-books-recon-report.md"))
     args = ap.parse_args()
     apply = args.apply
@@ -567,6 +645,10 @@ def main():
     cfg = yaml.safe_load((HERE / "merchants.yaml").read_text())
     z = Zoho()
     state = load_state()
+    if args.undo_created_transfers:
+        undo_created_transfers(z, state, args.undo_created_transfers, log)
+        Path(args.report).write_text("\n".join(out))
+        return
     log(f"# Zoho Books recon {'APPLY' if apply else 'DRY RUN'} — {date.today().isoformat()} ({args.start} → {args.end})\n")
 
     # --- chart + banks ---
@@ -585,7 +667,7 @@ def main():
 
     # --- Mercury + feed ---
     mbal = mercury_balances()
-    accounts = cfg["accounts"]
+    accounts = cfg["accounts"] + cfg.get("zoho_only_accounts", [])
     plan = []          # (account_cfg, mercury txn, feed line, kind, payload)
     unmatched = []     # (account, t, name)
     unpaired_m, unpaired_z = [], []
@@ -599,6 +681,8 @@ def main():
         zid = banks[zoho_name]["account_id"]
         acct["zoho_id"] = zid
         txns = mp.fetch_mercury(acct["mercury_account_id"], args.start, args.end)
+        if acct.get("statement_import"):
+            import_statement(z, zid, zoho_name, txns, state, apply, log)
         lines = feed_lines(z, zid)
         paired, un_m, un_z = pair(txns, lines)
         # Mercury txns whose line is already gone are done (state or UI); report only if unknown
@@ -754,22 +838,39 @@ def main():
     def budget():
         return z.capped or (args.limit and writes >= args.limit)
 
-    # opening balances (once)
-    if not args.spike and not state.get("_opening"):
+    # opening balances (once per account; the Zoho entity is one record, so PUT the full set)
+    posted_ob = state.get("_opening", {})
+    if not args.spike and any(zid not in posted_ob for zid in openings):
         currency_id = banks[BANK_NAMES[accounts[0]["xero_bank_account"]]].get("currency_id")
         ob = {"date": OPENING_DATE, "accounts": [
-            {"account_id": zid, "debit_or_credit": "debit", "exchange_rate": 1,
-             "currency_id": currency_id, "amount": float(bal)}
+            {"account_id": zid, "debit_or_credit": "debit" if bal >= 0 else "credit", "exchange_rate": 1,
+             "currency_id": currency_id, "amount": float(abs(bal))}
             for zid, bal in openings.items()]}
         try:
             existing = z.get("/settings/openingbalances").get("opening_balance") or {}
             if existing.get("opening_balance_id"):
-                z.put(f"/settings/openingbalances/{existing['opening_balance_id']}", ob)
+                # the record cannot change once a reconciliation includes it: fall back
+                # to one journal per missing account (bank <- Opening Balance Offset)
+                _, by_name_now = chart_index(z)
+                offset = by_name_now["Opening Balance Offset"]["account_id"]
+                for zid, bal in openings.items():
+                    if zid in posted_ob:
+                        continue
+                    refno = f"opening:{zid}"
+                    if not any(j.get("reference_number") == refno for j in z.get("/journals", reference_number=refno).get("journals", [])):
+                        z.post("/journals", {"journal_date": OPENING_DATE, "reference_number": refno,
+                                             "notes": "Opening balance as of 2025-12-31 (Mercury)",
+                                             "line_items": [
+                                                 {"account_id": zid, "debit_or_credit": "debit" if bal >= 0 else "credit", "amount": float(abs(bal))},
+                                                 {"account_id": offset, "debit_or_credit": "credit" if bal >= 0 else "debit", "amount": float(abs(bal))}]})
+                    posted_ob[zid] = str(bal)
+                    log(f"opening balance for {zid[-6:]} = {bal} posted as a journal ({refno})")
             else:
                 z.post("/settings/openingbalances", ob)
-            state["_opening"] = {k: str(v) for k, v in openings.items()}
+                posted_ob = {k: str(v) for k, v in openings.items()}
+                log(f"opening balances posted as of {OPENING_DATE}: " + ", ".join(f"{k[-6:]}={v}" for k, v in openings.items()))
+            state["_opening"] = posted_ob
             save_state(state)
-            log(f"opening balances posted as of {OPENING_DATE}: " + ", ".join(f"{k[-6:]}={v}" for k, v in openings.items()))
         except ZohoError as e:
             failures.append(("opening", None, str(e)))
             log(f"opening balances FAILED: {e}")
@@ -779,18 +880,20 @@ def main():
         g = groups[key]
         _, _, frm, to = key
         creators, matchers = g["out"], g["in"]
-        if not creators and frm in feed_ids:
-            # internal transfer whose out side was posted in an earlier run (or by hand):
-            # the in side must MATCH the existing transfer, never create a second one
-            for acct, t, line, kind, payload in matchers:
+        if (not creators or not matchers) and frm in feed_ids and to in feed_ids:
+            # internal transfer whose other side was posted in an earlier run (or by
+            # hand): this side must MATCH the existing document, never create a second
+            # one. Only if Zoho offers no candidate does it create.
+            for acct, t, line, kind, payload in creators + matchers:
                 if t["id"] in state or budget():
                     continue
                 try:
                     pick, cands = match_line(z, line, want_type="transfer_fund")
                     if pick is None:
-                        failures.append((kind, t, f"earlier-run transfer not offered as match ({len(cands)} cands)"))
-                        continue
-                    done(t, {"op": "match", "line": line["transaction_id"], "to": pick["transaction_id"]})
+                        categorize_transfer(z, line, frm, to, t)
+                        done(t, {"op": "transfer_fund", "line": line["transaction_id"], "from": frm, "to": to})
+                    else:
+                        done(t, {"op": "match", "line": line["transaction_id"], "to": pick["transaction_id"]})
                     writes += 1
                 except ZohoError as e:
                     failures.append((kind, t, str(e)))
@@ -895,6 +998,15 @@ def main():
         cur = mbal[acct["mercury_account_id"]]["currentBalance"]
         flag = "" if money(b["balance"]) == money(cur) else "  ← differs"
         log(f"| {b['account_name']} | {b['balance']} | {b['bank_balance']} | {cur} | {b['uncategorized_transactions']} |{flag}")
+    # closed accounts: once they sit at 0.00 with nothing uncategorized, hide them
+    for acct in accounts:
+        b = banks[BANK_NAMES[acct["xero_bank_account"]]]
+        if acct.get("closed") and b.get("is_active") and money(b["balance"]) == 0 and not b.get("uncategorized_transactions"):
+            try:
+                z.post(f"/bankaccounts/{b['account_id']}/inactive")
+                log(f"{b['account_name']}: balance 0.00, marked inactive")
+            except ZohoError as e:
+                log(f"{b['account_name']}: could not mark inactive: {str(e)[-120:]}")
     if failures:
         log(f"\n### Failures ({len(failures)})")
         for kind, t, msg in failures:
