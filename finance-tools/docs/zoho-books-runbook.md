@@ -97,6 +97,8 @@ statement import (one call), and not re-running what the checkpoint already cove
 - 0551 (closed): fully booked, Jan–Jun reconciled, 0.00, **inactive**. Reconciliation
   records cannot be posted to an inactive account (11015): reactivate
   (`POST /bankaccounts/{id}/active`), post, deactivate.
-- Nothing pending in Zoho. Branch `worktree-zoho-books-recon-plan` is not merged to main.
+- Mercury side: nothing pending (merged to main via PR #1, 2026-10-16).
+- **Next: the Bank of America accounts** (checking 1778, CORP card 2119, linked
+  2026-10-16) — see `zoho-books-handoff-boa.md`.
 - Decision still open: switch from Xero (criteria in the plan §7). The Xero Monday
   pre-coder keeps running meanwhile and shares `merchants.yaml`.
