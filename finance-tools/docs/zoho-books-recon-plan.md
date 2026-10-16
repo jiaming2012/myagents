@@ -6,6 +6,12 @@ If the trial is painless, Zoho Books replaces Xero. Nothing here touches Xero.
 
 **Correctness bar (same as Xero):** books only need to be right from **2026-01-01**.
 
+> **Status 2026-10-16: EXECUTED.** Sections 1–3 are done; see
+> `docs/zoho-books-recon-report.md` (outcome, the four merchants left for the operator,
+> monthly reconciliation table, API facts learned) and `docs/zoho-books-spike-toast-split.md`.
+> Script: `zoho_books_recon.py`; task targets `zoho:recon`, `zoho:recon:apply`,
+> `zoho:rules`, `zoho:reconcile`, `zoho:toast-dump`.
+
 **Scope of the one shot:** the three Mercury business accounts of Yumyums Kitchen LLC
 (4613 Operations, 5396 Outgoing ACH, 7818 Profit). Other banks (BoA, LFCU, Wells Fargo,
 Cap1, NavyFed, Chase Ink, Mercury personal) are phase 2 and reuse the same mechanism.

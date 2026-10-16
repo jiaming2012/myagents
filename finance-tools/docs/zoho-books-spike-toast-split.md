@@ -48,6 +48,15 @@ Equity, 3200 Drawings, 4000 Sales, 5000 Cost of Goods Sold, 6280 Printing and
 Stationery. Two feed-less bank accounts created: `Operations ••0551 (closed)` and
 `BoA Business Checking ••1778`.
 
+## Reversibility, verified on 2026-10-16
+
+A transfer posted twice by mistake (the in-side of an earlier-run transfer re-created it)
+was undone with `POST /banktransactions/{imported_transaction_id}/uncategorize` — the
+**statement-line id**, not the document id (that returns 108005 "does not exist"), and
+`DELETE` on a categorized/matched document is refused (19015). Uncategorizing removes the
+document and restores the feed line, which was then matched to the original transfer.
+The script now matches first and never creates from the in-side of an internal transfer.
+
 ## Run log
 
 See `docs/zoho-books-recon-report.md` for the full apply; the spike's own log was

@@ -446,34 +446,62 @@ def reconcile(z, accounts, openings, apply, log):
     (opening + posted txns through month end), transactions = every categorized
     or matched document dated in the month. Zoho reports the difference."""
     log("## Monthly reconciliation records")
-    log("| account | month | Mercury closing | docs | Zoho difference | status |")
-    log("|---|---|---|---|---|---|")
+    log("| account | month | Zoho closing | Mercury closing | diff | docs | status |")
+    log("|---|---|---|---|---|---|---|")
+    # Zoho reconciles strictly by its own document dates: the opening of a period is
+    # the sum of reconciled documents dated before it, and a document dated inside
+    # the period must be selected in that period. A transfer Mercury posts late on
+    # the 31st (Eastern) is dated the 1st by the feed, so Zoho's month-end differs
+    # from Mercury's by exactly those straddlers; they are listed under the table.
+    mercury_date = {t["id"]: eastern_date(t["postedAt"]) for a in accounts for t in a["txns_2026"]}
     for acct in accounts:
         zid = acct["zoho_id"]
         name = BANK_NAMES[acct["xero_bank_account"]]
         existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
         docs = list(z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"))
-        docs = [d for d in docs if d.get("status") in ("categorized", "matched", "reconciled")]
-        bal = openings[zid]
+        docs = [d for d in docs if d.get("status") not in ("uncategorized", "excluded")]
+        for d in docs:
+            mid = (d.get("reference_number") or "").removeprefix("mercury:")
+            d["_mdate"] = mercury_date.get(mid) or date.fromisoformat(d["date"])
+            d["_signed"] = money(d.get("amount", 0)) * (1 if d.get("debit_or_credit") == "debit" else -1)
+            d["_rec"] = d.get("reconcile_status") == "reconciled"
+        mbal = openings[zid]
         for first, last in month_ends(START_DEFAULT, date.today().isoformat()):
-            bal += sum(money(t["amount"]) for t in acct["txns_2026"] if first <= eastern_date(t["postedAt"]) <= last)
-            month_docs = [d for d in docs if first.isoformat() <= d["date"] <= last.isoformat()]
+            # Mercury month-end, Eastern dates; the first month starts at OPENING_DATE
+            # because a late-Dec-31 posting sits in the 2026 fetch (UTC) and was netted
+            # out of the opening balance.
+            lo = date.fromisoformat(OPENING_DATE) if first.isoformat() == START_DEFAULT else first
+            mbal += sum(money(t["amount"]) for t in acct["txns_2026"] if lo <= eastern_date(t["postedAt"]) <= last)
+            sel = [d for d in docs if not d["_rec"] and lo.isoformat() <= d["date"] <= last.isoformat()]
+            z_open = sum(d["_signed"] for d in docs if d["_rec"] and d["date"] < lo.isoformat())
+            z_close = z_open + sum(d["_signed"] for d in sel)
+            straddle = [d for d in sel if not (first <= d["_mdate"] <= last)] + \
+                       [d for d in docs if d["_rec"] and first <= d["_mdate"] <= last and not (first.isoformat() <= d["date"] <= last.isoformat())]
             if first.isoformat() in existing:
                 r = existing[first.isoformat()]
-                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | {r.get('difference')} | exists: {r.get('status')} |")
+                log(f"| {name} | {first:%Y-%m} | {r.get('closing_balances')} | {mbal} | {money(r.get('closing_balances', 0)) - mbal} | — | exists: {r.get('status')} |")
+                for d in docs:
+                    if r.get("status") == "reconciled" and first.isoformat() <= d["date"] <= last.isoformat():
+                        d["_rec"] = True
                 continue
             if not apply:
-                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | — | dry run |")
-                continue
-            body = {"start_date": first.isoformat(), "end_date": last.isoformat(),
-                    "closing_balance": float(bal), "save_option": "reconcile",
-                    "transactions_to_be_reconciled": [{"transaction_id": d["transaction_id"]} for d in month_docs]}
-            try:
-                r = z.post(f"/bankaccounts/{zid}/reconciliations", body)
-                rec = r.get("reconciliation", r)
-                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | {rec.get('difference', '?')} | {rec.get('status', r.get('message'))} |")
-            except ZohoError as e:
-                log(f"| {name} | {first:%Y-%m} | {bal} | {len(month_docs)} | FAILED | {str(e)[:160]} |")
+                log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | dry run |")
+            else:
+                # the API wants a plain list of ids here (the documented object form is rejected)
+                body = {"start_date": first.isoformat(), "end_date": last.isoformat(),
+                        "closing_balance": float(z_close), "save_option": "reconcile",
+                        "transactions_to_be_reconciled": [d["transaction_id"] for d in sel]}
+                try:
+                    r = z.post(f"/bankaccounts/{zid}/reconciliations", body)
+                    rec = r.get("reconciliation", r)
+                    log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | {rec.get('status', r.get('message'))} |")
+                except ZohoError as e:
+                    log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | FAILED {str(e)[-100:]} |")
+                    break  # later months depend on this one
+            for d in sel:
+                d["_rec"] = True
+            for d in straddle:
+                log(f"    straddle: Zoho {d['date']} / Mercury {d['_mdate']} {d['_signed']} {d.get('transaction_type')}")
 
 
 # --- bank rules for future feed lines ------------------------------------------
@@ -489,7 +517,8 @@ def seed_rules(z, cfg, accounts, by_code, apply, log):
     n = 0
     for m in cfg["merchants"]:
         code = m["account"]
-        name = f"mercury: {m['pattern']} -> {code}"
+        # Zoho rejects punctuation such as ':' and '>' in rule names
+        name = f"Mercury {m['pattern'].replace('••', '')} to {code}"[:50]
         if name in existing:
             continue
         record_as = "owner_drawings" if code in EQUITY_CODES else "expense"
@@ -750,6 +779,22 @@ def main():
         g = groups[key]
         _, _, frm, to = key
         creators, matchers = g["out"], g["in"]
+        if not creators and frm in feed_ids:
+            # internal transfer whose out side was posted in an earlier run (or by hand):
+            # the in side must MATCH the existing transfer, never create a second one
+            for acct, t, line, kind, payload in matchers:
+                if t["id"] in state or budget():
+                    continue
+                try:
+                    pick, cands = match_line(z, line, want_type="transfer_fund")
+                    if pick is None:
+                        failures.append((kind, t, f"earlier-run transfer not offered as match ({len(cands)} cands)"))
+                        continue
+                    done(t, {"op": "match", "line": line["transaction_id"], "to": pick["transaction_id"]})
+                    writes += 1
+                except ZohoError as e:
+                    failures.append((kind, t, str(e)))
+            continue
         if not creators:                      # money-in from a no-feed bank: in side creates
             creators, matchers = matchers, []
         extra = matchers[len(creators):]      # uneven internal keys: extras create too
