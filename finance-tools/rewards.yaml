@@ -52,7 +52,8 @@
 exclude:
   category: ["Credit Card Payment", "Transfer", "Payment", "Interest", "Financial Fees"]
   merchant: ["AUTOPAY", "PAYMENT - THANK YOU", "PAYMENT THANK YOU", "ONLINE PAYMENT",
-             "MOBILE PAYMENT", "INTEREST CHARGE", "ANNUAL MEMBERSHIP FEE"]
+             "MOBILE PAYMENT", "INTEREST CHARGE", "ANNUAL MEMBERSHIP FEE",
+             "RENEWAL MEMBERSHIP FEE"]   # Amex's label for the annual fee
 
 cards:
   # --- Amex Platinum (2025 refresh: $895 fee, Lululemon/Resy quarterly credits) ---
@@ -64,8 +65,9 @@ cards:
     currency: MR
     cents_per_point: 1.0          # conservative; transfers to partners often get 1.5-2.0
     points_expire: "never while the account is open and in good standing"
-    annual_fee: 895
-    anniversary: null             # fill in from the statement that shows the fee
+    annual_fee: 895               # last charged $695 on 2025-12-26 (pre-refresh price);
+                                  # expect the new $895 at the 2026-12-26 renewal
+    anniversary: 2025-12-26       # "RENEWAL MEMBERSHIP FEE" posted 2024-12-27 and 2025-12-26
     earn:
       - name: "Flights booked direct or via Amex Travel"
         rate: 5
