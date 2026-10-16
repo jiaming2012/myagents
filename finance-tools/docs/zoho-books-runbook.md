@@ -93,16 +93,10 @@ statement import (one call), and not re-running what the checkpoint already cove
 
 ## 7. State as of 2026-10-16 and open items
 
-- 4613, 5396, 7818: every 2026 line booked, Jan–Sep records reconciled.
-- **0551**: 253 lines imported and categorized; 44 transfers 0551→5396 were created a
-  second time instead of matched (5396 reads 6,409.10 vs Mercury 450.18; 0551 reads
-  −6,330.03). Pending, in order:
-  ```
-  python3 zoho_books_recon.py --undo-created-transfers 1622286000000101006
-  task zoho:recon:apply          # posts 0551's opening journal 371.11, marks it inactive at 0.00
-  task zoho:reconcile -- --apply # 0551 Jan–Jun records
-  ```
-  then re-check 5396 = 450.18, 0551 = 0.00 (inactive).
-- Branch `worktree-zoho-books-recon-plan` is not merged to main.
+- 4613, 5396, 7818: every 2026 line booked, Jan–Sep records reconciled, book = Mercury.
+- 0551 (closed): fully booked, Jan–Jun reconciled, 0.00, **inactive**. Reconciliation
+  records cannot be posted to an inactive account (11015): reactivate
+  (`POST /bankaccounts/{id}/active`), post, deactivate.
+- Nothing pending in Zoho. Branch `worktree-zoho-books-recon-plan` is not merged to main.
 - Decision still open: switch from Xero (criteria in the plan §7). The Xero Monday
   pre-coder keeps running meanwhile and shares `merchants.yaml`.
