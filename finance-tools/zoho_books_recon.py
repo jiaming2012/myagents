@@ -395,8 +395,19 @@ def categorize_transfer(z, line, from_id, to_id, t):
     return z.post(f"/banktransactions/uncategorized/{line['transaction_id']}/categorize", body)
 
 
-def match_line(z, line, want_ref=None, want_type=None):
-    """Match an uncategorized line to an existing document (transfer side / journal)."""
+def match_line(z, line, want_ref=None, want_type=None, known_id=None):
+    """Match an uncategorized line to an existing document (transfer side / journal).
+    With known_id (the document this run just created) the candidate lookup is
+    skipped: 2 calls per transfer / Toast payout instead of 3."""
+    if known_id and want_type:
+        try:
+            z.post(f"/banktransactions/uncategorized/{line['transaction_id']}/match",
+                   {"transactions_to_be_matched": [{"transaction_id": known_id, "transaction_type": want_type}]})
+            return {"transaction_id": known_id, "transaction_type": want_type}, []
+        except ZohoError as e:
+            if z.capped:
+                raise
+            # fall through to the lookup
     d = z.get(f"/banktransactions/uncategorized/{line['transaction_id']}/match", account_id=line["account_id"])
     cands = d.get("matching_transactions", [])
     pick = None
@@ -560,9 +571,9 @@ def undo_created_transfers(z, state, from_id, log):
         try:
             z.post(f"/banktransactions/{line_id}/uncategorize")
         except ZohoError as e:
-            log(f"  {mid[:8]}: uncategorize failed: {str(e)[-90:]}")
-            n_fail += 1
-            continue
+            if z.capped:
+                raise
+            log(f"  {mid[:8]}: uncategorize failed ({str(e)[-70:]}); checking whether the line is already free")
         line = next((ln for ln in feed_lines(z, from_id) if ln["transaction_id"] == line_id), None)
         if line is None:
             log(f"  {mid[:8]}: line {line_id} not found after uncategorize")
@@ -906,8 +917,10 @@ def main():
             if t["id"] in state or budget():
                 continue
             try:
-                categorize_transfer(z, line, frm, to, t)
-                done(t, {"op": "transfer_fund", "line": line["transaction_id"], "from": frm, "to": to})
+                resp = categorize_transfer(z, line, frm, to, t)
+                doc = resp.get("banktransaction") or resp.get("transaction") or {}
+                done(t, {"op": "transfer_fund", "line": line["transaction_id"], "from": frm, "to": to,
+                         "doc": doc.get("transaction_id")})
                 writes += 1
             except ZohoError as e:
                 failures.append((kind, t, str(e)))
@@ -919,7 +932,8 @@ def main():
                 failures.append((kind, t, "creator side not posted, cannot match"))
                 continue
             try:
-                pick, cands = match_line(z, line, want_ref=f"mercury:{ct['id']}", want_type="transfer_fund")
+                pick, cands = match_line(z, line, want_ref=f"mercury:{ct['id']}", want_type="transfer_fund",
+                                         known_id=state[ct["id"]].get("doc"))
                 if pick is None:
                     failures.append((kind, t, f"no match candidate for transfer ({len(cands)} cands)"))
                     continue
@@ -967,7 +981,7 @@ def main():
         try:
             if args.toast_approach == "A":
                 j = post_toast_journal(z, dep, by_code, own, line, t)
-                pick, cands = match_line(z, line, want_ref=ref(t), want_type="journal")
+                pick, cands = match_line(z, line, want_ref=ref(t), want_type="journal", known_id=j.get("journal_id"))
                 if pick is None:
                     types = sorted({c.get("transaction_type") for c in cands})
                     log(f"  Toast A: journal {j['journal_id']} not offered as match ({len(cands)} cands, types {types}); deleting journal")
