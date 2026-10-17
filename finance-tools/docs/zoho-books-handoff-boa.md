@@ -45,6 +45,12 @@ script, API budget, repairs); this file is only what is different about BoA.
   `account_ids` at 100 characters (five ids), so rules now cover only the live feed
   accounts (`closed:` / `no_rules:` entries are skipped). Monthly records await the LFCU
   statements (Mar–Sep); Zoho's closings are in the report.
+- **Wells Fargo Signify Business Cash card ••4637** (`1622286000000207157`, credit_card,
+  feed-linked 2026-10-17): the feed refreshed cleanly but holds **0 lines and a 0.00
+  balance**; not in `payments.yaml` either. Waiting for the operator to say whether the
+  card has had no activity or the feed needs re-linking with history from 2026-01-01.
+  When lines arrive: add `"Wells: Signify Business (4637)"` to `BANK_NAMES` /
+  `zoho_feed_only_accounts` (kind credit_card) and run `task zoho:boa`.
 - **Still open**: (a) nothing to classify.
   (b) Chase Ink DONE 2026-10-17: closed card (cannot be feed-linked, operator still paying
   it off). The 11 statements (`…/2025_taxes/yumyums/bank_statements/chase_7667/`, closing
