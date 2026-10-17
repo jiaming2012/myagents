@@ -34,6 +34,7 @@ xero .env (same fallback as mercury_precode.py).
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from collections import defaultdict
@@ -71,12 +72,16 @@ BANK_NAMES = {
     "Mercury: Outgoing ACH (5396)": "Outgoing ACH ••5396",
     "Mercury: Profit (7818)": "Taxes ••7818",
     "Mercury: Operations (0551) * Closed": "Operations ••0551 (closed)",
-    "BoA: Business Checking (1778)": "BoA Business Checking ••1778",
+    # BoA accounts are feed-linked (2026-10-16); names are Zoho's own for the feed
+    "BoA: Business Checking (1778)": "Business Adv Fundamentals",
+    "BoA: CORP Account (2119)": "CORP Account - Business Adv Customized Cash Rewards - 2119",
 }
+CLOSING_FILE = HERE / "closing_balances.yaml"   # operator-supplied statement balances (feed-only accounts)
 
 # Chart of accounts to seed: code -> (name, zoho account_type).
 # Stock Zoho accounts that stand in for a Xero code just get the code added.
-STOCK = {"5000": "Cost of Goods Sold", "3200": "Drawings", "3100": "Owner's Equity", "4000": "Sales"}
+STOCK = {"5000": "Cost of Goods Sold", "3200": "Drawings", "3100": "Owner's Equity", "4000": "Sales",
+         "6050": "Bank Fees and Charges", "6055": "Credit Card Charges"}
 CHART = {
     "1100": ("Cash on Hand", "other_current_asset"),
     "1310": ("Other Receivables", "other_current_asset"),
@@ -94,6 +99,8 @@ CHART = {
     "5200": ("COGS - Supplies", "cost_of_goods_sold"),
     "6000": ("Advertising", "expense"),
     "6040": ("Merchant Fees", "expense"),
+    "6050": ("Bank Fees and Charges", "expense"),      # overdraft item fees, monthly maintenance fee
+    "6055": ("Credit Card Charges", "expense"),        # card finance charges, late payment fees
     "6041": ("Toast Withholdings", "expense"),
     "6060": ("Cleaning and Maintenance", "expense"),
     "6090": ("Contract Labor", "expense"),
@@ -385,7 +392,8 @@ def pair_toast(toast_txns, deposits):
 
 
 def ref(t):
-    return f"mercury:{t['id']}"
+    # Mercury txns: mercury:<txn id>. Feed-only lines carry their own key (boa:<line id>).
+    return t.get("ref") or f"mercury:{t['id']}"
 
 
 def categorize_transfer(z, line, from_id, to_id, t):
@@ -591,21 +599,377 @@ def undo_created_transfers(z, state, from_id, log):
     log(f"  matched {n_match}, re-created {n_keep}, failed {n_fail}\n")
 
 
+# --- feed-only accounts (Bank of America): the feed is the data -------------------
+#
+# No bank API behind these accounts, so each uncategorized line is classified on
+# its own payee/description: merchants.yaml `boa_transfers` (other side of a
+# transfer), then `boa_merchants`, then the shared `merchants`. Documents carry
+# reference boa:<statement line id> and the checkpoint uses the same key.
+# "RETURN OF POSTED CHECK / ITEM (RECEIVED ON MM-DD)" lines are the bank bouncing
+# a debit: they inherit that debit's classification and post as its refund.
+
+RETURN_MARK = "RETURN OF POSTED CHECK"
+
+
+def line_signed(line):
+    """Signed amount in Mercury's convention (+ = money into the business).
+    Bank feed: debit = money in. Card feed: debit = payment (owed goes down),
+    credit = charge (money out of the business). Verified on the 2119 feed 2026-10-17."""
+    amt = money(line["amount"])
+    return amt if line["debit_or_credit"] == "debit" else -amt
+
+
+def line_name(line):
+    """Review-list name: the feed's payee when set, else the description with the
+    bank's numbers, masks and dates stripped."""
+    if line.get("payee"):
+        return line["payee"]
+    words = [w for w in (line.get("description") or "").split()
+             if not any(ch.isdigit() for ch in w) and "XXXX" not in w and w != "#"]
+    return " ".join(words[:6]) or "?"
+
+
+def fake_txn(line):
+    """Shape a feed line like a Mercury txn so categorize_* / ref() work unchanged."""
+    return {"id": line["transaction_id"], "ref": f"boa:{line['transaction_id']}",
+            "amount": float(line_signed(line)), "postedAt": f"{line['date']}T12:00:00Z",
+            "bankDescription": line.get("description") or "", "counterpartyName": line.get("payee") or ""}
+
+
+def classify_feed(lines, cfg, own_name):
+    """-> [(line, kind, payload)]: transfer -> other account's Xero name;
+    coded -> (name, code, is_return); unmatched -> name."""
+    by_key = defaultdict(list)
+    for ln in lines:
+        by_key[(ln["date"], money(ln["amount"]), ln["debit_or_credit"])].append(ln)
+    cls = {}
+    for ln in lines:
+        desc = ln.get("description") or ""
+        if RETURN_MARK in desc:
+            continue
+        # ACH descriptors name the account holder ("INDN:JAMAL COLE CO ID:…"): drop that
+        # segment so the owner pattern in merchants: cannot claim vendor debits
+        hay = f"{ln.get('payee') or ''} {re.sub(r'INDN:.*?CO ID:', '', desc)}".lower()
+        target = next((acct for pat, acct in cfg.get("boa_transfers", {}).items()
+                       if pat.lower() in hay and acct != own_name), None)
+        if target:
+            cls[ln["transaction_id"]] = ("transfer", target)
+            continue
+        m = next((m for m in cfg.get("boa_merchants", []) + cfg.get("merchants", [])
+                  if m["pattern"].lower() in hay), None)
+        cls[ln["transaction_id"]] = ("coded", (line_name(ln), m["account"], False)) if m else ("unmatched", line_name(ln))
+    used = set()
+    for ln in lines:
+        desc = ln.get("description") or ""
+        if RETURN_MARK not in desc:
+            continue
+        orig = None
+        if "RECEIVED ON " in desc:
+            d0 = f"{ln['date'][:4]}-{desc.split('RECEIVED ON ')[-1][:5]}"
+            opposite = "credit" if ln["debit_or_credit"] == "debit" else "debit"
+            orig = next((o for o in by_key.get((d0, money(ln["amount"]), opposite), [])
+                         if o["transaction_id"] not in used), None)
+        if orig is None:
+            cls[ln["transaction_id"]] = ("unmatched", f"RETURN of ? {line_name(ln)}")
+            continue
+        used.add(orig["transaction_id"])
+        k, p = cls[orig["transaction_id"]]
+        if k == "coded":
+            cls[ln["transaction_id"]] = ("coded", (f"RETURN of {p[0]}", p[1], True))
+        else:
+            cls[ln["transaction_id"]] = ("unmatched", f"RETURN of {p if k == 'unmatched' else 'transfer ' + p}")
+    return [(ln, *cls[ln["transaction_id"]]) for ln in lines]
+
+
+def load_closings():
+    data = yaml.safe_load(CLOSING_FILE.read_text()) if CLOSING_FILE.exists() else None
+    return {k: {str(kk): vv for kk, vv in (v or {}).items()} for k, v in (data or {}).items()}
+
+
+def post_opening_journal(z, zid, bal, note):
+    """Opening balance as a journal (bank <-> Opening Balance Offset); bal is the
+    account's own balance (positive = debit balance, so a card's amount owed is negative)."""
+    refno = f"opening:{zid}"
+    found = [j for j in z.get("/journals", reference_number=refno).get("journals", []) if j.get("reference_number") == refno]
+    if found:
+        return found[0]["journal_id"]
+    _, by_name = chart_index(z)
+    offset = by_name["Opening Balance Offset"]["account_id"]
+    r = z.post("/journals", {"journal_date": OPENING_DATE, "reference_number": refno, "notes": note,
+                             "line_items": [
+                                 {"account_id": zid, "debit_or_credit": "debit" if bal >= 0 else "credit", "amount": float(abs(bal))},
+                                 {"account_id": offset, "debit_or_credit": "credit" if bal >= 0 else "debit", "amount": float(abs(bal))}]})
+    return r["journal"]["journal_id"]
+
+
+def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
+    """Classify every uncategorized line of the feed-only accounts and (apply)
+    post: opening journals from closing_balances.yaml, transfers between the two
+    accounts (create from the money-out side, match the other), coded lines,
+    returned items as refunds. Returns {zoho_id: (account cfg, plan)}."""
+    accounts = cfg.get("zoho_feed_only_accounts") or sys.exit("merchants.yaml has no zoho_feed_only_accounts")
+    closings = load_closings()
+    log("## Feed-only accounts (Bank of America)")
+    log("| account | uncategorized | transfers | coded | unmatched | in state | feed balance | implied opening 2025-12-31 | statement opening |")
+    log("|---|---|---|---|---|---|---|---|---|")
+    plans = {}
+    for acct in accounts:
+        name = acct["xero_bank_account"]
+        b = banks[BANK_NAMES[name]]
+        zid = acct["zoho_id"] = b["account_id"]
+        acct["kind"] = acct.get("kind", "bank")
+        lines = feed_lines(z, zid)
+        plan = classify_feed(lines, cfg, name)
+        plans[zid] = (acct, plan)
+        kinds = defaultdict(int)
+        for _, k, _ in plan:
+            kinds[k] += 1
+        net = sum(line_signed(ln) for ln in lines)
+        feed_bal = money(b["bank_balance"])
+        # Zoho's book balance = everything already posted (+ the opening journal, once posted).
+        # Bank: book is signed like the lines. Card: Zoho shows the amount owed, i.e. -(debit - credit).
+        ob = money(state.get("_opening", {}).get(zid, 0))        # bank: +balance; card: -owed
+        book = money(b["balance"])
+        if acct["kind"] == "bank":
+            acct["implied_opening"] = feed_bal - net - (book - ob)
+        else:
+            acct["implied_opening"] = feed_bal + net - (book + ob)
+        acct["statement_opening"] = closings.get(name, {}).get(OPENING_DATE)
+        in_state = sum(1 for ln, _, _ in plan if f"boa:{ln['transaction_id']}" in state)
+        log(f"| {b['account_name'][:44]} | {len(lines)} | {kinds['transfer']} | {kinds['coded']} | {kinds['unmatched']} | {in_state} "
+            f"| {feed_bal} | {acct['implied_opening']} | {acct['statement_opening'] if acct['statement_opening'] is not None else '—'} |")
+    log("  (implied opening = today's feed balance less the feed's 2026 net; equals the Dec 2025 statement closing only if the feed is complete)\n")
+
+    for zid, (acct, plan) in plans.items():
+        agg = defaultdict(lambda: [0, Decimal(0)])
+        for ln, k, p in plan:
+            label = f"↔ {p}" if k == "transfer" else (f"{p[1]} {p[0]}" if k == "coded" else p)
+            agg[(k, label)][0] += 1
+            agg[(k, label)][1] += line_signed(ln)
+        log(f"### {BANK_NAMES[acct['xero_bank_account']]}")
+        for (k, label), (n, s) in sorted(agg.items(), key=lambda kv: (kv[0][0], -kv[1][0])):
+            hint = f'   # suggested: - {{pattern: "{label[:30]}", account: "????"}}' if k == "unmatched" else ""
+            log(f"- {k:9} {label}: {n} lines, net {s}{hint}")
+        log()
+    if not apply:
+        return plans
+
+    writes, failures = 0, []
+    key = lambda ln: f"boa:{ln['transaction_id']}"  # noqa: E731
+    budget = lambda: z.capped or (limit and writes >= limit)  # noqa: E731
+
+    def done(ln, rec):
+        state[key(ln)] = rec
+        save_state(state)
+
+    # opening journals, only from operator-supplied statement balances
+    posted_ob = state.setdefault("_opening", {})
+    for zid, (acct, _) in plans.items():
+        stmt = acct["statement_opening"]
+        if stmt is None or zid in posted_ob:
+            continue
+        bal = money(stmt) if acct["kind"] == "bank" else -money(stmt)
+        try:
+            jid = post_opening_journal(z, zid, bal, f"Opening balance as of {OPENING_DATE} (Bank of America statement)")
+            posted_ob[zid] = str(bal)
+            save_state(state)
+            log(f"opening balance for {zid[-6:]} = {bal} posted as journal {jid}")
+        except ZohoError as e:
+            failures.append(("opening", None, str(e)))
+
+    # transfers between the feed-only accounts: money-out side creates, the other matches
+    bank_id = {xn: banks[zn]["account_id"] for xn, zn in BANK_NAMES.items() if zn in banks}
+    groups = defaultdict(lambda: {"out": [], "in": []})
+    for zid, (acct, plan) in plans.items():
+        for ln, k, p in plan:
+            if k != "transfer":
+                continue
+            other = bank_id.get(p)
+            if other is None:
+                failures.append(("transfer", ln, f"no Zoho bank account for '{p}'"))
+                continue
+            frm, to, side = (zid, other, "out") if line_signed(ln) < 0 else (other, zid, "in")
+            groups[(ln["date"], str(money(ln["amount"])), frm, to)][side].append(ln)
+    for gkey in sorted(groups):
+        g = groups[gkey]
+        _, _, frm, to = gkey
+        creators, matchers = g["out"], g["in"]
+        if (not creators or not matchers) and frm in plans and to in plans:
+            # one side only, the other account is in this run: its line was posted in an
+            # earlier run (or by hand) and is no longer uncategorized. MATCH first; create
+            # only when Zoho offers no candidate — a create here duplicates the document.
+            for ln in creators + matchers:
+                if key(ln) in state or budget():
+                    continue
+                try:
+                    pick, cands = match_line(z, ln, want_type="transfer_fund")
+                    if pick is None:
+                        resp = categorize_transfer(z, ln, frm, to, fake_txn(ln))
+                        doc = resp.get("banktransaction") or resp.get("transaction") or {}
+                        done(ln, {"op": "transfer_fund", "line": ln["transaction_id"], "from": frm, "to": to, "doc": doc.get("transaction_id")})
+                    else:
+                        done(ln, {"op": "match", "line": ln["transaction_id"], "to": pick["transaction_id"]})
+                    writes += 1
+                except ZohoError as e:
+                    failures.append(("transfer", ln, str(e)))
+                    log(f"  FAIL one-sided transfer {ln['date']} {ln['amount']}: {e}")
+            continue
+        if not creators:
+            creators, matchers = matchers, []
+        pairs = list(zip(creators, matchers + [None] * len(creators)))
+        for c, m in pairs:
+            if key(c) in state or budget():
+                continue
+            try:
+                if m is not None and key(m) in state:        # partner already posted: match, never duplicate
+                    pick, cands = match_line(z, c, want_type="transfer_fund", known_id=state[key(m)].get("doc"))
+                    if pick is None:
+                        failures.append(("transfer", c, f"partner posted but no match candidate ({len(cands)})"))
+                        continue
+                    done(c, {"op": "match", "line": c["transaction_id"], "to": pick["transaction_id"]})
+                else:
+                    resp = categorize_transfer(z, c, frm, to, fake_txn(c))
+                    doc = resp.get("banktransaction") or resp.get("transaction") or {}
+                    done(c, {"op": "transfer_fund", "line": c["transaction_id"], "from": frm, "to": to, "doc": doc.get("transaction_id")})
+                writes += 1
+            except ZohoError as e:
+                failures.append(("transfer", c, str(e)))
+                log(f"  FAIL transfer {c['date']} {c['amount']}: {e}")
+        for c, m in pairs:
+            if m is None or key(m) in state or budget():
+                continue
+            if key(c) not in state:
+                failures.append(("transfer-match", m, "creator side not posted, cannot match"))
+                continue
+            try:
+                pick, cands = match_line(z, m, want_ref=f"boa:{c['transaction_id']}", want_type="transfer_fund",
+                                         known_id=state[key(c)].get("doc"))
+                if pick is None:
+                    failures.append(("transfer-match", m, f"no match candidate ({len(cands)})"))
+                    continue
+                done(m, {"op": "match", "line": m["transaction_id"], "to": pick["transaction_id"]})
+                writes += 1
+            except ZohoError as e:
+                failures.append(("transfer-match", m, str(e)))
+                log(f"  FAIL match {m['date']} {m['amount']}: {e}")
+
+    # coded lines (expenses, refunds of returned items, owner contributions / draws)
+    for zid, (acct, plan) in plans.items():
+        for ln, k, p in sorted(plan, key=lambda e: e[0]["date"]):
+            if k != "coded" or key(ln) in state or budget():
+                continue
+            name, code, _ = p
+            acc = by_code[code]["account_id"]
+            t, s = fake_txn(ln), line_signed(ln)
+            try:
+                if code in EQUITY_CODES and s < 0:
+                    categorize_generic(z, ln, "owner_drawings", zid, acc, t, name)
+                    op = "owner_drawings"
+                elif code in EQUITY_CODES:
+                    categorize_generic(z, ln, "owner_contribution", acc, zid, t, name)
+                    op = "owner_contribution"
+                elif s < 0:
+                    categorize_expense(z, ln, acc, zid, t, name)
+                    op = "expense"
+                else:
+                    categorize_generic(z, ln, "expense_refund", acc, zid, t, name, account_id=acc)
+                    op = "expense_refund"
+                done(ln, {"op": op, "line": ln["transaction_id"], "account": code, "bank": zid})
+                writes += 1
+            except ZohoError as e:
+                failures.append((k, ln, str(e)))
+                log(f"  FAIL coded {ln['date']} {s} {name}: {e}")
+
+    log("\n## Verification")
+    if z.capped:
+        log("Zoho daily API cap reached — run stopped early; re-run tomorrow (state is checkpointed).")
+    log("| account | Zoho book balance | Zoho feed balance | opening posted | uncategorized left |")
+    log("|---|---|---|---|---|")
+    banks = bank_index(z) if not z.capped else banks
+    for zid, (acct, _) in plans.items():
+        b = banks[BANK_NAMES[acct["xero_bank_account"]]]
+        ob = posted_ob.get(zid, "no (statement balance missing)")
+        flag = "" if money(b["balance"]) == money(b["bank_balance"]) else "  ← differs"
+        log(f"| {b['account_name'][:44]} | {b['balance']} | {b['bank_balance']} | {ob} | {b['uncategorized_transactions']} |{flag}")
+    if failures:
+        log(f"\n### Failures ({len(failures)})")
+        for kind, ln, msg in failures:
+            log(f"- {kind} {ln['date'] if ln else ''} {ln['amount'] if ln else ''}: {msg[:300]}")
+    log(f"\nwrites: {writes}, Zoho calls: {z.calls}")
+    return plans
+
+
+def reconcile_feed_only(z, plans, apply, log):
+    """One record per full month, closing = the statement balance the operator put in
+    closing_balances.yaml (`<Xero bank name>: {YYYY-MM: balance}`, a card's balance
+    being the amount owed). Posted only when Zoho's own closing equals it."""
+    closings = load_closings()
+    log("## Monthly reconciliation records (statement closings from closing_balances.yaml)")
+    log("| account | month | Zoho closing | statement | diff | docs | status |")
+    log("|---|---|---|---|---|---|---|")
+    for zid, (acct, _) in plans.items():
+        name = acct["xero_bank_account"]
+        zname = BANK_NAMES[name]
+        stmts = closings.get(name, {})
+        existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
+        docs = [d for d in z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions")
+                if d.get("status") not in ("uncategorized", "excluded")]
+        for d in docs:
+            d["_signed"] = money(d.get("amount", 0)) * (1 if d.get("debit_or_credit") == "debit" else -1)
+            d["_rec"] = d.get("reconcile_status") == "reconciled"
+        for first, last in month_ends(START_DEFAULT, date.today().isoformat()):
+            lo = date.fromisoformat(OPENING_DATE) if first.isoformat() == START_DEFAULT else first
+            sel = [d for d in docs if not d["_rec"] and lo.isoformat() <= d["date"] <= last.isoformat()]
+            z_close = sum(d["_signed"] for d in docs if d["_rec"] and d["date"] < lo.isoformat()) + sum(d["_signed"] for d in sel)
+            z_bal = z_close if acct["kind"] == "bank" else -z_close     # card: report as amount owed
+            stmt = stmts.get(f"{first:%Y-%m}")
+            if first.isoformat() in existing:
+                r = existing[first.isoformat()]
+                log(f"| {zname[:30]} | {first:%Y-%m} | {r.get('closing_balances')} | {stmt} | — | — | exists: {r.get('status')} |")
+                for d in docs:
+                    if r.get("status") == "reconciled" and first.isoformat() <= d["date"] <= last.isoformat():
+                        d["_rec"] = True
+                continue
+            if stmt is None:
+                log(f"| {zname[:30]} | {first:%Y-%m} | {z_bal} | — | — | {len(sel)} | no statement balance |")
+            elif money(stmt) != z_bal:
+                log(f"| {zname[:30]} | {first:%Y-%m} | {z_bal} | {stmt} | {z_bal - money(stmt)} | {len(sel)} | MISMATCH, not posted |")
+            elif not apply:
+                log(f"| {zname[:30]} | {first:%Y-%m} | {z_bal} | {stmt} | 0.00 | {len(sel)} | dry run |")
+            else:
+                body = {"start_date": first.isoformat(), "end_date": last.isoformat(), "closing_balance": float(z_bal),
+                        "save_option": "reconcile", "transactions_to_be_reconciled": [d["transaction_id"] for d in sel]}
+                try:
+                    r = z.post(f"/bankaccounts/{zid}/reconciliations", body)
+                    log(f"| {zname[:30]} | {first:%Y-%m} | {z_bal} | {stmt} | 0.00 | {len(sel)} | {r.get('reconciliation', r).get('status', r.get('message'))} |")
+                except ZohoError as e:
+                    log(f"| {zname[:30]} | {first:%Y-%m} | {z_bal} | {stmt} | 0.00 | {len(sel)} | FAILED {str(e)[-100:]} |")
+                    break
+            for d in sel:
+                d["_rec"] = True
+
+
 # --- bank rules for future feed lines ------------------------------------------
 
 
-def seed_rules(z, cfg, accounts, by_code, apply, log):
+def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
     """One withdrawal rule per merchants.yaml pattern so future feed lines
     auto-categorize. Transfers and Toast payouts stay script-driven (a rule on
-    both sides of a transfer would post it twice; Toast needs the journal)."""
+    both sides of a transfer would post it twice; Toast needs the journal).
+    The BoA block (`boa_merchants`) gets its own rules on the feed-only accounts;
+    deposit-side patterns (owner contributions, 3100) stay script-driven."""
     existing = {r["rule_name"] for r in z.get("/bankaccounts/rules").get("rules", [])}
-    account_ids = ",".join(a["zoho_id"] for a in accounts)
+    wanted = [("Mercury", ",".join(a["zoho_id"] for a in accounts), m) for m in cfg["merchants"]] if accounts else []
+    boa = cfg.get("zoho_feed_only_accounts") or []
+    if boa and banks:
+        boa_ids = ",".join(banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"] for a in boa)
+        wanted += [("BoA", boa_ids, m) for m in cfg.get("boa_merchants", []) if m["account"] != "3100"]
     log("## Bank rules")
     n = 0
-    for m in cfg["merchants"]:
+    for prefix, account_ids, m in wanted:
         code = m["account"]
         # Zoho rejects punctuation such as ':' and '>' in rule names
-        name = f"Mercury {m['pattern'].replace('••', '')} to {code}"[:50]
+        name = re.sub(r"[^A-Za-z0-9 ]", "", f"{prefix} {m['pattern']} to {code}")[:50]
         if name in existing:
             continue
         record_as = "owner_drawings" if code in EQUITY_CODES else "expense"
@@ -642,11 +1006,15 @@ def main():
     ap.add_argument("--limit", type=int, default=0, help="stop after N writes (apply)")
     ap.add_argument("--reconcile", action="store_true", help="create monthly reconciliation records")
     ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml")
+    ap.add_argument("--feed-only", action="store_true",
+                    help="Bank of America: classify/post the uncategorized feed lines of zoho_feed_only_accounts (no Mercury)")
     ap.add_argument("--undo-created-transfers", metavar="ZOHO_ACCOUNT_ID",
                     help="repair: re-match transfers this script created from that account's side")
     ap.add_argument("--report", default=str(HERE / "docs/zoho-books-recon-report.md"))
     args = ap.parse_args()
     apply = args.apply
+    if args.feed_only and args.report == ap.get_default("report"):
+        args.report = str(HERE / "docs/zoho-books-boa-report.md")
     out = []
 
     def log(s=""):
@@ -664,6 +1032,7 @@ def main():
 
     # --- chart + banks ---
     needed = set(m["account"] for m in cfg["merchants"]) | {"1320", "3100"}
+    needed |= {m["account"] for m in cfg.get("boa_merchants", [])}
     deposits = load_toast(args.toast)
     for dep in deposits:
         needed |= {li["code"] for li in dep["line_items"]}
@@ -675,6 +1044,17 @@ def main():
     banks = seed_banks(z, apply, log)
     bank_id = {xn: banks[zn]["account_id"] for xn, zn in BANK_NAMES.items() if zn in banks}
     log(f"  {len(by_code)} coded accounts, banks: {', '.join(BANK_NAMES[k] for k in bank_id)}\n")
+
+    # --- feed-only accounts (BoA): no Mercury, the feed is the data ---
+    if args.feed_only:
+        plans = feed_only(z, cfg, state, by_code, banks, apply and not args.reconcile and not args.rules, args.limit, log)
+        if args.rules:
+            seed_rules(z, cfg, [], by_code, apply, log, banks=banks)
+        if args.reconcile:
+            reconcile_feed_only(z, plans, apply, log)
+        Path(args.report).write_text("\n".join(out))
+        log(f"{'applied' if apply else 'dry run only'} — report at {args.report}; Zoho calls: {z.calls}")
+        return
 
     # --- Mercury + feed ---
     mbal = mercury_balances()

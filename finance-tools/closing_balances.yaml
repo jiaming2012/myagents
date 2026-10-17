@@ -1,0 +1,17 @@
+# Statement balances for the feed-only (Bank of America) accounts, read by
+# `task zoho:boa` / `task zoho:boa:reconcile`. Keys are the Xero bank names used
+# in merchants.yaml. "2025-12-31" is the opening balance (posted once as a journal
+# against Opening Balance Offset); "YYYY-MM" is the statement closing balance for
+# that month (a reconciliation record is posted only when Zoho's closing equals it).
+# A card's balance is the amount owed (positive).
+#
+# Fill in from the BoA statements. The dry run prints the opening the feed
+# implies (today's feed balance less the 2026 net) as a cross-check.
+
+"BoA: Business Checking (1778)":
+  # "2025-12-31": 0.00
+  # "2026-01": 0.00
+
+"BoA: CORP Account (2119)":
+  # "2025-12-31": 0.00
+  # "2026-01": 0.00

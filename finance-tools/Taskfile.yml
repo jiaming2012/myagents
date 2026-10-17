@@ -149,6 +149,26 @@ tasks:
     cmds:
       - python zoho_books_recon.py --reconcile {{.CLI_ARGS}}
 
+  zoho:boa:
+    desc: "Dry-run the Bank of America feed-only classification (docs/zoho-books-handoff-boa.md)"
+    cmds:
+      - python zoho_books_recon.py --feed-only {{.CLI_ARGS}}
+
+  zoho:boa:apply:
+    desc: "Post the Bank of America feed lines to Zoho (resumes from .zoho_recon_state.json)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --apply {{.CLI_ARGS}}
+
+  zoho:boa:reconcile:
+    desc: "Monthly BoA reconciliation records from closing_balances.yaml (dry run unless -- --apply)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --reconcile {{.CLI_ARGS}}
+
+  zoho:boa:rules:
+    desc: "Bank rules for the BoA patterns in merchants.yaml (dry run unless -- --apply)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --rules {{.CLI_ARGS}}
+
   budget:
     desc: Monarch budget and goal tracker
     cmds:

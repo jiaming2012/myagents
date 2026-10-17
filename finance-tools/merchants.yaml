@@ -122,3 +122,57 @@ zoho_only_accounts:
     xero_bank_account: "Mercury: Operations (0551) * Closed"
     statement_import: true
     closed: "2026-06-02"
+
+# --- Bank of America: Zoho feed only (`task zoho:boa`), no bank API ---------------
+# The feed is the data; the independent check is the monthly statement closing
+# balance in closing_balances.yaml. Lines are classified on payee + description:
+# boa_transfers -> boa_merchants -> the shared merchants: block above.
+zoho_feed_only_accounts:
+  - xero_bank_account: "BoA: Business Checking (1778)"   # Zoho "Business Adv Fundamentals" 1622286000000143048
+    kind: bank
+  - xero_bank_account: "BoA: CORP Account (2119)"         # Zoho "CORP Account - ... - 2119" 1622286000000143054
+    kind: credit_card
+
+# description substring -> the other account of the transfer (Xero bank name)
+boa_transfers:
+  "payment to CRD 2119":          "BoA: CORP Account (2119)"          # checking -> card (online payment)
+  "BUSINESS CARD Bill Payment":   "BoA: CORP Account (2119)"          # checking -> card (autopay)
+  "OVERDRAFT PROTECTION FROM":    "BoA: CORP Account (2119)"          # card ..445819 funds the checking overdraft
+  "PAYMENT - THANK YOU":          "BoA: Business Checking (1778)"     # card side of the autopay
+  "PAYMENT FROM CHK 1":           "BoA: Business Checking (1778)"     # card side of the online payment
+  "OVERDRAFT ADVANCE":            "BoA: Business Checking (1778)"     # card side of the overdraft pull
+
+boa_merchants:
+  # --- owner (2803 is the personal BoA checking) ---
+  - {pattern: "transfer from CHK 2803",   account: "3100"}   # Owner's Equity: owner contribution
+  - {pattern: "Zelle payment from JAMAL COLE", account: "3100"}
+  - {pattern: "transfer to CHK 2803",     account: "3200"}   # Owner's Draws
+  # --- bank / card fees ---
+  - {pattern: "OVERDRAFT ITEM FEE",       account: "6050"}   # Bank Fees and Charges
+  - {pattern: "Monthly Fee Business Adv", account: "6050"}
+  - {pattern: "LATE PAYMENT FEE",         account: "6055"}   # Credit Card Charges (card 2119)
+  - {pattern: "FINANCE CHARGE",           account: "6055"}
+  # --- vendors not already in merchants: ---
+  - {pattern: "GOOGLE *ADS",              account: "6000"}   # Advertising
+  - {pattern: "Google ADS",               account: "6000"}
+  - {pattern: "GOOGLE*ADS",               account: "6000"}
+  - {pattern: "GOOGLE*CLOUD",             account: "6340"}   # Software & Web
+  - {pattern: "GOOGLE*WORKSPACE",         account: "6340"}
+  - {pattern: "NAME-CHEAP",               account: "6340"}
+  - {pattern: "Adobe",                    account: "6340"}
+  - {pattern: "ZOHODISTRIB",              account: "6340"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
+  - {pattern: "Angel Mechanic",           account: "6440"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
+  - {pattern: "VERIZON WIRELESS",         account: "6390"}   # Telephone and Internet
+  # --- waiting on the operator (see docs/zoho-books-handoff-boa.md §4) ---
+  # - {pattern: "CHASE CREDIT CRD",       account: "????"}   # Chase Ink 7667 autopay: card account in Zoho or owner draw?
+  # - {pattern: "Spotify",                account: "????"}   # business (payments.yaml) or personal?
+  # - {pattern: "MEDIUM.COM",             account: "3200"}   # payments.yaml says personal
+  # - {pattern: "DOORDASHDASHPAS",        account: "3200"}   # DashPass, personal?
+  # - {pattern: "PEACOCKTVLL",            account: "3200"}   # Peacock TV, personal?
+  # - {pattern: "UBER *",                 account: "????"}
+  # - {pattern: "APPLE CASH SENT MONEY",  account: "6450"}   # like Cash App wages?
+  # - {pattern: "Counter Credit",         account: "????"}   # cash deposits: sales (4000) or owner contribution (3100)?
+  # - {pattern: "ATM",                    account: "????"}   # BKOFAMERICA ATM DEPOSIT: same question
+  # - {pattern: "Bluevine",               account: "????"}   # 71.76 in from Bluevine 2026-06-03
+  # - {pattern: "AVIS RENT-A-CAR",        account: "????"}   # Hartford CT, 2026-09-19
+  # - {pattern: "U-HAUL",                 account: "????"}

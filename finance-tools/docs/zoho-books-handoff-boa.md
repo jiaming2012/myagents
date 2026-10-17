@@ -3,6 +3,38 @@
 Written 2026-10-16 for a fresh session. Read `zoho-books-runbook.md` first (credentials,
 script, API budget, repairs); this file is only what is different about BoA.
 
+## 0. Status 2026-10-17 — steps 1–3 done, waiting on the operator for 4–5
+
+- `task zoho:boa` (dry run) / `task zoho:boa:apply` / `task zoho:boa:reconcile` /
+  `task zoho:boa:rules` exist (`--feed-only` in `zoho_books_recon.py`). Classification:
+  `boa_transfers:` → `boa_merchants:` → shared `merchants:` in merchants.yaml, on
+  payee + description (the ACH `INDN:<holder>` segment is stripped first so the
+  "Jamal Cole" owner pattern cannot claim vendor debits).
+- Placeholder `BoA Business Checking ••1778` deleted; `BANK_NAMES` points at the two feed
+  accounts. Stock "Bank Fees and Charges" = 6050, "Credit Card Charges" = 6055.
+- Posted (reference `boa:<line id>`, checkpointed under the same key): all 15 transfers
+  between 1778 and 2119 (7 card payments, 8 overdraft advances), every fee, every mapped
+  vendor, the 44 owner contributions from 2803, the 7 draws to 2803, and the returned
+  items as refunds of the debit they reverse. See `zoho-books-boa-report.md` for the
+  verification table and what is still uncategorized.
+- **Not posted, awaiting answers (§4)**: Chase Ink autopay (13 lines incl. retries + 4
+  returns), Spotify, Medium, DoorDash, Peacock, Uber, Apple Cash, the cash deposits
+  (2 Counter Credit + 4 ATM, 4,387.00 in), Bluevine 71.76 in, Avis, U-Haul. Add the
+  answers to the commented lines at the end of `boa_merchants:` and re-run
+  `task zoho:boa:apply`.
+- **Opening balances / monthly records**: `closing_balances.yaml` is a template. The feed
+  implies 2025-12-31 balances of **1,245.79** (1778) and **1,856.36 owed** (2119); confirm
+  against the December statements, fill the file, then `task zoho:boa:apply` posts the
+  opening journals and `task zoho:boa:reconcile -- --apply` posts the month-end records
+  (a record is only posted when Zoho's closing equals the statement figure).
+- Corrections to §2–3 below, from the actual feed: checking credit = money out; the 7
+  "transfer to CHK 2803" lines are owner **draws**; the card payments are the 3
+  "payment to CRD 2119" + 4 "BUSINESS CARD Bill Payment" lines; the card's credit =
+  charge, debit = payment; "Zohaib" is the feed's guess for `PAYPAL *ZOHODISTRIB`, i.e.
+  Zoho's own $8/mo charge (mapped 6340, review); Verizon was missing from `merchants:`
+  (added to the BoA block, 6390). Progressive is coded 6210 as the handoff says, but
+  `payments.yaml` lists it as personal — operator to confirm.
+
 ## 1. What is in Zoho right now (verified 2026-10-16)
 
 | Zoho account | account_id | type | feed lines (uncategorized) | range | feed balance |
