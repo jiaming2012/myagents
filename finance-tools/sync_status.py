@@ -59,6 +59,9 @@ DEFAULT_TTL_MINUTES = 30
 ERROR_TTL_MINUTES = 5
 MONARCH_STALE_DAYS = 3
 ZOHO_STALE_DAYS = 2
+# A no-feed account is kept current by importing its monthly statement; one missed
+# cycle shows up as a newest-transaction date older than this.
+STATEMENT_STALE_DAYS = 35
 
 MONARCH_FIX = "Open Monarch -> Accounts -> the institution -> Reconnect / re-enter credentials."
 ZOHO_FEED_FIX = "Zoho Books -> Banking -> the account -> Connect bank feed (or import a statement)."
@@ -192,6 +195,7 @@ async def fetch_monarch_accounts():
 def slim_zoho_account(a):
     consent = a.get("consent_info") or {}
     return {
+        "id": a.get("account_id"),
         "name": a.get("account_name") or "(unnamed)",
         "type": a.get("account_type") or "",
         "active": bool(a.get("is_active", True)),
@@ -203,6 +207,9 @@ def slim_zoho_account(a):
         "last_refresh": a.get("feeds_last_refresh_date") or "",
         "mfa_required": bool(a.get("mfa_required")),
         "consent_expired": consent.get("is_consent_expired") in (True, "true", "True", 1, "1"),
+        # Newest posted transaction (filled in for no-feed accounts, which are kept
+        # current by statement imports instead of a feed). None = not looked up.
+        "last_txn": a.get("_last_txn"),
     }
 
 
@@ -214,7 +221,8 @@ def zoho_is_parked(a):
     return not a["active"] or a["type"] not in ("bank", "credit_card")
 
 
-def zoho_findings(accounts, today=None, stale_days=ZOHO_STALE_DAYS):
+def zoho_findings(accounts, today=None, stale_days=ZOHO_STALE_DAYS,
+                  statement_stale_days=STATEMENT_STALE_DAYS):
     today = today or datetime.now(timezone.utc).date()
     findings = []
     for a in accounts:
@@ -222,9 +230,24 @@ def zoho_findings(accounts, today=None, stale_days=ZOHO_STALE_DAYS):
             continue
         name = a["name"]
         if not zoho_has_feed(a):
-            findings.append(_finding("zoho", "warning", name,
-                                     f"no bank feed; book balance ${a['book_balance']:,.2f} can drift "
-                                     f"unnoticed", ZOHO_FEED_FIX))
+            # Kept current by statement imports (e.g. the closed Chase Ink being paid
+            # down, Oct 2026): judge it by its newest posted transaction, not by the feed.
+            if abs(a["book_balance"]) < 0.01:
+                findings.append(_finding("zoho", "warning", name,
+                                         "no bank feed and a $0.00 balance: paid off?",
+                                         "Mark the account inactive in Zoho Books and retire its statement-import reminder."))
+                continue
+            last = a.get("last_txn")
+            age = _age_days(last, today)
+            if not last:
+                findings.append(_finding("zoho", "warning", name,
+                                         f"no bank feed and no posted transactions found; book balance "
+                                         f"${a['book_balance']:,.2f} can drift unnoticed", ZOHO_FEED_FIX))
+            elif age is not None and age > statement_stale_days:
+                findings.append(_finding("zoho", "warning", name,
+                                         f"statement import overdue: newest transaction {last} ({age}d ago); "
+                                         f"book balance ${a['book_balance']:,.2f} is behind",
+                                         "Import the latest statement: Zoho Books -> Banking -> the account -> Import Statement."))
             continue
         if a["mfa_required"]:
             findings.append(_finding("zoho", "error", name, "feed is waiting on MFA", ZOHO_REFRESH_FIX))
@@ -291,7 +314,23 @@ def fetch_zoho_accounts():
                          headers={"Authorization": f"Zoho-oauthtoken {token}"})
     if r.status_code >= 300:
         raise RuntimeError(f"Zoho /bankaccounts -> {r.status_code}: {r.text[:200]}")
-    return [slim_zoho_account(a) for a in r.json().get("bankaccounts", [])]
+    raw = r.json().get("bankaccounts", [])
+    # One extra call per active no-feed account: its newest posted transaction, so a
+    # statement-maintained account is judged by import recency rather than nagged about.
+    for a in raw:
+        probe = slim_zoho_account(a)
+        if zoho_is_parked(probe) or zoho_has_feed(probe) or abs(probe["book_balance"]) < 0.01:
+            continue
+        try:
+            t = requests.get(f"{ZOHO_BASE}/banktransactions", timeout=60,
+                             params={"organization_id": os.getenv("ZOHO_BOOKS_ORG_ID"), "account_id": a["account_id"],
+                                     "per_page": 1, "sort_column": "date", "sort_order": "D"},
+                             headers={"Authorization": f"Zoho-oauthtoken {token}"})
+            txns = t.json().get("banktransactions", []) if t.status_code < 300 else []
+            a["_last_txn"] = txns[0].get("date") if txns else ""
+        except Exception:  # noqa: BLE001 - leave as None: "not looked up"
+            a["_last_txn"] = None
+    return [slim_zoho_account(a) for a in raw]
 
 
 # --- cache + collect ---------------------------------------------------------
@@ -499,7 +538,15 @@ def print_full_report(result, color=True):
                     why = "inactive" if not a["active"] else a["type"]
                     status = f"{c.DIM}parked ({why}){c.RESET}"
                 elif not zoho_has_feed(a):
-                    status = f"{c.YELLOW}no feed{c.RESET}"
+                    last_age = _age_days(a.get("last_txn"), datetime.now(timezone.utc).date())
+                    if abs(a["book_balance"]) < 0.01:
+                        status = f"{c.YELLOW}no feed, $0: retire?{c.RESET}"
+                    elif last_age is None:
+                        status = f"{c.YELLOW}no feed, no txns{c.RESET}"
+                    elif last_age > STATEMENT_STALE_DAYS:
+                        status = f"{c.YELLOW}statement overdue ({last_age}d){c.RESET}"
+                    else:
+                        status = f"{c.GREEN}ok (statements, last {a['last_txn']}){c.RESET}"
                 elif a["mfa_required"] or a["consent_expired"] or (a["refresh_status"] and a["refresh_status"] != "completed"):
                     status = f"{c.RED}feed broken{c.RESET}"
                 elif abs(a["book_balance"] - a["bank_balance"]) >= 0.01 or a["uncategorized"]:

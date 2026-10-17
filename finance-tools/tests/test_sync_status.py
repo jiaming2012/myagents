@@ -135,15 +135,39 @@ def test_zoho_healthy_feed_has_no_findings():
     assert zoho_findings([z("Operations ••4613")], TODAY) == []
 
 
-def test_zoho_no_feed_is_warning():
-    acct = z("Chase Ink ••7667", type="credit_card", refresh_status="", last_refresh="",
-             book_balance=5708.07, bank_balance=0.0)
+def _no_feed(**over):
+    base = dict(type="credit_card", refresh_status="", last_refresh="", book_balance=5708.07, bank_balance=0.0)
+    base.update(over)
+    return z("Chase Ink ••7667", **base)
+
+
+def test_zoho_no_feed_with_recent_statement_is_fine():
+    acct = _no_feed(last_txn="2026-10-14")
     assert not zoho_has_feed(acct)
-    out = zoho_findings([acct], TODAY)
+    assert zoho_findings([acct], TODAY) == []
+
+
+def test_zoho_no_feed_with_overdue_statement_is_warning():
+    out = zoho_findings([_no_feed(last_txn="2026-08-14")], TODAY, statement_stale_days=35)
     assert len(out) == 1
     assert out[0]["severity"] == "warning"
-    assert "no bank feed" in out[0]["message"]
-    assert "5,708.07" in out[0]["message"]
+    assert "statement import overdue" in out[0]["message"]
+    assert "64d ago" in out[0]["message"] and "5,708.07" in out[0]["message"]
+    assert "Import Statement" in out[0]["fix"]
+
+
+def test_zoho_no_feed_without_any_transactions_warns_about_drift():
+    for last in (None, ""):
+        out = zoho_findings([_no_feed(last_txn=last)], TODAY)
+        assert len(out) == 1
+        assert "no posted transactions" in out[0]["message"]
+
+
+def test_zoho_no_feed_paid_off_suggests_retiring_the_account():
+    out = zoho_findings([_no_feed(book_balance=0.0, last_txn="2026-10-14")], TODAY)
+    assert len(out) == 1
+    assert "paid off" in out[0]["message"]
+    assert "inactive" in out[0]["fix"]
 
 
 def test_zoho_inactive_and_cash_accounts_are_ignored():
