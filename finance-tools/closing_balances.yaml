@@ -12,3 +12,6 @@
 "BoA: CORP Account (2119)":
   "2025-12-31": 1856.36      # December_Statement_2025-12-10.pdf new balance; no activity 12/11-12/31 (= feed-implied)
   # card statements close on the 10th, so month-end figures must come from the daily balance / online history
+
+"Bluevine: Checking * Closed":
+  "2025-12-31": 81.76        # feed-implied (closed at 0.00 after a 10.00 dormancy fee and the 71.76 transfer to BoA); no statement seen

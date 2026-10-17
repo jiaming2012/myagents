@@ -77,7 +77,7 @@ BANK_NAMES = {
     "BoA: CORP Account (2119)": "CORP Account - Business Adv Customized Cash Rewards - 2119",
     # own accounts with no feed in Zoho, created by the script so transfers have a far side
     "Chase: Ink (7667)": "Chase Ink ••7667",
-    "Bluevine: Checking * Closed": "Bluevine Checking (closed)",
+    "Bluevine: Checking * Closed": "Bluevine Checking ••2189 (closed)",   # feed-linked 2026-10-17 (closed, 0.00)
 }
 BANK_TYPES = {"Chase Ink ••7667": "credit_card"}   # Zoho account_type when the script creates it (default bank)
 INCOME_PREFIX = "4"                                  # codes 4xxx: money in is a deposit to income, not a refund
@@ -931,6 +931,8 @@ def reconcile_feed_only(z, plans, apply, log):
         for first, last in month_ends(START_DEFAULT, date.today().isoformat()):
             lo = date.fromisoformat(OPENING_DATE) if first.isoformat() == START_DEFAULT else first
             sel = [d for d in docs if not d["_rec"] and lo.isoformat() <= d["date"] <= last.isoformat()]
+            if not sel and acct.get("closed") and first.isoformat() > acct["closed"]:
+                continue  # closed account, nothing after the closure
             z_close = sum(d["_signed"] for d in docs if d["_rec"] and d["date"] < lo.isoformat()) + sum(d["_signed"] for d in sel)
             z_bal = z_close if acct["kind"] == "bank" else -z_close     # card: report as amount owed
             stmt = stmts.get(f"{first:%Y-%m}")

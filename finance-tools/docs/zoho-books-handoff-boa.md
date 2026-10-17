@@ -30,9 +30,16 @@ script, API budget, repairs); this file is only what is different about BoA.
   Peacock (2 + retry + 2 returns), Uber (1), Apple Cash sends (2): 32 lines, net −381.85,
   uncategorized; checking book is 434.01 vs feed 52.16 until they are posted. Uncomment
   the lines at the end of `boa_merchants:` with the answer, `task zoho:boa:apply`.
-  (b) Chase Ink shows −1,550.00 (payments, no charges): either link its feed / import its
-  statements, or post its 2025-12-31 balance as an opening journal. (c) Bluevine shows
-  −71.76: post an opening journal of 71.76 dated 2025-12-31 if that is all it held.
+  (b) Chase Ink shows −1,550.00 (payments, no charges). The card is closed and cannot be
+  feed-linked (operator 2026-10-17); the operator is sending its statements (Dec 2025
+  onward): post the 2025-12-31 balance as an opening journal and import the 2026
+  charges/interest with `POST /bankstatements` (credit = money in, see runbook §5), then
+  match the 17 autopay transfers. (c) Bluevine DONE 2026-10-17: the operator feed-linked it
+  (two accounts arrived unnamed as "Yumyums Kitchen LLC"; renamed `Bluevine Checking
+  ••2189 (closed)` = `1622286000000207062`, now a feed-only account in merchants.yaml, and
+  `Bluevine ••2849 (closed, empty)` = `1622286000000207068`, no lines, delete if it never
+  held business money). The no-feed placeholder was deleted, opening 81.76 (feed-implied)
+  posted, 2 lines booked, book = feed = 0.00.
   (d) Month-end records: `task zoho:boa:reconcile` prints Zoho's closing per month; fill
   `closing_balances.yaml` with the statement month-end balances (checking statements
   close on the last day; the card statement closes on the 10th, so use the online daily
