@@ -6,59 +6,91 @@ tasks:
     cmds:
       - pip install -r requirements.txt
 
+  sync-status:
+    desc: "Which Monarch connections / Zoho bank feeds are disconnected or stale (cached 30 min; -- --fresh to re-query)"
+    cmds:
+      - python sync_status.py {{.CLI_ARGS}}
+
+  sync-status:fresh:
+    desc: Same, ignoring the cache (one Monarch login + one Zoho call)
+    cmds:
+      - python sync_status.py --fresh {{.CLI_ARGS}}
+
+  sync-status:warn:
+    desc: "Banner only: prints a sync warning (or a one-line OK) before another command's numbers; never fails"
+    cmds:
+      - cmd: python sync_status.py --warn {{.CLI_ARGS}}
+        ignore_error: true
+
+  sync-status:gate:
+    desc: "Flow step: exit 1 if any connection is broken (-- --fail-on warning to also stop on stale/no-feed)"
+    cmds:
+      - python sync_status.py --fail-on error {{.CLI_ARGS}}
+
   payments:
     desc: List upcoming payment events (default 7 days)
     cmds:
+      - task: sync-status:warn
       - python zoho_calendar_payments.py {{.CLI_ARGS}}
 
   payments:today:
     desc: List today's payment events
     cmds:
+      - task: sync-status:warn
       - python zoho_calendar_payments.py --days 1
 
   payments:month:
     desc: List payment events for the next 30 days
     cmds:
+      - task: sync-status:warn
       - python zoho_calendar_payments.py --days 30
 
   bill-map:
     desc: Show bill-to-account mapping with balances (default 30 days)
     cmds:
+      - task: sync-status:warn
       - python zoho_calendar_payments.py --bill-map {{.CLI_ARGS}}
 
   bill-map:month:
     desc: Bill mapping for next 30 days
     cmds:
+      - task: sync-status:warn
       - python zoho_calendar_payments.py --bill-map --days 30
 
   report:
     desc: Weekly coverage report (all windows)
     cmds:
+      - task: sync-status:warn
       - python coverage_report.py {{.CLI_ARGS}}
 
   report:week:
     desc: Coverage report for next 7 days only
     cmds:
+      - task: sync-status:warn
       - python coverage_report.py --days 7
 
   forecast:
     desc: Payment forecast (default 30 days)
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py {{.CLI_ARGS}}
 
   forecast:week:
     desc: Payment forecast for next 7 days
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py --days 7
 
   forecast:month:
     desc: Payment forecast for next 30 days
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py --days 30
 
   week:
     desc: "THE weekly question: what leaves each bank account in the next 7 days, and does it clear? (timeline + per-account funding verdict + card charges)"
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py --days 7 --timeline {{.CLI_ARGS}}
 
   due:
@@ -94,16 +126,19 @@ tasks:
   forecast:email:
     desc: Email forecast summary (default 30 days)
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py --email-summary {{.CLI_ARGS}}
 
   forecast:email-weekly:
     desc: Email forecast summary for next 7 days
     cmds:
+      - task: sync-status:warn
       - python payment_forecast.py --email-summary --days 7
 
   balances:
     desc: Show Monarch Money account balances
     cmds:
+      - task: sync-status:warn
       - python monarch_balances.py {{.CLI_ARGS}}
 
   balances:login:
@@ -127,6 +162,7 @@ tasks:
   audit:
     desc: Transaction coverage audit (default 7 days)
     cmds:
+      - task: sync-status:warn
       - python transaction_audit.py {{.CLI_ARGS}}
 
   precode:
@@ -147,6 +183,7 @@ tasks:
   zoho:recon:
     desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md)"
     cmds:
+      - task: sync-status:warn
       - python zoho_books_recon.py --toast .toast_preview_2026.json {{.CLI_ARGS}}
 
   zoho:recon:apply:
@@ -162,11 +199,13 @@ tasks:
   zoho:reconcile:
     desc: Create monthly Zoho reconciliation records against Mercury month-end balances (dry run unless -- --apply)
     cmds:
+      - task: sync-status:warn
       - python zoho_books_recon.py --reconcile {{.CLI_ARGS}}
 
   budget:
     desc: Monarch budget and goal tracker
     cmds:
+      - task: sync-status:warn
       - python monarch_budget.py {{.CLI_ARGS}}
 
   health:
@@ -202,6 +241,7 @@ tasks:
   rewards:
     desc: "Credit card rewards: earn, statement credits, balance check (pulls Monarch, saves snapshot)"
     cmds:
+      - task: sync-status:warn
       - python rewards.py {{.CLI_ARGS}}
 
   rewards:offline:
@@ -212,6 +252,7 @@ tasks:
   rewards:amex:
     desc: "Rewards report for the Amex Platinum only"
     cmds:
+      - task: sync-status:warn
       - python rewards.py --card amex-platinum-2004 {{.CLI_ARGS}}
 
   rewards:json:

@@ -12,3 +12,4 @@ __pycache__/
 forecast_preview.html
 .mm
 .rewards_snapshot.json
+.sync_status_cache.json

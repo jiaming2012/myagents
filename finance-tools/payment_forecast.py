@@ -730,6 +730,12 @@ async def main():
         if args.email_summary:
             # D-07: Daily summary mode -- condensed digest on good days, full report on bad days
             subject, html_body = build_summary_html(forecast)
+            # Sync banner above the numbers: which Monarch connections / Zoho feeds are stale.
+            try:
+                from sync_status import collect as collect_sync_status, inject_banner_html
+                html_body = inject_banner_html(html_body, await collect_sync_status())
+            except Exception as e:  # noqa: BLE001 - the email must still go out
+                print(f"Warning: sync banner skipped ({type(e).__name__}: {e})", file=sys.stderr)
 
             if args.dry_run:
                 # D-10: Export HTML preview instead of sending

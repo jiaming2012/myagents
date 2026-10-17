@@ -158,6 +158,43 @@ task due:month             # next 30 days
 `payments.yaml` is the source of truth. Balances are skipped, so the projected
 columns are meaningless; the payment list and dates are exact.
 
+## Account Sync Status (is the data behind the numbers current?)
+
+```bash
+task sync-status           # Monarch connections + Zoho bank feeds: who is disconnected, stale, or unfed
+task sync-status:fresh     # same, bypassing the 30-minute cache
+task sync-status:warn      # banner only (what every numbers command prints first)
+task sync-status:gate      # flow step: exit 1 if a connection is broken; -- --fail-on warning is stricter
+task sync-status -- --json # machine-readable
+```
+
+Monarch: a credential with `updateRequired` or a provider disconnect is an **error**
+(one finding per connection, naming every account on it); an account not updated in
+3 days is a **warning**. Manual, hidden, deactivated and sync-disabled accounts are
+listed as "parked" and never warned about. Zoho Books: an active bank/card account
+with no bank feed, a stale refresh (2 days), a book-vs-bank balance gap or open
+uncategorized lines is a **warning**; MFA pending, consent expired or a failed
+refresh is an **error**.
+
+Every command that presents balances or charges (`week`, `forecast*`, `payments*`,
+`bill-map*`, `report*`, `balances`, `budget`, `audit`, `rewards`, `zoho:recon`,
+`zoho:reconcile`) runs `sync-status:warn` first, so a stale source is announced
+before its numbers. `task health` embeds the same banner at the top of the terminal
+report and the emailed HTML, and `forecast:email*` injects it above the summary.
+Results are cached in `.sync_status_cache.json` (30 min, 5 min after an outage) so a
+chain of tasks costs one Monarch login and one Zoho API call; `SYNC_STATUS_TTL_MINUTES`
+overrides the lifetime. `--warn` never fails the command it precedes.
+
+To use it as a step in a flow, call the gate before the work:
+
+```yaml
+  month-close:
+    cmds:
+      - task: sync-status:gate      # stop here if a feed is broken
+      - task: zoho:recon:apply
+      - task: zoho:reconcile
+```
+
 ## Registry Gaps (what the forecast can't see)
 
 ```bash
