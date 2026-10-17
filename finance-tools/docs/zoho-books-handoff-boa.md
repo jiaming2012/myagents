@@ -47,9 +47,9 @@ script, API budget, repairs); this file is only what is different about BoA.
   close on the 14th, so reconcile it by statement period or skip records. (c) Bluevine DONE 2026-10-17: the operator feed-linked it
   (two accounts arrived unnamed as "Yumyums Kitchen LLC"; renamed `Bluevine Checking
   ••2189 (closed)` = `1622286000000207062`, now a feed-only account in merchants.yaml, and
-  `Bluevine ••2849 (closed, empty)` = `1622286000000207068`, no lines, delete if it never
-  held business money). The no-feed placeholder was deleted, opening 81.76 (feed-implied)
-  posted, 2 lines booked, book = feed = 0.00.
+  the second, `••2849`, had no lines, no balance and no documents and was deleted on
+  2026-10-17 with the operator's agreement). The no-feed placeholder was deleted, opening
+  81.76 (feed-implied) posted, 2 lines booked, book = feed = 0.00.
   (d) Month-end records — **1778 DONE 2026-10-17**: the nine eStmt PDFs
   (`…/2025_taxes/yumyums/bank_statements/boa_1778/`, periods = calendar months) gave the
   ending balances in `closing_balances.yaml`; all nine equalled Zoho's closings and
