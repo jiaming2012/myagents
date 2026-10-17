@@ -17,16 +17,26 @@ script, API budget, repairs); this file is only what is different about BoA.
   vendor, the 44 owner contributions from 2803, the 7 draws to 2803, and the returned
   items as refunds of the debit they reverse. See `zoho-books-boa-report.md` for the
   verification table and what is still uncategorized.
-- **Not posted, awaiting answers (§4)**: Chase Ink autopay (13 lines incl. retries + 4
-  returns), Spotify, Medium, DoorDash, Peacock, Uber, Apple Cash, the cash deposits
-  (2 Counter Credit + 4 ATM, 4,387.00 in), Bluevine 71.76 in, Avis, U-Haul. Add the
-  answers to the commented lines at the end of `boa_merchants:` and re-run
-  `task zoho:boa:apply`.
-- **Opening balances / monthly records**: `closing_balances.yaml` is a template. The feed
-  implies 2025-12-31 balances of **1,245.79** (1778) and **1,856.36 owed** (2119); confirm
-  against the December statements, fill the file, then `task zoho:boa:apply` posts the
-  opening journals and `task zoho:boa:reconcile -- --apply` posts the month-end records
-  (a record is only posted when Zoho's closing equals the statement figure).
+- **Operator answers 2026-10-17, posted the same day**: Chase Ink autopay = transfers to a
+  new no-feed credit-card account `Chase Ink ••7667` (`1622286000000212046`; its 4
+  returned autopays are transfers back); cash deposits (Counter Credit, ATM) = 4000 Sales
+  as `deposit`; Bluevine 71.76 = transfer from a new no-feed `Bluevine Checking (closed)`
+  (`1622286000000208105`); Avis = owner draw; U-Haul = 6310 (move to the storage unit
+  near the truck). **Opening journals posted** from the December statements:
+  1778 = 1,245.79 (`eStmt_2025-12-31.pdf`), 2119 = 1,856.36 owed
+  (`December_Statement_2025-12-10.pdf`, no activity 12/11–12/31) — both equal to the
+  feed-implied figures. Card 2119: book = feed = 1,651.98, 0 uncategorized.
+- **Still open**: (a) question 2 — Spotify (9), Medium (7), DoorDash (6 + 2 returns),
+  Peacock (2 + retry + 2 returns), Uber (1), Apple Cash sends (2): 32 lines, net −381.85,
+  uncategorized; checking book is 434.01 vs feed 52.16 until they are posted. Uncomment
+  the lines at the end of `boa_merchants:` with the answer, `task zoho:boa:apply`.
+  (b) Chase Ink shows −1,550.00 (payments, no charges): either link its feed / import its
+  statements, or post its 2025-12-31 balance as an opening journal. (c) Bluevine shows
+  −71.76: post an opening journal of 71.76 dated 2025-12-31 if that is all it held.
+  (d) Month-end records: `task zoho:boa:reconcile` prints Zoho's closing per month; fill
+  `closing_balances.yaml` with the statement month-end balances (checking statements
+  close on the last day; the card statement closes on the 10th, so use the online daily
+  balance) and run it with `-- --apply`. Checking closings only match once (a) is done.
 - Corrections to §2–3 below, from the actual feed: checking credit = money out; the 7
   "transfer to CHK 2803" lines are owner **draws**; the card payments are the 3
   "payment to CRD 2119" + 4 "BUSINESS CARD Bill Payment" lines; the card's credit =

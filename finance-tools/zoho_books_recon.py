@@ -75,7 +75,12 @@ BANK_NAMES = {
     # BoA accounts are feed-linked (2026-10-16); names are Zoho's own for the feed
     "BoA: Business Checking (1778)": "Business Adv Fundamentals",
     "BoA: CORP Account (2119)": "CORP Account - Business Adv Customized Cash Rewards - 2119",
+    # own accounts with no feed in Zoho, created by the script so transfers have a far side
+    "Chase: Ink (7667)": "Chase Ink ••7667",
+    "Bluevine: Checking * Closed": "Bluevine Checking (closed)",
 }
+BANK_TYPES = {"Chase Ink ••7667": "credit_card"}   # Zoho account_type when the script creates it (default bank)
+INCOME_PREFIX = "4"                                  # codes 4xxx: money in is a deposit to income, not a refund
 CLOSING_FILE = HERE / "closing_balances.yaml"   # operator-supplied statement balances (feed-only accounts)
 
 # Chart of accounts to seed: code -> (name, zoho account_type).
@@ -280,9 +285,10 @@ def seed_banks(z, apply, log):
     banks = bank_index(z)
     for xero_name, zoho_name in BANK_NAMES.items():
         if zoho_name not in banks:
-            log(f"  bank: create '{zoho_name}' (no feed)")
+            atype = BANK_TYPES.get(zoho_name, "bank")
+            log(f"  bank: create '{zoho_name}' ({atype}, no feed)")
             if apply:
-                z.post("/bankaccounts", {"account_name": zoho_name, "account_type": "bank"})
+                z.post("/bankaccounts", {"account_name": zoho_name, "account_type": atype})
     return bank_index(z) if apply else banks
 
 
@@ -676,8 +682,10 @@ def classify_feed(lines, cfg, own_name):
         k, p = cls[orig["transaction_id"]]
         if k == "coded":
             cls[ln["transaction_id"]] = ("coded", (f"RETURN of {p[0]}", p[1], True))
+        elif k == "transfer":
+            cls[ln["transaction_id"]] = ("transfer", p)     # money comes back: a transfer the other way
         else:
-            cls[ln["transaction_id"]] = ("unmatched", f"RETURN of {p if k == 'unmatched' else 'transfer ' + p}")
+            cls[ln["transaction_id"]] = ("unmatched", f"RETURN of {p}")
     return [(ln, *cls[ln["transaction_id"]]) for ln in lines]
 
 
@@ -868,6 +876,9 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
                 elif code in EQUITY_CODES:
                     categorize_generic(z, ln, "owner_contribution", acc, zid, t, name)
                     op = "owner_contribution"
+                elif code.startswith(INCOME_PREFIX) and s > 0:
+                    categorize_generic(z, ln, "deposit", acc, zid, t, name)   # cash sales -> income
+                    op = "deposit"
                 elif s < 0:
                     categorize_expense(z, ln, acc, zid, t, name)
                     op = "expense"

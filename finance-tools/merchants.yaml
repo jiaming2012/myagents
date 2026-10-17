@@ -141,6 +141,9 @@ boa_transfers:
   "PAYMENT - THANK YOU":          "BoA: Business Checking (1778)"     # card side of the autopay
   "PAYMENT FROM CHK 1":           "BoA: Business Checking (1778)"     # card side of the online payment
   "OVERDRAFT ADVANCE":            "BoA: Business Checking (1778)"     # card side of the overdraft pull
+  # other own accounts with no feed in Zoho (created by the script, kind in BANK_TYPES)
+  "CHASE CREDIT CRD":             "Chase: Ink (7667)"                 # autopay of the Chase Ink business card (operator 2026-10-17: a liability)
+  "DES:Bluevine":                 "Bluevine: Checking * Closed"       # transfer out of the closed Bluevine checking (operator 2026-10-17)
 
 boa_merchants:
   # --- owner (2803 is the personal BoA checking) ---
@@ -163,16 +166,15 @@ boa_merchants:
   - {pattern: "ZOHODISTRIB",              account: "6340"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
   - {pattern: "Angel Mechanic",           account: "6440"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
   - {pattern: "VERIZON WIRELESS",         account: "6390"}   # Telephone and Internet
-  # --- waiting on the operator (see docs/zoho-books-handoff-boa.md §4) ---
-  # - {pattern: "CHASE CREDIT CRD",       account: "????"}   # Chase Ink 7667 autopay: card account in Zoho or owner draw?
+  # --- operator answers 2026-10-17 ---
+  - {pattern: "Counter Credit",           account: "4000"}   # cash sales deposited at the counter
+  - {pattern: "BKOFAMERICA ATM",          account: "4000"}   # cash sales deposited at the ATM
+  - {pattern: "AVIS RENT-A-CAR",          account: "3200"}   # personal trip -> owner draw
+  - {pattern: "U-HAUL",                   account: "6310"}   # Rent - Other: move to a storage unit closer to the truck
+  # --- still waiting on the operator (see docs/zoho-books-handoff-boa.md §4, question 2) ---
   # - {pattern: "Spotify",                account: "????"}   # business (payments.yaml) or personal?
   # - {pattern: "MEDIUM.COM",             account: "3200"}   # payments.yaml says personal
   # - {pattern: "DOORDASHDASHPAS",        account: "3200"}   # DashPass, personal?
   # - {pattern: "PEACOCKTVLL",            account: "3200"}   # Peacock TV, personal?
   # - {pattern: "UBER *",                 account: "????"}
   # - {pattern: "APPLE CASH SENT MONEY",  account: "6450"}   # like Cash App wages?
-  # - {pattern: "Counter Credit",         account: "????"}   # cash deposits: sales (4000) or owner contribution (3100)?
-  # - {pattern: "ATM",                    account: "????"}   # BKOFAMERICA ATM DEPOSIT: same question
-  # - {pattern: "Bluevine",               account: "????"}   # 71.76 in from Bluevine 2026-06-03
-  # - {pattern: "AVIS RENT-A-CAR",        account: "????"}   # Hartford CT, 2026-09-19
-  # - {pattern: "U-HAUL",                 account: "????"}
