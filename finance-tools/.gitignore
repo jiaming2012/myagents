@@ -11,3 +11,4 @@ __pycache__/
 .toast_preview_*.json
 forecast_preview.html
 .mm
+.rewards_snapshot.json

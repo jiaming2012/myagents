@@ -86,12 +86,12 @@ class TestGetPaymentDatesInHorizon(unittest.TestCase):
 class TestResolvePaymentAmount(unittest.TestCase):
     """Tests for resolve_payment_amount()."""
 
-    def test_credit_card_uses_abs_monarch_balance(self):
-        """Returns abs(monarch_balance) for credit card accounts (type=='credit')."""
+    def test_credit_card_full_uses_abs_monarch_balance(self):
+        """autopay_type full: returns abs(monarch_balance) of the card (type=='credit')."""
         from payment_forecast import resolve_payment_amount
 
-        payment = {"name": "BoA Plat 1 (min)", "amount": 953.00, "funding_account": "boa-checking-2803",
-                    "autopay_type": "min"}
+        payment = {"name": "BoA Plat 1 (full)", "amount": 953.00, "funding_account": "boa-checking-2803",
+                    "autopay_type": "full"}
         # The credit card account being paid
         credit_account = {
             "id": "boa-plat1-5153", "name": "Platinum Plus Mastercard 1",
@@ -105,6 +105,19 @@ class TestResolvePaymentAmount(unittest.TestCase):
             result = resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balances,
                                             credit_account=credit_account)
         self.assertAlmostEqual(result, 1234.56)
+
+    def test_credit_card_min_uses_yaml_amount_not_card_balance(self):
+        """autopay_type min: a minimum payment never draws the whole card balance."""
+        from payment_forecast import resolve_payment_amount
+
+        payment = {"name": "BoA Plat 2 (min)", "amount": 78.00, "funding_account": "cap1-recurring-4354",
+                    "autopay_type": "min"}
+        credit_account = {"id": "boa-plat2-7250", "name": "Platinum Plus Mastercard 2", "type": "credit",
+                          "monarch_match": "BankAmericard Platinum Plus Mastercard (...7250)"}
+        with patch("payment_forecast.resolve_balance", return_value=(-2519.80, "monarch")) as rb:
+            result = resolve_payment_amount(payment, {}, {}, {}, credit_account=credit_account)
+        self.assertAlmostEqual(result, 78.00)
+        rb.assert_not_called()
 
     def test_non_credit_returns_yaml_amount(self):
         """Returns payments.yaml amount for depository/non-credit accounts."""
@@ -174,13 +187,13 @@ class TestBuildForecast(unittest.TestCase):
             ],
         }
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_groups_payments_by_funding_account(self, mock_dates, mock_balance):
         """build_forecast() groups payments by funding_account and computes projected_balance."""
         from payment_forecast import build_forecast
 
-        mock_balance.side_effect = lambda acct, m, x: (2000.0, "monarch") if acct["id"] == "checking-1" else (500.0, "monarch")
+        mock_balance.side_effect = lambda acct, m, x: (2000.0, "monarch", None) if acct["id"] == "checking-1" else (500.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -195,13 +208,13 @@ class TestBuildForecast(unittest.TestCase):
         acct2 = next(a for a in result["accounts"] if a["id"] == "checking-2")
         self.assertAlmostEqual(acct2["projected_balance"], 500.0 - 50.0)
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_severity_error_when_negative(self, mock_dates, mock_balance):
         """build_forecast() sets severity='error' when projected_balance < 0."""
         from payment_forecast import build_forecast
 
-        mock_balance.return_value = (500.0, "monarch")
+        mock_balance.return_value = (500.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -214,14 +227,14 @@ class TestBuildForecast(unittest.TestCase):
         acct1 = next(a for a in result["accounts"] if a["id"] == "checking-1")
         self.assertEqual(acct1["severity"], "error")
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_severity_warning_below_min_balance(self, mock_dates, mock_balance):
         """build_forecast() sets severity='warning' when projected >= 0 but < min_balance."""
         from payment_forecast import build_forecast
 
         # checking-1 has min_balance=500, balance=600, rent=200 -> projected=400 < 500
-        mock_balance.return_value = (600.0, "monarch")
+        mock_balance.return_value = (600.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -234,13 +247,13 @@ class TestBuildForecast(unittest.TestCase):
         self.assertEqual(acct1["severity"], "warning")
         self.assertAlmostEqual(acct1["projected_balance"], 400.0)
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_severity_ok_above_min_balance(self, mock_dates, mock_balance):
         """build_forecast() sets severity='ok' when projected_balance >= min_balance."""
         from payment_forecast import build_forecast
 
-        mock_balance.return_value = (5000.0, "monarch")
+        mock_balance.return_value = (5000.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -252,13 +265,13 @@ class TestBuildForecast(unittest.TestCase):
         acct1 = next(a for a in result["accounts"] if a["id"] == "checking-1")
         self.assertEqual(acct1["severity"], "ok")
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_summary_totals(self, mock_dates, mock_balance):
         """build_forecast() summary has correct total_outgoing, total_available, net_position."""
         from payment_forecast import build_forecast
 
-        mock_balance.side_effect = lambda acct, m, x: (2000.0, "monarch") if acct["id"] == "checking-1" else (500.0, "monarch")
+        mock_balance.side_effect = lambda acct, m, x: (2000.0, "monarch", None) if acct["id"] == "checking-1" else (500.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -272,13 +285,13 @@ class TestBuildForecast(unittest.TestCase):
         # Net position: 2500 - 1200 = 1300
         self.assertAlmostEqual(summary["net_position"], 1300.0)
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_account_with_no_payments(self, mock_dates, mock_balance):
         """build_forecast() handles account with no payments (projected == current, severity='ok')."""
         from payment_forecast import build_forecast
 
-        mock_balance.return_value = (1000.0, "monarch")
+        mock_balance.return_value = (1000.0, "monarch", None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = self._make_config()
@@ -303,14 +316,14 @@ class TestBuildForecast(unittest.TestCase):
 class TestBuildForecastBalanceFetchFailure(unittest.TestCase):
     """Test graceful degradation when balance fetch fails."""
 
-    @patch("payment_forecast.resolve_balance")
+    @patch("payment_forecast.resolve_balance_entry")
     @patch("payment_forecast.get_payment_dates_in_horizon")
     def test_unknown_balance_sets_unknown_severity(self, mock_dates, mock_balance):
         """When resolve_balance returns None: balance=0.0, source='unknown', severity='unknown'
         (a source outage is a gap to fix, not a shortfall; exit code is WARNING, not ERROR)."""
         from payment_forecast import build_forecast
 
-        mock_balance.return_value = (None, None)
+        mock_balance.return_value = (None, None, None)
         mock_dates.return_value = [datetime(2026, 1, 15)]
 
         config = {
@@ -330,6 +343,69 @@ class TestBuildForecastBalanceFetchFailure(unittest.TestCase):
         self.assertEqual(acct["severity"], "unknown")
         from payment_forecast import determine_exit_code, EXIT_WARNING
         self.assertEqual(determine_exit_code(result), EXIT_WARNING)
+
+
+class TestCardChargesAndStaleness(unittest.TestCase):
+    """Bills charged to a card are not bank draws; old balances are flagged."""
+
+    def _config(self):
+        return {
+            "accounts": [
+                {"id": "chk", "name": "Checking", "type": "depository", "category": "personal",
+                 "monarch_match": "Checking (...1111)", "min_balance": 100, "nicknames": []},
+                {"id": "card", "name": "Corp Card", "type": "credit", "category": "business",
+                 "monarch_match": None, "nicknames": []},
+            ],
+            "payments": [
+                {"name": "Rent", "amount": 900.00, "day_of_month": 15, "funding_account": "chk",
+                 "autopay_type": None},
+                {"name": "Spotify", "amount": 12.78, "day_of_month": 15, "funding_account": "card",
+                 "autopay_type": None},
+            ],
+        }
+
+    @patch("payment_forecast.resolve_balance_entry")
+    @patch("payment_forecast.get_payment_dates_in_horizon")
+    def test_credit_funding_account_becomes_card_charge(self, mock_dates, mock_balance):
+        from payment_forecast import build_forecast
+        mock_balance.return_value = (1000.0, "monarch", "2026-10-16T08:00:00+00:00")
+        mock_dates.return_value = [datetime(2026, 10, 15)]
+        result = build_forecast(self._config(), {}, {}, days=7)
+        self.assertEqual([a["id"] for a in result["accounts"]], ["chk"])
+        self.assertEqual(len(result["card_charges"]), 1)
+        self.assertEqual(result["card_charges"][0]["card_id"], "card")
+        self.assertAlmostEqual(result["summary"]["total_outgoing"], 900.0)
+        self.assertAlmostEqual(result["summary"]["total_card_charges"], 12.78)
+        # No fake shortfall on a line of credit
+        self.assertTrue(all(a["severity"] != "error" for a in result["accounts"]))
+
+    @patch("payment_forecast.resolve_balance_entry")
+    @patch("payment_forecast.get_payment_dates_in_horizon")
+    def test_stale_balance_is_flagged(self, mock_dates, mock_balance):
+        from payment_forecast import build_forecast, MONARCH_STALE_DAYS
+        old = (datetime.now() - timedelta(days=MONARCH_STALE_DAYS + 40)).strftime("%Y-%m-%dT00:00:00+00:00")
+        mock_balance.return_value = (1000.0, "monarch", old)
+        mock_dates.return_value = [datetime(2026, 10, 15)]
+        acct = build_forecast(self._config(), {}, {}, days=7)["accounts"][0]
+        self.assertTrue(acct["stale"])
+        self.assertGreaterEqual(acct["stale_days"], MONARCH_STALE_DAYS + 40)
+        self.assertEqual(acct["balance_as_of"], old)
+
+    @patch("payment_forecast.resolve_balance_entry")
+    @patch("payment_forecast.get_payment_dates_in_horizon")
+    def test_fresh_balance_not_stale(self, mock_dates, mock_balance):
+        from payment_forecast import build_forecast
+        today = datetime.now().strftime("%Y-%m-%dT06:00:00+00:00")
+        mock_balance.return_value = (1000.0, "monarch", today)
+        mock_dates.return_value = [datetime(2026, 10, 15)]
+        acct = build_forecast(self._config(), {}, {}, days=7)["accounts"][0]
+        self.assertFalse(acct["stale"])
+        self.assertEqual(acct["stale_days"], 0)
+
+    def test_balance_age_none_when_unknown(self):
+        from payment_forecast import _balance_age_days
+        self.assertIsNone(_balance_age_days(None))
+        self.assertIsNone(_balance_age_days("not a date"))
 
 
 if __name__ == "__main__":
