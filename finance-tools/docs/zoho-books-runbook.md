@@ -100,9 +100,10 @@ statement import (one call), and not re-running what the checkpoint already cove
   records cannot be posted to an inactive account (11015): reactivate
   (`POST /bankaccounts/{id}/active`), post, deactivate.
 - Mercury side: nothing pending (merged to main via PR #1, 2026-10-16).
-- **Bank of America** (checking 1778, CORP card 2119, feed-linked 2026-10-16): every
-  unambiguous line posted 2026-10-17 (`task zoho:boa:apply`); the lines that need an
-  operator decision, the Dec 2025 opening balances and the month-end records are
-  listed in `zoho-books-handoff-boa.md` §0 and §4.
+- **Bank of America + Bluevine** (checking 1778, CORP card 2119, Bluevine 2189 closed; all
+  feed-linked): every 2026 line posted 2026-10-17, opening journals from the Dec 2025
+  statements, book = feed on all three, 34 BoA rules. Open: Chase Ink statements (closed
+  card, import + opening), monthly statement closings for the records —
+  `zoho-books-handoff-boa.md` §0.
 - Decision still open: switch from Xero (criteria in the plan §7). The Xero Monday
   pre-coder keeps running meanwhile and shares `merchants.yaml`.

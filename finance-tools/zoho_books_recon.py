@@ -615,6 +615,7 @@ def undo_created_transfers(z, state, from_id, log):
 # a debit: they inherit that debit's classification and post as its refund.
 
 RETURN_MARK = "RETURN OF POSTED CHECK"
+MATCHED_PATTERNS = set()   # merchants.yaml patterns that matched a feed-only line this run (for --rules)
 
 
 def line_signed(line):
@@ -663,6 +664,8 @@ def classify_feed(lines, cfg, own_name):
             continue
         m = next((m for m in cfg.get("boa_merchants", []) + cfg.get("merchants", [])
                   if m["pattern"].lower() in hay), None)
+        if m:
+            MATCHED_PATTERNS.add(m["pattern"])
         cls[ln["transaction_id"]] = ("coded", (line_name(ln), m["account"], False)) if m else ("unmatched", line_name(ln))
     used = set()
     for ln in lines:
@@ -975,8 +978,19 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
     wanted = [("Mercury", ",".join(a["zoho_id"] for a in accounts), m) for m in cfg["merchants"]] if accounts else []
     boa = cfg.get("zoho_feed_only_accounts") or []
     if boa and banks:
+        # the BoA block plus the shared merchants seen on a BoA line this run; withdrawals
+        # only, so deposit patterns (owner contributions 3100, sales 4xxx) stay script-driven
         boa_ids = ",".join(banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"] for a in boa)
-        wanted += [("BoA", boa_ids, m) for m in cfg.get("boa_merchants", []) if m["account"] != "3100"]
+        seen = set(MATCHED_PATTERNS)
+        for a in boa:   # posted documents keep "name | <bank description>", so the history can be re-matched
+            zid = banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"]
+            for d in z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"):
+                hay = f"{d.get('payee') or ''} {re.sub(r'INDN:.*?CO ID:', '', d.get('description') or '')}".lower()
+                seen |= {m["pattern"] for m in cfg["merchants"] if m["pattern"].lower() in hay}
+        # never a BoA rule: ACH descriptors carry "INDN:JAMAL COLE" on vendor debits
+        shared = [m for m in cfg["merchants"] if m["pattern"] in seen and m["pattern"] != "Jamal Cole"]
+        wanted += [("BoA", boa_ids, m) for m in cfg.get("boa_merchants", []) + shared
+                   if m["account"] != "3100" and not m["account"].startswith(INCOME_PREFIX)]
     log("## Bank rules")
     n = 0
     for prefix, account_ids, m in wanted:

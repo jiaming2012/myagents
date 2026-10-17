@@ -171,15 +171,16 @@ boa_merchants:
   - {pattern: "ZOHODISTRIB",              account: "6340"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
   - {pattern: "Angel Mechanic",           account: "6440"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
   - {pattern: "VERIZON WIRELESS",         account: "6390"}   # Telephone and Internet
+  - {pattern: "PROG CASUALTY",            account: "6210"}   # Progressive by its ACH descriptor (bank rules see only the description)
+  - {pattern: "GOOGLE *Worksp",           account: "6340"}   # Google Workspace by its card descriptor
   # --- operator answers 2026-10-17 ---
   - {pattern: "Counter Credit",           account: "4000"}   # cash sales deposited at the counter
   - {pattern: "BKOFAMERICA ATM",          account: "4000"}   # cash sales deposited at the ATM
   - {pattern: "AVIS RENT-A-CAR",          account: "3200"}   # personal trip -> owner draw
   - {pattern: "U-HAUL",                   account: "6310"}   # Rent - Other: move to a storage unit closer to the truck
-  # --- still waiting on the operator (see docs/zoho-books-handoff-boa.md §4, question 2) ---
-  # - {pattern: "Spotify",                account: "????"}   # business (payments.yaml) or personal?
-  # - {pattern: "MEDIUM.COM",             account: "3200"}   # payments.yaml says personal
-  # - {pattern: "DOORDASHDASHPAS",        account: "3200"}   # DashPass, personal?
-  # - {pattern: "PEACOCKTVLL",            account: "3200"}   # Peacock TV, personal?
-  # - {pattern: "UBER *",                 account: "????"}
-  # - {pattern: "APPLE CASH SENT MONEY",  account: "6450"}   # like Cash App wages?
+  - {pattern: "Spotify",                  account: "6340"}   # Software & Web: music on the truck (operator 2026-10-17)
+  - {pattern: "MEDIUM.COM",               account: "3200"}   # Owner's Draws (operator 2026-10-17)
+  - {pattern: "DOORDASHDASHPAS",          account: "3200"}   # DashPass -> owner draw
+  - {pattern: "PEACOCKTVLL",              account: "3200"}   # Peacock TV -> owner draw
+  - {pattern: "UBER *",                   account: "3200"}   # owner draw
+  - {pattern: "APPLE CASH SENT MONEY",    account: "6450"}   # Wages and Salaries: payroll sent to an employee

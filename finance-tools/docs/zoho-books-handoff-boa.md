@@ -26,10 +26,14 @@ script, API budget, repairs); this file is only what is different about BoA.
   1778 = 1,245.79 (`eStmt_2025-12-31.pdf`), 2119 = 1,856.36 owed
   (`December_Statement_2025-12-10.pdf`, no activity 12/11–12/31) — both equal to the
   feed-implied figures. Card 2119: book = feed = 1,651.98, 0 uncategorized.
-- **Still open**: (a) question 2 — Spotify (9), Medium (7), DoorDash (6 + 2 returns),
-  Peacock (2 + retry + 2 returns), Uber (1), Apple Cash sends (2): 32 lines, net −381.85,
-  uncategorized; checking book is 434.01 vs feed 52.16 until they are posted. Uncomment
-  the lines at the end of `boa_merchants:` with the answer, `task zoho:boa:apply`.
+- **Question 2 answered and posted 2026-10-17**: Spotify = 6340 (music on the truck),
+  Medium / DoorDash DashPass / Peacock / Uber = owner draws, Apple Cash sends = 6450
+  wages. **All three feed accounts now read book = feed with 0 uncategorized**: 1778 =
+  52.16, 2119 = 1,651.98 owed, Bluevine = 0.00. 34 BoA bank rules created
+  (`task zoho:boa:rules`): the BoA block plus the shared merchants seen on BoA, withdrawals
+  only; "Jamal Cole" is deliberately excluded (ACH descriptors carry `INDN:JAMAL COLE`), and
+  deposit patterns (2803 contributions, cash sales) stay script-driven.
+- **Still open**: (a) nothing to classify.
   (b) Chase Ink shows −1,550.00 (payments, no charges). The card is closed and cannot be
   feed-linked (operator 2026-10-17); the operator is sending its statements (Dec 2025
   onward): post the 2025-12-31 balance as an opening journal and import the 2026
@@ -43,7 +47,12 @@ script, API budget, repairs); this file is only what is different about BoA.
   (d) Month-end records: `task zoho:boa:reconcile` prints Zoho's closing per month; fill
   `closing_balances.yaml` with the statement month-end balances (checking statements
   close on the last day; the card statement closes on the 10th, so use the online daily
-  balance) and run it with `-- --apply`. Checking closings only match once (a) is done.
+  balance) and run it with `-- --apply`. Zoho's closings with everything posted
+  (checking / card owed): Jan 0.00 / 1,697.04 · Feb 295.00 / 1,684.34 · Mar 1,012.65 /
+  1,757.94 · Apr 0.00 / 1,650.92 · May 136.03 / 1,712.48 · Jun −377.43 / 1,721.64 · Jul
+  −61.43 / 1,799.14 · Aug −275.04 / 1,727.28 · Sep 632.12 / 1,806.20 (the 0.00 months are
+  real: overdraft protection pulls exactly the shortfall). Bluevine: 81.76 Jan–Apr, 71.76
+  May, 0.00 Jun.
 - Corrections to §2–3 below, from the actual feed: checking credit = money out; the 7
   "transfer to CHK 2803" lines are owner **draws**; the card payments are the 3
   "payment to CRD 2119" + 4 "BUSINESS CARD Bill Payment" lines; the card's credit =
