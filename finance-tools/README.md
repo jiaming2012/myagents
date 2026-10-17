@@ -195,6 +195,35 @@ To use it as a step in a flow, call the gate before the work:
       - task: zoho:reconcile
 ```
 
+## Debt Paydown Plan (aggressive, without overdrafting)
+
+```bash
+task debt                              # owe / headroom / this month's move / outlook
+task debt:plan -- --monthly-extra 600  # commit $600/month extra on top of minimums
+task debt:goal -- --by 2028-06         # solve: monthly extra needed to be debt-free by then
+task debt -- --snowball                # smallest balance first instead of highest APR
+task debt -- --json                    # machine-readable
+task debt:test                         # unit tests, no network
+```
+
+Balances are live: Monarch for personal debts (`monarch_match`), Zoho Books for business
+ones (`zoho_match` on the registry account). `debts.yaml` adds what the sources do not
+know: APR, minimum payment, funding account, and whether a card is carried. A debt
+missing from `debts.yaml` still runs with an **assumed** APR (cards 24.99%, loans
+9.99%) and is flagged until you fill it in. Cards whose registry payment is
+`autopay_type: full` are "paid in full monthly" and stay out of the paydown unless
+`carried: true`.
+
+The "without overdrafting" part is section 2: for every depository funding account,
+headroom = balance − every scheduled debit in the next 30 days (the same engine as
+`task week`) − the account's `min_balance` floor. Positive headroom is pooled per
+category (personal money pays personal debt, business pays business) and pointed at
+the avalanche target; negative headroom is an autopay already at risk and is shown
+with the debits that will bounce. Income is not modeled, so headroom is money you can
+send this instant, not a forecast of next month. The outlook simulates minimums only
+versus your plan, month by month, rolling each paid-off minimum into the next target,
+and `--by` binary-searches the monthly extra a deadline needs.
+
 ## Registry Gaps (what the forecast can't see)
 
 ```bash

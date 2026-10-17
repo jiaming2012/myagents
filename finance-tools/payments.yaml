@@ -14,6 +14,7 @@
 #   category:        personal | business
 #   monarch_match:   name as it appears in Monarch Money (for balance lookup)
 #   xero_account_id:  Xero account name for balance lookup (business accounts)
+#   zoho_match:      bank account name in Zoho Books (business balances for debt_plan.py)
 #   role:            income_hub | business | null
 #   nicknames:       list of human-readable aliases for account resolution from calendar notes
 
@@ -54,6 +55,7 @@ accounts:
     category: business
     monarch_match: null
     xero_account_id: "Mercury: Operations (4613)"   # was "Mercury: Income (4613)", which Xero does not have; the ledger calls 4613 Operations
+    zoho_match: "Operations ••4613"
     nicknames: ["Mercury Business", "Mercury Biz Income", "Mercury 4613"]
 
   - id: mercury-biz-outgoing-5396
@@ -64,6 +66,7 @@ accounts:
     category: business
     monarch_match: null
     xero_account_id: "Mercury: Outgoing ACH (5396)"
+    zoho_match: "Outgoing ACH ••5396"
     nicknames: ["Mercury Outgoing", "Mercury Biz Outgoing", "Mercury 5396"]
 
   - id: mercury-biz-operations-0551
@@ -85,6 +88,7 @@ accounts:
     category: business
     monarch_match: null
     xero_account_id: "Mercury: Profit (7818)"
+    zoho_match: "Taxes ••7818"
     nicknames: ["Mercury Profit", "Mercury Biz Savings", "Mercury 7818"]
 
   # --- Capital One ---
@@ -148,6 +152,7 @@ accounts:
     category: business
     monarch_match: null  # not connected to Monarch; Adv Plus 2803 shows transfers "to CHK 1778" so the account is live
     xero_account_id: "BoA: Business Checking (1778)"   # NOT in Xero's bank list (2026-10-17) -> balance unknown. Rent, Progressive, OnPay, Sling, PayPal draw from here blind.
+    zoho_match: "Business Adv Fundamentals"
     nicknames: ["BoA Business", "BoA 1778", "Bank of America 1778", "BoA Biz"]
     min_balance: 500
     alert_on: error
@@ -187,6 +192,7 @@ accounts:
     category: business
     monarch_match: null  # TODO: confirm Monarch name
     xero_account_id: "BoA: CORP Account (2119)"
+    zoho_match: "CORP Account - Business Adv Customized Cash Rewards - 2119"
     nicknames: ["BoA Corp", "BoA 2119", "Bank of America 2119", "CORP"]
 
   - id: boa-cash-rewards-5819
@@ -208,6 +214,7 @@ accounts:
     category: business
     monarch_match: null  # TODO: confirm Monarch name
     xero_account_id: null
+    zoho_match: "Chase Ink ••7667"
     nicknames: ["Chase 7667", "Ink 7667", "Chase Ink", "Ink"]
 
   - id: chase-wholefds-7006
@@ -355,6 +362,7 @@ accounts:
     category: business
     monarch_match: "Business Basic Checking Account (...3617)"
     xero_account_id: "LFCU: Checking"
+    zoho_match: "LFCU Business Checking ••7011"
     nicknames: ["Lafayette Business", "Lafayette 3617", "Lafayette Federal 3617"]
 
   - id: lafayette-savings-3617s0
@@ -365,6 +373,7 @@ accounts:
     category: business
     monarch_match: null
     xero_account_id: "LFCU: Savings"
+    zoho_match: "LFCU Share Savings ••3617"
     nicknames: ["Lafayette Savings", "LFCU Savings"]
 
   # --- Fidelity ---

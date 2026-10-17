@@ -27,6 +27,29 @@ tasks:
     cmds:
       - python sync_status.py --fail-on error {{.CLI_ARGS}}
 
+  debt:
+    desc: "Debt paydown plan: what you owe, what each funding account can send today without overdrafting, this month's move, outlook (debts.yaml for APRs)"
+    cmds:
+      - task: sync-status:warn
+      - python debt_plan.py {{.CLI_ARGS}}
+
+  debt:plan:
+    desc: "Plan with a committed monthly extra: task finance:debt:plan -- --monthly-extra 600"
+    cmds:
+      - task: sync-status:warn
+      - python debt_plan.py {{.CLI_ARGS}}
+
+  debt:goal:
+    desc: "Monthly extra needed to be debt-free by a month: task finance:debt:goal -- --by 2028-06"
+    cmds:
+      - task: sync-status:warn
+      - python debt_plan.py {{.CLI_ARGS}}
+
+  debt:test:
+    desc: Unit tests for the debt planner (no network)
+    cmds:
+      - python -m pytest tests/test_debt_plan.py -q
+
   payments:
     desc: List upcoming payment events (default 7 days)
     cmds:
