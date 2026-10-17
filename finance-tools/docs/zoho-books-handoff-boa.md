@@ -1,9 +1,18 @@
-# Handoff — reconcile the Bank of America accounts in Zoho Books
+# Handoff — the feed-only accounts in Zoho Books (BoA, Lafayette FCU, Bluevine, Chase Ink, Wells Fargo)
 
-Written 2026-10-16 for a fresh session. Read `zoho-books-runbook.md` first (credentials,
-script, API budget, repairs); this file is only what is different about BoA.
+Written 2026-10-16 for a fresh session as the Bank of America handoff; §0 is the running
+status for every non-Mercury account, which all go through the same `--feed-only` mode.
+Read `zoho-books-runbook.md` first (credentials, script, API budget, repairs); §1–§4
+below are the original BoA notes and keep their corrections in §0.
 
-## 0. Status 2026-10-17 — steps 1–3 done, waiting on the operator for 4–5
+## 0. Status 2026-10-17 — every account booked, book = bank on all of them
+
+Accounts and where they stand (all 0 uncategorized): BoA checking 1778 = 52.16 (Jan–Sep
+reconciled against the statements), BoA CORP card 2119 = 1,651.98 owed, Bluevine 2189
+(closed) = 0.00, Chase Ink 7667 (closed, imported) = 5,708.07 owed = Oct 14 statement,
+LFCU checking 7011 = 6.84, LFCU savings 3617 = 455.67, Wells Fargo Signify 4637 = never
+used. Optional only: month-end records for 2119 / Chase (by statement period) and LFCU
+(needs the statements). Details per account follow.
 
 - `task zoho:boa` (dry run) / `task zoho:boa:apply` / `task zoho:boa:reconcile` /
   `task zoho:boa:rules` exist (`--feed-only` in `zoho_books_recon.py`). Classification:

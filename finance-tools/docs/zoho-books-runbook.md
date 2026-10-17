@@ -28,9 +28,16 @@ task zoho:toast-dump            # refresh .toast_preview_2026.json
 task zoho:recon                 # dry run: pairing table, plan, unmatched merchants
 task zoho:recon:apply           # categorize / match / Toast journals; stops cleanly at the API cap
 task zoho:reconcile -- --apply  # month-end records for any newly complete month
+task zoho:boa                   # feed-only accounts (BoA, LFCU, Bluevine, Chase, Wells): dry run
+task zoho:boa:apply             # post them (owner contributions, cash sales and transfers have no rules)
 ```
+Month end, for the feed-only accounts: add the new statement ending balance to
+`closing_balances.yaml`, then `task zoho:boa:reconcile -- --apply` (a record is only
+posted when Zoho's closing equals the statement).
+
 Unmatched merchants are printed with a suggested `merchants.yaml` line; add them and
-re-run apply. New patterns also need `task zoho:rules -- --apply` so future feed lines
+re-run apply. New patterns also need `task zoho:rules -- --apply` (Mercury) or
+`task zoho:boa:rules -- --apply` (feed-only accounts) so future feed lines
 auto-categorize (rules fire at feed import, i.e. zero API calls).
 
 ## 3. How the script decides (per Mercury transaction)
