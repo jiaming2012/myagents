@@ -373,6 +373,17 @@ accounts:
     nicknames: ["Wells Fargo Autograph", "WF Autograph", "Wells 8694", "WF 8694"]
     # Added 2026-10-15: found via Monarch (balance -$4,411), absent from registry.
 
+  - id: wells-signify-4637
+    name: "Signify Business Cash"
+    institution: "Wells Fargo"
+    last4: "4637"
+    type: credit
+    category: business
+    monarch_match: null
+    xero_account_id: "Wells: Signify Business (4637)"
+    nicknames: ["Wells Fargo Signify", "WF Signify", "Signify", "Wells 4637"]
+    # Added 2026-10-17: feed-linked in Zoho Books; never used (operator), 0.00 balance.
+
   # --- Loans ---
   - id: truist-auto-1001
     name: "Auto Loan"

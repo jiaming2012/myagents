@@ -81,6 +81,7 @@ BANK_NAMES = {
     # Lafayette Federal Credit Union, feed-linked 2026-10-17 (opened March 2026)
     "LFCU: Checking": "LFCU Business Checking ••7011",
     "LFCU: Savings": "LFCU Share Savings ••3617",
+    "Wells: Signify Business (4637)": "WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637",   # feed-linked 2026-10-17, never used
 }
 BANK_TYPES = {"Chase Ink ••7667": "credit_card"}   # Zoho account_type when the script creates it (default bank)
 INCOME_PREFIX = "4"                                  # codes 4xxx: money in is a deposit to income, not a refund

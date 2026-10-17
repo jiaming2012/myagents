@@ -144,6 +144,8 @@ zoho_feed_only_accounts:
   - xero_bank_account: "LFCU: Savings"                    # Zoho "LFCU Share Savings ••3617" 1622286000000207090
     kind: bank
     opened: "2026-03-04"
+  - xero_bank_account: "Wells: Signify Business (4637)"   # Zoho 1622286000000207157, feed-linked 2026-10-17; never used (operator), 0 lines
+    kind: credit_card
 
 # description substring -> the other account of the transfer (Xero bank name)
 boa_transfers:
