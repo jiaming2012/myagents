@@ -143,20 +143,31 @@ def resolve_balance(account, monarch_balances, xero_balances):
     A source that is entirely empty (login expired, org disconnected) yields
     None, never a silent 0.0 -- callers treat None as "unknown", not "broke".
     """
+    balance, source, _as_of = resolve_balance_entry(account, monarch_balances, xero_balances)
+    return balance, source
+
+
+def resolve_balance_entry(account, monarch_balances, xero_balances):
+    """Like resolve_balance, but also returns when the source last refreshed.
+
+    Returns (balance, source, as_of). as_of is the source's last-updated
+    timestamp (ISO string) when it reports one, else None. A Monarch connection
+    that stopped syncing months ago still returns its last balance, so callers
+    that project forward must look at as_of before trusting the number.
+    """
     from registry_gaps import norm_name
 
     # Try Xero first (for business accounts with xero_account_id)
     xero_id = account.get("xero_account_id")
     if xero_id:
-        if xero_balances:
-            if xero_id in xero_balances:
-                return xero_balances[xero_id]["balance"], "xero"
-            # Xero is up but this account is absent from the bank summary: zero balance
-            return 0.0, "xero"
-        return None, None
+        if xero_balances and xero_id in xero_balances:
+            return xero_balances[xero_id]["balance"], "xero", None
+        # Xero down, or the org has no such bank account (e.g. a BoA account that
+        # was never connected): either way nobody can vouch for the balance.
+        return None, None, None
 
     if not monarch_balances:
-        return None, None
+        return None, None, None
 
     # Exact (normalized) Monarch match -- ignores ®/™ and case differences
     monarch_match = account.get("monarch_match")
@@ -164,7 +175,7 @@ def resolve_balance(account, monarch_balances, xero_balances):
         target = norm_name(monarch_match)
         for name, data in monarch_balances.items():
             if norm_name(name) == target:
-                return data["balance"], "monarch"
+                return data["balance"], "monarch", data.get("updated")
 
     # Partial match on Monarch (displayName contains last4); prefer active accounts
     last4 = account.get("last4")
@@ -172,9 +183,9 @@ def resolve_balance(account, monarch_balances, xero_balances):
         candidates = [(name, data) for name, data in monarch_balances.items() if last4 in name]
         candidates.sort(key=lambda nd: (bool(nd[1].get("deactivated")), bool(nd[1].get("hidden"))))
         if candidates:
-            return candidates[0][1]["balance"], "monarch"
+            return candidates[0][1]["balance"], "monarch", candidates[0][1].get("updated")
 
-    return None, None
+    return None, None, None
 
 
 def print_report(config, monarch_balances, xero_balances, windows):

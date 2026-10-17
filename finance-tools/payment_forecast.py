@@ -32,9 +32,10 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from coverage_report import fetch_monarch_balances, resolve_balance, load_payments_yaml
+    from coverage_report import (fetch_monarch_balances, resolve_balance, resolve_balance_entry,
+                                 load_payments_yaml)
     from monarch_client import MonarchAuthError
-    from registry_gaps import check_liabilities_without_payment
+    from registry_gaps import check_liabilities_without_payment, MONARCH_STALE_DAYS
 except ImportError as e:
     print(f"Error: coverage_report.py / monarch_client.py / registry_gaps.py must be in the same directory ({e})",
           file=sys.stderr)
@@ -153,9 +154,14 @@ def resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balan
                            credit_account=None):
     """Resolve the actual payment amount, using live balance for credit cards.
 
-    For credit card payments (identified by having a credit_account), the payment
-    amount is the absolute value of the credit card's current balance from Monarch.
-    This handles the Monarch convention where credit card balances are negative.
+    For credit card payments (identified by having a credit_account) that pay the
+    statement in full, the payment amount is the absolute value of the credit
+    card's current balance from Monarch. This handles the Monarch convention where
+    credit card balances are negative. The current balance includes charges made
+    after the statement closed, so it is an upper bound on the autopay debit.
+
+    A minimum-payment autopay (autopay_type: min) never draws the full balance:
+    the payments.yaml amount is the estimate (record the last observed minimum).
 
     For non-credit-card payments, returns the amount from payments.yaml.
 
@@ -170,6 +176,8 @@ def resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balan
         float: The resolved payment amount.
     """
     if credit_account and credit_account.get("type") == "credit":
+        if payment.get("autopay_type") == "min":
+            return payment.get("amount", 0.0)
         balance, source = resolve_balance(credit_account, monarch_balances, xero_balances)
         if balance is not None:
             return abs(balance)
@@ -261,16 +269,35 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
             payments_by_account.setdefault(fa, []).append(p)
 
     forecast_accounts = []
+    card_charges = []
     total_outgoing = 0.0
     total_available = 0.0
+    total_card_charges = 0.0
 
     for acct_id, acct_payments in sorted(payments_by_account.items()):
         account = accounts_by_id.get(acct_id)
         if not account:
             continue
 
+        # A bill charged to a credit card does not draw down a bank account; the
+        # card's own payment entry does. List these separately instead of
+        # projecting a "shortfall" on an account that is a line of credit.
+        if account.get("type") == "credit":
+            for p in acct_payments:
+                for d in get_payment_dates_in_horizon(p["day_of_month"], days):
+                    amount = p.get("amount", 0.0)
+                    total_card_charges += amount
+                    card_charges.append({
+                        "name": p["name"],
+                        "amount": amount,
+                        "due_date": d,
+                        "card_id": acct_id,
+                        "card_name": account.get("name", acct_id),
+                    })
+            continue
+
         # Resolve current balance
-        balance, source = resolve_balance(account, monarch_balances, xero_balances)
+        balance, source, as_of = resolve_balance_entry(account, monarch_balances, xero_balances)
         if balance is None:
             if warn_missing:
                 print(f"Warning: Could not fetch balance for {account.get('name', acct_id)}, "
@@ -281,6 +308,7 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
         current_balance = balance
         balance_source = source or "unknown"
         min_balance = account.get("min_balance", 0)
+        stale_days = _balance_age_days(as_of)
 
         # Compute upcoming payment amounts and dates
         account_payments = []
@@ -289,11 +317,20 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
             credit_account = _find_credit_card_for_payment(p, all_accounts)
             amount = resolve_payment_amount(p, accounts_by_id, monarch_balances, xero_balances,
                                             credit_account=credit_account)
+            # A "full" card payment is priced from the card's live balance; if that
+            # feed stopped syncing, the amount is as old as the feed. Say so.
+            amount_stale_days = None
+            if credit_account and p.get("autopay_type") != "min":
+                _b, _s, card_as_of = resolve_balance_entry(credit_account, monarch_balances, xero_balances)
+                age = _balance_age_days(card_as_of)
+                if age is not None and age > MONARCH_STALE_DAYS:
+                    amount_stale_days = age
             for d in dates:
                 account_payments.append({
                     "name": p["name"],
                     "amount": amount,
                     "due_date": d,
+                    "amount_stale_days": amount_stale_days,
                 })
 
         # Sort by due date
@@ -327,20 +364,58 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
             "institution": account.get("institution"),
             "current_balance": current_balance,
             "balance_source": balance_source,
+            "balance_as_of": as_of,
+            "stale_days": stale_days,
+            "stale": stale_days is not None and stale_days > MONARCH_STALE_DAYS,
             "payments": account_payments,
             "projected_balance": projected_balance,
             "min_balance": min_balance,
             "severity": severity,
         })
 
+    card_charges.sort(key=lambda x: x["due_date"])
+
     return {
         "accounts": forecast_accounts,
+        "card_charges": card_charges,
         "summary": {
             "total_outgoing": total_outgoing,
             "total_available": total_available,
             "net_position": total_available - total_outgoing,
+            "total_card_charges": total_card_charges,
         },
     }
+
+
+def _balance_age_days(as_of, today=None):
+    """Days since a balance source last refreshed, or None when unknown."""
+    if not as_of:
+        return None
+    try:
+        updated = datetime.fromisoformat(str(as_of).replace("Z", "+00:00")).date()
+    except ValueError:
+        return None
+    today = today or datetime.now().date()
+    return (today - updated).days
+
+
+def _amount_note(payment):
+    """' [card balance STALE 53d]' when a full-payment amount came from a dead feed."""
+    age = payment.get("amount_stale_days")
+    if age is None:
+        return ""
+    return f" {Color.YELLOW}[card bal. STALE {age}d]{Color.RESET}"
+
+
+def balance_label(acct):
+    """'$3,068.53 (monarch, as of 2026-10-16)' with a STALE marker when too old."""
+    label = f"${acct['current_balance']:,.2f} ({acct['balance_source']}"
+    if acct.get("balance_as_of"):
+        label += f", as of {str(acct['balance_as_of'])[:10]}"
+    label += ")"
+    if acct.get("stale"):
+        label += f" {Color.BOLD_RED}STALE {acct['stale_days']}d{Color.RESET}"
+    return label
 
 
 def print_grouped_view(forecast, days):
@@ -360,7 +435,7 @@ def print_grouped_view(forecast, days):
             acct_label += f" (..{acct['last4']})"
 
         print(f"\n  {Color.BOLD}{acct_label}{Color.RESET}")
-        print(f"  Current Balance: ${acct['current_balance']:,.2f} ({acct['balance_source']})")
+        print(f"  Current Balance: {balance_label(acct)}")
 
         if acct["payments"]:
             table_data = []
@@ -369,8 +444,9 @@ def print_grouped_view(forecast, days):
                     p["due_date"].strftime("%b %d"),
                     p["name"],
                     f"${p['amount']:,.2f}",
+                    _amount_note(p),
                 ])
-            print(tabulate_fn(table_data, headers=["Date", "Payment", "Amount"],
+            print(tabulate_fn(table_data, headers=["Date", "Payment", "Amount", ""],
                               tablefmt="simple", stralign="left", numalign="right"))
         else:
             print("  No payments in this period.")
@@ -390,6 +466,47 @@ def print_grouped_view(forecast, days):
         if i < len(forecast["accounts"]) - 1:
             print(f"  {'─' * 60}")
 
+    print_card_charges(forecast)
+
+
+def print_card_charges(forecast):
+    """Bills charged to a credit card: no bank draw, they ride on the card's payment."""
+    charges = forecast.get("card_charges") or []
+    if not charges:
+        return
+    print(f"\n  {Color.BOLD}Charged to credit cards (no bank draw; paid via the card's own entry){Color.RESET}")
+    table_data = [[c["due_date"].strftime("%b %d"), c["name"], f"${c['amount']:,.2f}", c["card_name"]]
+                  for c in charges]
+    print(tabulate_fn(table_data, headers=["Date", "Charge", "Amount", "Card"],
+                      tablefmt="simple", stralign="left", numalign="right"))
+
+
+def print_funding_check(forecast, days):
+    """One row per bank account: what it holds, what leaves it, and whether that clears."""
+    print(f"\n  {Color.BOLD}FUNDING CHECK -- per bank account, next {days} days{Color.RESET}")
+    table_data = []
+    for acct in forecast["accounts"]:
+        due = sum(p["amount"] for p in acct["payments"])
+        label = acct["name"] + (f" (..{acct['last4']})" if acct.get("last4") else "")
+        bal = f"${acct['current_balance']:,.2f}"
+        if acct.get("balance_as_of"):
+            bal += f" @{str(acct['balance_as_of'])[5:10]}"
+        proj = acct["projected_balance"]
+        if acct["severity"] == "unknown":
+            verdict = f"{Color.YELLOW}UNKNOWN balance ({acct['balance_source']}){Color.RESET}"
+        elif acct["severity"] == "error":
+            verdict = f"{Color.BOLD_RED}SHORT by ${abs(proj):,.2f}{Color.RESET}"
+        elif acct["severity"] == "warning":
+            verdict = f"{Color.YELLOW}OK, but ${proj:,.2f} < ${acct['min_balance']:,.0f} floor{Color.RESET}"
+        else:
+            verdict = f"{Color.GREEN}OK, ${proj:,.2f} left{Color.RESET}"
+        if acct.get("stale"):
+            verdict += f" {Color.BOLD_RED}[balance STALE {acct['stale_days']}d]{Color.RESET}"
+        table_data.append([label, bal, f"${due:,.2f}", len(acct["payments"]), verdict])
+    print(tabulate_fn(table_data,
+                      headers=["Bank account", "Balance", "Due", "#", "Verdict"],
+                      tablefmt="simple", stralign="left", numalign="right"))
+
 
 def print_timeline_view(forecast, days):
     """Print chronological payment timeline across all accounts (D-08).
@@ -408,6 +525,7 @@ def print_timeline_view(forecast, days):
                 "due_date": p["due_date"],
                 "name": p["name"],
                 "amount": p["amount"],
+                "amount_stale_days": p.get("amount_stale_days"),
                 "account_name": acct["name"],
                 "account_id": acct["id"],
             })
@@ -445,7 +563,7 @@ def print_timeline_view(forecast, days):
         table_data.append([
             p["due_date"].strftime("%b %d"),
             p["name"],
-            f"${p['amount']:,.2f}",
+            f"${p['amount']:,.2f}" + _amount_note(p),
             p["account_name"],
             rb_str,
         ])
@@ -455,6 +573,9 @@ def print_timeline_view(forecast, days):
                       headers=["Date", "Payment", "Amount", "Funding Account", "Running Balance"],
                       tablefmt="simple", stralign="left", numalign="right"))
 
+    print_funding_check(forecast, days)
+    print_card_charges(forecast)
+
 
 def print_summary(forecast):
     """Print summary line with totals (D-09)."""
@@ -462,7 +583,9 @@ def print_summary(forecast):
     print(f"\n{'═' * 70}")
     print(f"  SUMMARY")
 
-    print(f"    Total Outgoing:   ${summary['total_outgoing']:>12,.2f}")
+    print(f"    Total Outgoing:   ${summary['total_outgoing']:>12,.2f}   (bank draws)")
+    if summary.get("total_card_charges"):
+        print(f"    Card Charges:     ${summary['total_card_charges']:>12,.2f}   (on cards, not a bank draw)")
     print(f"    Total Available:  ${summary['total_available']:>12,.2f}")
 
     net = summary["net_position"]

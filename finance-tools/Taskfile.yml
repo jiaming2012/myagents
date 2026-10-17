@@ -56,6 +56,11 @@ tasks:
     cmds:
       - python payment_forecast.py --days 30
 
+  week:
+    desc: "THE weekly question: what leaves each bank account in the next 7 days, and does it clear? (timeline + per-account funding verdict + card charges)"
+    cmds:
+      - python payment_forecast.py --days 7 --timeline {{.CLI_ARGS}}
+
   due:
     desc: "Everything due in the next 7 days from payments.yaml -- deterministic, no logins"
     cmds:

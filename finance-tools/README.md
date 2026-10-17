@@ -116,6 +116,38 @@ Say you get a new $50/month subscription billed on the 15th, paid from your Capi
 
 3. **Verify:** Run `task forecast` — the new bill should appear under the Capital One account section.
 
+## The Weekly Question (one command)
+
+```bash
+task week                  # next 7 days: timeline, per-bank-account funding verdict, card charges
+task week -- --days 14     # same, two weeks out
+```
+
+`task week` answers "how much leaves each bank account this week, and does it
+clear?" in one screen: the dated timeline with a running balance, then a
+**FUNDING CHECK** row per bank account (balance and its as-of date, total due,
+count, verdict: `OK`, `OK but below floor`, `SHORT by $x`, or `UNKNOWN balance`),
+then anything charged to a credit card. Exit code is 0/1/2 for ok/warning/error.
+
+Conventions the forecast relies on (all in `payments.yaml`):
+
+- **`day_of_month` is the bank-side posting day**, not the card's due date. Card
+  autopay lands at the bank 1-4 days after the card shows it (Amex says the
+  16th; Recurring ACH 4354 sees it on the 17th). The point of the forecast is
+  bank funding, so the registry records the day the money actually leaves.
+- **`autopay_type: min` uses the `amount` in the file** (record the last
+  observed minimum). Only `autopay_type: full` prices the payment from the
+  card's live balance, and that balance includes post-statement charges, so it
+  is an upper bound on the debit.
+- **A credit card as `funding_account` is a card charge, not a bank draw.** It
+  is listed under "Charged to credit cards" and excluded from bank totals; the
+  card's own payment entry is what reaches a bank account.
+- **Stale balances are labelled, never hidden.** A funding account whose Monarch
+  connection stopped syncing shows `STALE Nd`; a full-payment amount priced
+  from a dead card feed shows `[card bal. STALE Nd]`. An account no source can
+  vouch for (e.g. a BoA account that is in neither Monarch nor Xero) is
+  `UNKNOWN`, not `$0.00`.
+
 ## What's Due (no logins)
 
 ```bash

@@ -123,10 +123,12 @@ def test_resolve_balance_never_returns_silent_zero_when_source_is_down():
     }
     acct2 = {"id": "y", "monarch_match": "Nope (...1111)", "last4": "1111"}
     assert resolve_balance(acct2, monarch, {}) == (421.53, "monarch")
-    # Xero: whole source empty -> unknown; source up but account absent -> 0.0
+    # Xero: whole source empty -> unknown; an account the org never connected -> also unknown
+    # (a BoA account absent from Xero's bank summary is not a $0 account)
     biz = {"id": "b", "xero_account_id": "Mercury: Ops"}
     assert resolve_balance(biz, {}, {}) == (None, None)
-    assert resolve_balance(biz, {}, {"Other": {"balance": 1.0}}) == (0.0, "xero")
+    assert resolve_balance(biz, {}, {"Other": {"balance": 1.0}}) == (None, None)
+    assert resolve_balance(biz, {}, {"Mercury: Ops": {"balance": 7.5}}) == (7.5, "xero")
 
 
 def test_registry_closed_in_monarch():
