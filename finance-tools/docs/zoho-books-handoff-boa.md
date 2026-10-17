@@ -50,10 +50,13 @@ script, API budget, repairs); this file is only what is different about BoA.
   `Bluevine ••2849 (closed, empty)` = `1622286000000207068`, no lines, delete if it never
   held business money). The no-feed placeholder was deleted, opening 81.76 (feed-implied)
   posted, 2 lines booked, book = feed = 0.00.
-  (d) Month-end records: `task zoho:boa:reconcile` prints Zoho's closing per month; fill
-  `closing_balances.yaml` with the statement month-end balances (checking statements
-  close on the last day; the card statement closes on the 10th, so use the online daily
-  balance) and run it with `-- --apply`. Zoho's closings with everything posted
+  (d) Month-end records — **1778 DONE 2026-10-17**: the nine eStmt PDFs
+  (`…/2025_taxes/yumyums/bank_statements/boa_1778/`, periods = calendar months) gave the
+  ending balances in `closing_balances.yaml`; all nine equalled Zoho's closings and
+  Jan–Sep are `reconciled`. Card 2119, Bluevine and Chase Ink have no records yet: the
+  card and Chase statements close on the 10th/14th, so either reconcile them by statement
+  period (extend `reconcile_feed_only` to take arbitrary periods) or leave them — book =
+  statement/feed on all three. Zoho's closings with everything posted
   (checking / card owed): Jan 0.00 / 1,697.04 · Feb 295.00 / 1,684.34 · Mar 1,012.65 /
   1,757.94 · Apr 0.00 / 1,650.92 · May 136.03 / 1,712.48 · Jun −377.43 / 1,721.64 · Jul
   −61.43 / 1,799.14 · Aug −275.04 / 1,727.28 · Sep 632.12 / 1,806.20 (the 0.00 months are

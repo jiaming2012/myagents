@@ -103,7 +103,10 @@ statement import (one call), and not re-running what the checkpoint already cove
 - **Bank of America + Bluevine + Chase Ink** (checking 1778, CORP card 2119, Bluevine 2189
   closed, all feed-linked; Chase Ink 7667 closed card imported from its statements): every
   2026 line posted 2026-10-17, opening journals from the Dec 2025 statements, book = feed
-  (Chase = Oct 14 statement, 5,708.07 owed), 34 BoA rules. Open: monthly statement
-  closings for the reconciliation records — `zoho-books-handoff-boa.md` §0.
+  (Chase = Oct 14 statement, 5,708.07 owed), 34 BoA rules; 1778 Jan–Sep reconciliation
+  records posted from the monthly statements. Weekly: `task zoho:boa:apply` after the
+  Mercury cycle; month-end: add the new eStmt ending balance to `closing_balances.yaml`,
+  `task zoho:boa:reconcile -- --apply`. Open: records for the card / Chase (statement
+  periods) — `zoho-books-handoff-boa.md` §0.
 - Decision still open: switch from Xero (criteria in the plan §7). The Xero Monday
   pre-coder keeps running meanwhile and shares `merchants.yaml`.

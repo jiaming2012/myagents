@@ -7,7 +7,16 @@
 
 "BoA: Business Checking (1778)":
   "2025-12-31": 1245.79      # eStmt_2025-12-31.pdf, ending balance (= feed-implied)
-  # "2026-01": 0.00          # monthly statement ending balances, when supplied
+  # monthly statement ending balances (eStmt_2026-MM-DD.pdf, 2025_taxes/yumyums/bank_statements/boa_1778), read 2026-10-17
+  "2026-01": 0.00
+  "2026-02": 295.00
+  "2026-03": 1012.65
+  "2026-04": 0.00
+  "2026-05": 136.03
+  "2026-06": -377.43
+  "2026-07": -61.43
+  "2026-08": -275.04
+  "2026-09": 632.12
 
 "BoA: CORP Account (2119)":
   "2025-12-31": 1856.36      # December_Statement_2025-12-10.pdf new balance; no activity 12/11-12/31 (= feed-implied)
