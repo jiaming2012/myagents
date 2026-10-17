@@ -78,6 +78,9 @@ BANK_NAMES = {
     # own accounts with no feed in Zoho, created by the script so transfers have a far side
     "Chase: Ink (7667)": "Chase Ink ••7667",
     "Bluevine: Checking * Closed": "Bluevine Checking ••2189 (closed)",   # feed-linked 2026-10-17 (closed, 0.00)
+    # Lafayette Federal Credit Union, feed-linked 2026-10-17 (opened March 2026)
+    "LFCU: Checking": "LFCU Business Checking ••7011",
+    "LFCU: Savings": "LFCU Share Savings ••3617",
 }
 BANK_TYPES = {"Chase Ink ••7667": "credit_card"}   # Zoho account_type when the script creates it (default bank)
 INCOME_PREFIX = "4"                                  # codes 4xxx: money in is a deposit to income, not a refund
@@ -86,7 +89,7 @@ CLOSING_FILE = HERE / "closing_balances.yaml"   # operator-supplied statement ba
 # Chart of accounts to seed: code -> (name, zoho account_type).
 # Stock Zoho accounts that stand in for a Xero code just get the code added.
 STOCK = {"5000": "Cost of Goods Sold", "3200": "Drawings", "3100": "Owner's Equity", "4000": "Sales",
-         "6050": "Bank Fees and Charges", "6055": "Credit Card Charges"}
+         "6050": "Bank Fees and Charges", "6055": "Credit Card Charges", "4400": "Interest Income"}
 CHART = {
     "1100": ("Cash on Hand", "other_current_asset"),
     "1310": ("Other Receivables", "other_current_asset"),
@@ -100,6 +103,7 @@ CHART = {
     "4000": ("Sale of Goods", "income"),
     "4200": ("Other Revenues", "income"),
     "4300": ("Returns and Allowances", "income"),
+    "4400": ("Interest Income", "income"),             # credit-union dividends
     "5000": ("Cost of Goods Sold", "cost_of_goods_sold"),
     "5200": ("COGS - Supplies", "cost_of_goods_sold"),
     "6000": ("Advertising", "expense"),
@@ -936,6 +940,8 @@ def reconcile_feed_only(z, plans, apply, log):
             sel = [d for d in docs if not d["_rec"] and lo.isoformat() <= d["date"] <= last.isoformat()]
             if not sel and acct.get("closed") and first.isoformat() > acct["closed"]:
                 continue  # closed account, nothing after the closure
+            if acct.get("opened") and last.isoformat() < acct["opened"]:
+                continue  # account did not exist yet
             z_close = sum(d["_signed"] for d in docs if d["_rec"] and d["date"] < lo.isoformat()) + sum(d["_signed"] for d in sel)
             z_bal = z_close if acct["kind"] == "bank" else -z_close     # card: report as amount owed
             stmt = stmts.get(f"{first:%Y-%m}")
@@ -980,7 +986,12 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
     if boa and banks:
         # the BoA block plus the shared merchants seen on a BoA line this run; withdrawals
         # only, so deposit patterns (owner contributions 3100, sales 4xxx) stay script-driven
-        boa_ids = ",".join(banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"] for a in boa)
+        # live feed accounts only (closed / statement-imported ones get no new lines);
+        # Zoho caps account_ids at 100 characters, i.e. five ids
+        live = [a for a in boa if not a.get("closed") and not a.get("no_rules")]
+        boa_ids = ",".join(banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"] for a in live)
+        if len(boa_ids) > 100:
+            sys.exit(f"rules: account_ids is {len(boa_ids)} chars (Zoho max 100) — mark more accounts no_rules")
         seen = set(MATCHED_PATTERNS)
         for a in boa:   # posted documents keep "name | <bank description>", so the history can be re-matched
             zid = banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"]

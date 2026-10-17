@@ -137,6 +137,13 @@ zoho_feed_only_accounts:
     closed: "2026-06-02"
   - xero_bank_account: "Chase: Ink (7667)"                # Zoho "Chase Ink ••7667" 1622286000000212046; closed card, 2026 activity imported from the statements 2026-10-17
     kind: credit_card
+    no_rules: true                                        # no feed, nothing new arrives
+  - xero_bank_account: "LFCU: Checking"                   # Zoho "LFCU Business Checking ••7011" 1622286000000207096, feed-linked 2026-10-17
+    kind: bank
+    opened: "2026-03-04"                                  # no reconciliation records before this
+  - xero_bank_account: "LFCU: Savings"                    # Zoho "LFCU Share Savings ••3617" 1622286000000207090
+    kind: bank
+    opened: "2026-03-04"
 
 # description substring -> the other account of the transfer (Xero bank name)
 boa_transfers:
@@ -153,12 +160,19 @@ boa_transfers:
   "AUTOMATIC PAYMENT - THANK YOU": "BoA: Business Checking (1778)"    # Chase side of the autopay
   "Payment Thank You":            "BoA: Business Checking (1778)"     # Chase side of the retried autopay
   "Returned Payment":             "BoA: Business Checking (1778)"     # Chase side of a bounced autopay (BoA: RETURN OF POSTED CHECK)
+  # Lafayette FCU: S 0000 = share savings, S 0001 = business checking; *****0621 is the owner's personal LFCU account
+  "Transfer From S 0000":         "LFCU: Savings"                     # checking side: savings -> checking (incl. overdraft transfer)
+  "Transfer To S 0001":           "LFCU: Checking"                    # savings side of the same
 
 boa_merchants:
   # --- owner (2803 is the personal BoA checking) ---
   - {pattern: "transfer from CHK 2803",   account: "3100"}   # Owner's Equity: owner contribution
   - {pattern: "Zelle payment from JAMAL COLE", account: "3100"}
   - {pattern: "transfer to CHK 2803",     account: "3200"}   # Owner's Draws
+  - {pattern: "Transfer From Jamal Cole", account: "3100"}   # LFCU: from the owner's personal 0621 -> owner contribution
+  - {pattern: "Transfer To Jamal Cole",   account: "3200"}   # LFCU: to the owner's personal 0621 -> owner draw
+  - {pattern: "Dividend Deposit",         account: "4400"}   # LFCU share dividends -> Interest Income
+  - {pattern: "Monthly Maintenance Fee",  account: "6050"}   # LFCU
   # --- bank / card fees ---
   - {pattern: "OVERDRAFT ITEM FEE",       account: "6050"}   # Bank Fees and Charges
   - {pattern: "Monthly Fee Business Adv", account: "6050"}

@@ -33,6 +33,18 @@ script, API budget, repairs); this file is only what is different about BoA.
   (`task zoho:boa:rules`): the BoA block plus the shared merchants seen on BoA, withdrawals
   only; "Jamal Cole" is deliberately excluded (ACH descriptors carry `INDN:JAMAL COLE`), and
   deposit patterns (2803 contributions, cash sales) stay script-driven.
+- **Lafayette FCU DONE 2026-10-17** (operator feed-linked both): `LFCU Business Checking
+  ••7011` = `1622286000000207096` (22 lines) and `LFCU Share Savings ••3617` =
+  `1622286000000207090` (14 lines), both opened 2026-03-04 from zero (no opening journal;
+  `opened:` in merchants.yaml keeps Jan–Feb out of the monthly table). Conventions:
+  `*****0621` = the owner's personal LFCU account → contributions in (3100) / draws out
+  (3200); `S 0000`/`S 0001` = savings/checking shares → internal transfers (3, incl. the
+  overdraft transfer); Commerce Management 6300, Cash App 6450, maintenance fee 6050,
+  share dividends → 4400 Interest Income (stock account, code set). Book = feed: checking
+  6.84, savings 455.67, 0 uncategorized. Rules: 5 more (39 total); Zoho caps a rule's
+  `account_ids` at 100 characters (five ids), so rules now cover only the live feed
+  accounts (`closed:` / `no_rules:` entries are skipped). Monthly records await the LFCU
+  statements (Mar–Sep); Zoho's closings are in the report.
 - **Still open**: (a) nothing to classify.
   (b) Chase Ink DONE 2026-10-17: closed card (cannot be feed-linked, operator still paying
   it off). The 11 statements (`…/2025_taxes/yumyums/bank_statements/chase_7667/`, closing
