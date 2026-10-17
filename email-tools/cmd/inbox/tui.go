@@ -195,7 +195,7 @@ func (m model) buildItems() []displayItem {
 				continue
 			}
 			sort.Slice(items, func(i, j int) bool {
-				return items[i].Date.After(items[j].Date)
+				return items[i].Date.After(items[j].Date.Time)
 			})
 			display = append(display, displayItem{
 				isHeader: true,
@@ -213,7 +213,7 @@ func (m model) buildItems() []displayItem {
 	items := make([]pipeline.EmailInsight, len(cat.items))
 	copy(items, cat.items)
 	sort.Slice(items, func(i, j int) bool {
-		return items[i].Date.After(items[j].Date)
+		return items[i].Date.After(items[j].Date.Time)
 	})
 
 	var display []displayItem
@@ -621,7 +621,7 @@ func (m model) View() string {
 				subj = subj[:maxSubj-3] + "..."
 			}
 
-			age := formatAge(time.Since(ins.Date))
+			age := formatAge(time.Since(ins.Date.Time))
 
 			if navIdx == m.cursor {
 				b.WriteString(activeTab.Render(cursor) + fmt.Sprintf("%s %s %q  %s\n", unreadMark, urgTag, subj, dimStyle.Render(age+" ago")))

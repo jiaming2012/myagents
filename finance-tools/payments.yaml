@@ -31,6 +31,10 @@ accounts:
     min_balance: 500
     # alert_on: error (default) | warning | none — controls email alert threshold
     alert_on: error
+    # NO BALANCE SOURCE (2026-10-17): not in Monarch, and MERCURY_PERSONAL_API_KEY in .env is a
+    # placeholder (401 from Mercury). This is the hub that wires money into Recurring ACH 4354,
+    # so until a real personal Mercury API token is minted the forecast cannot see what is
+    # available to top 4354 up.
 
   - id: mercury-personal-savings-5237
     name: "Mercury Personal Savings"
@@ -49,7 +53,7 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "Mercury: Income (4613)"
+    xero_account_id: "Mercury: Operations (4613)"   # was "Mercury: Income (4613)", which Xero does not have; the ledger calls 4613 Operations
     nicknames: ["Mercury Business", "Mercury Biz Income", "Mercury 4613"]
 
   - id: mercury-biz-outgoing-5396
@@ -70,6 +74,7 @@ accounts:
     category: business
     monarch_match: null
     xero_account_id: "Mercury: Operations (0551)"
+    inactive: true   # archived in Mercury with $0 (API, 2026-10-17); Xero still carries a $13,489 ledger balance that is not real money
     nicknames: ["Mercury Operations", "Mercury Biz Ops", "Mercury 0551"]
 
   - id: mercury-biz-profit-7818
@@ -141,8 +146,8 @@ accounts:
     last4: "1778"
     type: depository
     category: business
-    monarch_match: null  # TODO: confirm Monarch name
-    xero_account_id: "BoA: Business Checking (1778)"
+    monarch_match: null  # not connected to Monarch; Adv Plus 2803 shows transfers "to CHK 1778" so the account is live
+    xero_account_id: "BoA: Business Checking (1778)"   # NOT in Xero's bank list (2026-10-17) -> balance unknown. Rent, Progressive, OnPay, Sling, PayPal draw from here blind.
     nicknames: ["BoA Business", "BoA 1778", "Bank of America 1778", "BoA Biz"]
     min_balance: 500
     alert_on: error
@@ -322,6 +327,16 @@ accounts:
     monarch_match: "Share Savings (...7517)"
     nicknames: ["NavyFed Savings", "NavyFed 7517", "Navy Federal 7517", "Share Savings"]
 
+  - id: navyfed-visa
+    name: "Visa Platinum"
+    institution: "Navy Federal"
+    last4: null
+    type: credit
+    category: personal
+    monarch_match: "Visa Platinum"
+    inactive: true   # $0 balance and no payment activity Jun-Oct 2026 (added 2026-10-17 so the gap check stops flagging it); drop inactive when the card is used
+    nicknames: ["NavyFed Visa", "Navy Federal Visa"]
+
   # --- Lafayette Federal ---
   - id: lafayette-checking-0621
     name: "Checking"
@@ -408,13 +423,24 @@ accounts:
 # =============================================================
 # Each payment has:
 #   name:             display name (matches Zoho Calendar event title prefix)
-#   amount:           monthly amount
-#   day_of_month:     due date
-#   funding_account:  references accounts[].id above
+#   amount:           monthly amount. For autopay_type: min this is the LAST OBSERVED
+#                     minimum (the forecast never draws the full card balance for a min).
+#                     For autopay_type: full it is ignored when the card balance is live.
+#   day_of_month:     the day the debit POSTS TO THE BANK ACCOUNT, not the card's due
+#                     date. Card autopay lands at the bank 1-4 days after the card
+#                     shows it (Amex 16th -> bank 17th). The forecast exists to check
+#                     bank funding, so the bank-side date is the one that matters.
+#   funding_account:  references accounts[].id above. A credit card here means the
+#                     bill is charged to that card (no bank draw); the card's own
+#                     payment entry carries it to the bank.
+#   pays_account:     for card/loan payments, the accounts[].id being paid down
 #   autopay:          true | false | null (needs review)
 #   autopay_type:     full | min | null
 #   category:         personal | business
 #   zoho_match:       title prefix in Zoho Calendar (for automated matching)
+#
+# Dates and amounts below were reconciled against 120 days of Monarch history
+# for Recurring ACH 4354 on 2026-10-17 (Jun 20 - Oct 16, 2026).
 
 payments:
   # --- Business ---
@@ -454,7 +480,7 @@ payments:
     autopay_type: null
     category: personal
     zoho_match: "Rent"
-    notes: "Paid from BoA business debit - review if this should move"
+    notes: "CONFIRM amount and account. Jul 2026 shows $1,900 'Bilt Payment' (7/6) and $2,184 'Akelius' (7/7) leaving Lafayette checking 0621, not $1,000 from BoA 1778. Lafayette's Monarch feed is stale since 2026-08-03 and BoA 1778 has no balance source at all, so the forecast cannot see this bill's funding."
 
   - name: "Progressive (Insurance)"
     amount: 450.10
@@ -473,7 +499,7 @@ payments:
     autopay_type: null
     category: personal
     zoho_match: "Chase"
-    notes: "NEEDS REVIEW - which account pays this?"
+    notes: "CONFIRM: Zoho says $156 on the 9th from 4354, but no Chase debit posted to 4354 on/near the 9th in Jun-Oct 2026. Likely a duplicate of 'Whole Foods Chase (full)' or paid from a card -- pick one and delete the other."
 
   - name: "Sling"
     amount: 10.00
@@ -496,103 +522,105 @@ payments:
   - name: "Northwest (Mail Forwarding)"
     amount: 20.00
     day_of_month: 16
-    funding_account: mercury-biz-operations-0551
+    funding_account: mercury-biz-outgoing-5396   # was mercury-biz-operations-0551, which Mercury shows archived with $0
     autopay: null
     autopay_type: null
     category: personal
     zoho_match: "Northwest"
-    notes: "NEEDS REVIEW - which account pays this?"
+    notes: "CONFIRM funding: moved to the business outgoing-ACH account (transfer_rules.business_outgoing) because 0551 is archived. Verify against the Mercury 5396 statement."
 
   # --- Credit Card Payments (from Google Sheet, not in Zoho Calendar) ---
-  - name: "BoA Platinum Plus 1 - 5153"
-    amount: 953.00
+  - name: "BoA Platinum Plus 1 - 5153 (min)"
+    amount: 137.00   # was 953: bank debits Jul-Oct 2026 were $66, $83(?), $248, $137 -- minimums, never the balance
     day_of_month: 1
     funding_account: cap1-recurring-4354
+    pays_account: boa-plat1-5153
     autopay: true
     autopay_type: min
     category: personal
     zoho_match: null
-    notes: "From Google Sheet - not yet in Zoho Calendar"
+    notes: "Minimum payment on the 1st (posted 7/1, 9/1, 10/1). Card carries $4,960 at ~$77/mo interest + a $40 late fee 8/4. Monarch BoA feed stale since 2026-08-25."
 
-  - name: "BoA Platinum Plus - 7250"
-    amount: 1801.00
-    day_of_month: 18
+  - name: "BoA Platinum Plus 2 - 7250 (min)"
+    amount: 78.00    # was 1,801 "full": bank debits were $78 (7/20) and $76 (8/19) -- a minimum, not the balance
+    day_of_month: 19   # card shows the 18th; the ACH posts to 4354 on the 19th-20th
     funding_account: cap1-recurring-4354
-    pays_account: boa-plat2-7250   # name heuristic missed this card; Monarch shows a $42.80 "Pending Payment" on the 9th -- CONFIRM amount/type
+    pays_account: boa-plat2-7250
     autopay: true
-    autopay_type: full
+    autopay_type: min
     category: personal
     zoho_match: null
-    notes: "From Google Sheet - not yet in Zoho Calendar"
+    notes: "No BoA debit seen on 4354 for Sep 18-20 -- CONFIRM the Sep payment went through. Card $2,519 at ~$51/mo interest."
 
-  - name: "BoA Visa Platinum - 2986"
+  - name: "BoA Visa Platinum - 2986 (full)"
     amount: 0.00
-    day_of_month: 7
+    day_of_month: 8    # was 7; bank debits posted 7/6 ($2.55) and 9/8 ($3.97)
     funding_account: cap1-recurring-4354
+    pays_account: boa-visa-2986
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: null
-    notes: "From Google Sheet - pays in full"
+    notes: "Pays in full; balance is a few dollars."
 
   - name: "Discover Gray (full)"
     amount: 0.00
     day_of_month: 19
     funding_account: cap1-recurring-4354
+    pays_account: discover-gray-8886
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: null
-    notes: "From Google Sheet - pays in full"
+    notes: "Balance $0 and no payment Jun-Oct 2026; harmless at $0."
 
-  - name: "Discover Rainbow (min)"
+  - name: "Discover Rainbow (full)"
     amount: 0.00
-    day_of_month: 13
+    day_of_month: 14   # was 13 "min": every debit is 'DIRECTPAY FULL BALANCE', posting to 4354 on the 14th
     funding_account: cap1-recurring-4354
+    pays_account: discover-rainbow-9035
     autopay: true
-    autopay_type: min
+    autopay_type: full
     category: personal
     zoho_match: null
+    notes: "Statement balance in full on the 14th: $110.66, $38.31, $411.40, $199.62 (Jul-Oct 2026)."
 
   - name: "Citi Rewards+ (full)"
     amount: 556.68
-    day_of_month: 22   # was 1; Monarch shows AUTOPAY on the 21st (card) / 22nd-23rd (bank), Jun-Oct 2026
+    day_of_month: 22   # card AUTOPAY on the 21st; bank debit 6/23, 7/22, 9/28 (no Aug debit seen)
     funding_account: cap1-recurring-4354
+    pays_account: citi-rewards-8281
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: null
-    notes: "From Google Sheet"
+    notes: "Statement balance in full: $27.12, $101.00, $299.79 (Jun, Jul, Sep 2026). Sep debit posted the 28th, so treat the 22nd as earliest."
 
   - name: "Whole Foods Chase (full)"
     amount: 868.49
-    day_of_month: 1
+    day_of_month: 3    # was 1; the one bank debit seen posted 7/3 ($274.48)
     funding_account: cap1-recurring-4354
+    pays_account: chase-wholefds-7006
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: null
-    notes: "From Google Sheet"
+    notes: "CONFIRM: only one Chase debit from 4354 in Jun-Oct 2026 (7/3, $274.48). Monarch Chase feed stale since 2026-05-22, so the card's real balance is unknown. May be the same bill as 'Chase Credit Card' below."
 
   - name: "Apple Card (full)"
     amount: 0.00
-    day_of_month: 30
+    day_of_month: 24   # was 30; card pays the 23rd, bank debit posts the 24th-25th (6/24, 7/24, 8/24, 9/25)
     funding_account: cap1-recurring-4354
+    pays_account: apple-card
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: null
-    notes: "From Google Sheet - pays in full"
+    notes: "Statement balance in full: $62.96, $95.43, $262.21, $168.30 (Jun-Sep 2026)."
 
-  - name: "BILT (full)"
-    amount: 0.00
-    day_of_month: 27
-    funding_account: cap1-recurring-4354
-    autopay: true
-    autopay_type: full
-    category: personal
-    zoho_match: null
-    notes: "From Google Sheet - NEEDS REVIEW autopay status"
+  # BILT (full) removed 2026-10-17: the card is inactive in Monarch (balance $0 since
+  # 2026-02-28) and no BILT debit hit 4354 in Jun-Oct 2026. The $1,900 "Bilt Payment"
+  # on Lafayette 0621 (7/6) is a rent payment routed through Bilt -- see Rent.
 
   - name: "ESCI - Heartland"
     amount: 55.00
@@ -602,7 +630,7 @@ payments:
     autopay_type: null
     category: null
     zoho_match: null
-    notes: ""
+    notes: "CONFIRM: no ESCI debit on 4354 in Jun-Oct 2026. Paid from a card, or discontinued?"
 
   - name: "ESCI - Gov"
     amount: 39.04
@@ -612,7 +640,7 @@ payments:
     autopay_type: null
     category: null
     zoho_match: null
-    notes: ""
+    notes: "CONFIRM: no ESCI debit on 4354 in Jun-Oct 2026. Paid from a card, or discontinued?"
 
   # --- Added 2026-10-15 from Monarch history (Jun-Oct 2026); all debit Recurring ACH 4354 ---
   - name: "Truist Auto Loan"
@@ -634,7 +662,7 @@ payments:
     autopay_type: null
     category: personal
     zoho_match: "Dept of Education"
-    notes: "Posted 22nd-24th as $156.30; Monarch stream predicts $167.24. No loan account in registry yet."
+    notes: "Posted 6/23, 7/22, 8/24 as $156.30; NO Sep 2026 debit seen -- CONFIRM (forbearance? paid elsewhere?). Monarch stream predicts $167.24 on 10/24. No loan account in registry yet."
 
   - name: "Perkins Loan"
     amount: 42.43
@@ -648,18 +676,18 @@ payments:
 
   - name: "Amex Platinum (full)"
     amount: 0.00
-    day_of_month: 16
+    day_of_month: 17   # card AUTOPAY on the 15th-16th; the ACH posts to 4354 on the 17th (8/17, 9/17)
     funding_account: cap1-recurring-4354
     pays_account: amex-platinum-2004
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: "Amex Platinum"
-    notes: "AUTOPAY on the 16th for the statement balance ($246-$1,450 Jun-Sep). Returned twice (Jun, Jul) with $29 fee each; carrying ~$73/mo interest."
+    notes: "Statement balance in full: $597.02, $1,450.01, $246.26, and $715.32 showing on the card 10/15 (bank debit due 10/17-19). Returned twice (Jun, Jul) with $29 fee each; carrying ~$73/mo interest. The forecast uses the live card balance, which is >= the statement amount."
 
   - name: "Amex Delta (full)"
     amount: 0.00
-    day_of_month: 5
+    day_of_month: 6    # was 5; the one debit seen posted 7/6 ($2.38)
     funding_account: cap1-recurring-4354
     pays_account: amex-delta-1008
     autopay: true
@@ -681,14 +709,36 @@ payments:
 
   - name: "Wells Fargo Autograph (full)"
     amount: 0.00
-    day_of_month: 27
+    day_of_month: 28   # card AUTOMATIC PAYMENT on the 26th-27th; the one 4354 debit posted 7/28
     funding_account: cap1-recurring-4354
     pays_account: wells-autograph-8694
     autopay: true
     autopay_type: full
     category: personal
     zoho_match: "Wells Fargo"
-    notes: "Autopay 27th. Aug payment of $2,109.96 was reversed; late fee Sep 27; balance $4,411 (Oct 2026). CONFIRM funding account (only one $349.67 debit seen from 4354)."
+    notes: "AT RISK. Card-side payments: $1,851.33 (6/26), $349.67 (7/27, the only one debited from 4354), $2,109.96 (8/27, reversed). Nothing since: $25 late fee 9/27, $96.98 interest 10/2, balance $4,411. CONFIRM which account autopay points at and that it is funded by 10/26."
+
+  # --- Added 2026-10-17 from Monarch history (first seen on Recurring ACH 4354 in Oct 2026) ---
+  - name: "IRS"
+    amount: 256.00
+    day_of_month: 13
+    funding_account: cap1-recurring-4354
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "IRS"
+    notes: "CONFIRM: $256.00 debited 2026-10-13, first IRS debit in 120 days. Installment agreement? If one-off, remove."
+
+  - name: "Lafayette FCU Personal Loan"
+    amount: 615.64
+    day_of_month: 14
+    funding_account: cap1-recurring-4354
+    pays_account: lafayette-loan-0621
+    autopay: true
+    autopay_type: null
+    category: personal
+    zoho_match: "Lafayette"
+    notes: "CONFIRM: $615.64 debited 2026-10-14, first Lafayette debit from 4354 in 120 days (earlier months likely paid from Lafayette checking 0621, whose Monarch feed is stale since 2026-08-03). Loan balance $20,578."
 
 # =============================================================
 # Transfer Rules

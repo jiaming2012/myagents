@@ -150,13 +150,13 @@ func runIngestChunk(args []string) {
 	if insights == nil {
 		insights = &pipeline.InsightsManifest{
 			Version:   1,
-			CreatedAt: time.Now(),
+			CreatedAt: pipeline.FlexTime{Time: time.Now()},
 			ModelUsed: "claude-code",
 		}
 	}
 
 	// Merge new insights
-	now := time.Now()
+	now := pipeline.FlexTime{Time: time.Now()}
 	for _, p := range parsed {
 		orig, ok := emailByID[p.EmailID]
 		if !ok {
@@ -169,7 +169,7 @@ func runIngestChunk(args []string) {
 			Subject:      orig.Subject,
 			From:         orig.From,
 			Snippet:      orig.Snippet,
-			Date:         orig.Date,
+			Date:         pipeline.FlexTime{Time: orig.Date},
 			Unread:       orig.Unread,
 			AnalyzedAt:   now,
 			Topic:        p.Topic,
