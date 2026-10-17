@@ -40,3 +40,20 @@ tasks:
         for b in $(git for-each-ref --format='%(refname:short)' refs/heads/worktree-*); do
           printf '%-40s %s unmerged\n' "$b" "$(git rev-list --count main..$b)"
         done
+
+  worktrees:prune:
+    desc: Remove worktrees whose branch is fully on main and delete those local branches (locked or dirty worktrees are skipped)
+    cmds:
+      - |
+        git worktree list --porcelain | awk '/^worktree /{wt=$2} /^branch /{print wt, $2}' | while read -r wt ref; do
+          b=${ref#refs/heads/}
+          case "$b" in worktree-*) ;; *) continue ;; esac
+          n=$(git rev-list --count "main..$b")
+          if [ "$n" != 0 ]; then echo "keep   $b ($n commits not on main)"; continue; fi
+          if git worktree remove "$wt" 2>/dev/null; then
+            git branch -d "$b" >/dev/null 2>&1 && echo "pruned $b" || echo "pruned $b (worktree removed; branch left in place)"
+          else
+            echo "skip   $b (locked or has uncommitted changes: $wt)"
+          fi
+        done
+        git worktree prune
