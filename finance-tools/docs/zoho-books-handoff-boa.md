@@ -34,11 +34,17 @@ script, API budget, repairs); this file is only what is different about BoA.
   only; "Jamal Cole" is deliberately excluded (ACH descriptors carry `INDN:JAMAL COLE`), and
   deposit patterns (2803 contributions, cash sales) stay script-driven.
 - **Still open**: (a) nothing to classify.
-  (b) Chase Ink shows −1,550.00 (payments, no charges). The card is closed and cannot be
-  feed-linked (operator 2026-10-17); the operator is sending its statements (Dec 2025
-  onward): post the 2025-12-31 balance as an opening journal and import the 2026
-  charges/interest with `POST /bankstatements` (credit = money in, see runbook §5), then
-  match the 17 autopay transfers. (c) Bluevine DONE 2026-10-17: the operator feed-linked it
+  (b) Chase Ink DONE 2026-10-17: closed card (cannot be feed-linked, operator still paying
+  it off). The 11 statements (`…/2025_taxes/yumyums/bank_statements/chase_7667/`, closing
+  on the 14th, Dec 2025 → Oct 2026) chain exactly; 2025-12-31 balance = Dec 14 new balance
+  5,964.17 (no activity 12/15–12/31), posted as the opening journal. The 31 lines of 2026
+  activity (13 autopays, 4 returned payments, 3 QuickBooks, 1 LastPass, 10 interest) were
+  pushed in with `POST /bankstatements` (statement `1622286000000219028`; same convention
+  as 0551: credit = money in, so a payment lands as a `debit` line like on 2119), then
+  `task zoho:boa:apply` matched the 17 payments/returns to the BoA-side transfer documents
+  (match-first: the dates differ by a day) and coded the rest. Book = 5,708.07 owed = the
+  Oct 14 statement. Keep the account active while it is being paid down; statements
+  close on the 14th, so reconcile it by statement period or skip records. (c) Bluevine DONE 2026-10-17: the operator feed-linked it
   (two accounts arrived unnamed as "Yumyums Kitchen LLC"; renamed `Bluevine Checking
   ••2189 (closed)` = `1622286000000207062`, now a feed-only account in merchants.yaml, and
   `Bluevine ••2849 (closed, empty)` = `1622286000000207068`, no lines, delete if it never

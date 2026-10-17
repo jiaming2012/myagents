@@ -135,6 +135,8 @@ zoho_feed_only_accounts:
   - xero_bank_account: "Bluevine: Checking * Closed"      # Zoho "Bluevine Checking ••2189 (closed)" 1622286000000207062, feed-linked 2026-10-17
     kind: bank
     closed: "2026-06-02"
+  - xero_bank_account: "Chase: Ink (7667)"                # Zoho "Chase Ink ••7667" 1622286000000212046; closed card, 2026 activity imported from the statements 2026-10-17
+    kind: credit_card
 
 # description substring -> the other account of the transfer (Xero bank name)
 boa_transfers:
@@ -148,6 +150,9 @@ boa_transfers:
   "CHASE CREDIT CRD":             "Chase: Ink (7667)"                 # autopay of the Chase Ink business card (operator 2026-10-17: a liability)
   "DES:Bluevine":                 "Bluevine: Checking * Closed"       # BoA side: transfer out of the closed Bluevine checking (operator 2026-10-17)
   "Transfer to Bank of Ame":      "BoA: Business Checking (1778)"     # Bluevine side of the same transfer
+  "AUTOMATIC PAYMENT - THANK YOU": "BoA: Business Checking (1778)"    # Chase side of the autopay
+  "Payment Thank You":            "BoA: Business Checking (1778)"     # Chase side of the retried autopay
+  "Returned Payment":             "BoA: Business Checking (1778)"     # Chase side of a bounced autopay (BoA: RETURN OF POSTED CHECK)
 
 boa_merchants:
   # --- owner (2803 is the personal BoA checking) ---
@@ -160,6 +165,9 @@ boa_merchants:
   - {pattern: "Dormancy Fee",             account: "6050"}   # Bluevine
   - {pattern: "LATE PAYMENT FEE",         account: "6055"}   # Credit Card Charges (card 2119)
   - {pattern: "FINANCE CHARGE",           account: "6055"}
+  - {pattern: "PURCHASE INTEREST CHARGE", account: "6055"}   # Chase Ink
+  - {pattern: "QBooks",                   account: "6340"}   # Intuit QuickBooks on the Chase Ink (descriptor "INTUIT *QBooks")
+  - {pattern: "LASTPASS",                 account: "6340"}
   # --- vendors not already in merchants: ---
   - {pattern: "GOOGLE *ADS",              account: "6000"}   # Advertising
   - {pattern: "Google ADS",               account: "6000"}
