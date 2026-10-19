@@ -12,3 +12,4 @@ __pycache__/
 forecast_preview.html
 .mm
 .rewards_snapshot.json
+.zoho_sheet_token.json

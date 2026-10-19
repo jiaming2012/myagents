@@ -184,6 +184,26 @@ tasks:
     cmds:
       - python zoho_books_recon.py --feed-only --rules {{.CLI_ARGS}}
 
+  zoho:sheet:auth:
+    desc: "One-time: exchange a Zoho grant code (Self Client, scope ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ) for ZOHO_SHEET_REFRESH_TOKEN (docs/zoho-sheet-bills.md)"
+    cmds:
+      - python zoho_sheet.py --auth {{.CLI_ARGS}}
+
+  zoho:sheet:list:
+    desc: "List Zoho Sheet workbooks visible to the Sheet token"
+    cmds:
+      - python zoho_sheet.py --list
+
+  zoho:sheet:bills:
+    desc: "Create the 'Bills' Zoho Sheet workbook from the Google Sheets export in exports/ (all 9 tabs, formulas and formatting)"
+    cmds:
+      - python zoho_sheet.py --upload exports/bills-google-sheet-2026-08-17.xlsx --name Bills
+
+  zoho:sheet:upload:
+    desc: "Upload any xlsx/csv/ods as a new Zoho Sheet workbook: task zoho:sheet:upload -- <file> [--name <name>]"
+    cmds:
+      - python zoho_sheet.py --upload {{.CLI_ARGS}}
+
   budget:
     desc: Monarch budget and goal tracker
     cmds:
