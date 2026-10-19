@@ -94,3 +94,32 @@ accounts. The sheet predates all of those.
 8. Add the three auto transfers to `transfer_rules` so the 4354 funding check can see the payday inflow.
 9. Quickbooks: confirm it still bills, else delete.
 10. 5819: mark `inactive: true` unless a statement shows activity.
+
+## 6. Owner answers and edits applied (2026-10-18)
+
+Owner answered the four open questions:
+
+| Question | Answer |
+|---|---|
+| Personal rent | Akelius (AKELIUSRES), ~$2,099, paid from **Mercury Personal 6343**. Not $1,350 to Natasha from 4354 any more. Posting day not stated. |
+| Chase Ink minimum funding | **BoA Business 1778** |
+| Sheet-only bills to add | Zoho $8, and the annual Northwest RA $125 / Namecheap $82 / Wyoming Agents $188. **Not** Todoist (free plan), not Mom, not Verizon Fios. Renewal months not stated. |
+| Quickbooks | Cancelled; delete. |
+
+Applied to `payments.yaml` (commit on branch `worktree-session-resume-task`):
+
+- §5.1 Rent split: `Rent (food truck location)` $1,000 business from Mercury 5396 on the 1st; new `Rent (Akelius)` $2,099 personal from Mercury Personal 6343, day assumed the 1st (verify from a 6343 statement, there is no feed).
+- §5.2 `Chase Credit Card` → `Chase Ink (min)` $164 on the 9th from BoA 1778, `pays_account: chase-ink-7667`, autopay min, business.
+- §5.3 `BoA CORP 2119 (min)` $45 on the 6th from BoA 1778.
+- §5.4 ESCI - Heartland and ESCI - Gov deleted (Perkins Loan entry covers the loan).
+- §5.5 Progressive: business, day 28.
+- §5.6 IRS: CONFIRM note replaced with "monthly installment agreement".
+- §5.7 Zoho Books $8 from BoA 1778 added, day set to the 1st pending a statement. Annual fees added under a new `annual_payments:` section that no loader reads yet (a null `day_of_month` in `payments:` would make the forecast fire every day); months to be filled in.
+- §5.9 Quickbooks deleted.
+
+Not applied:
+
+- §5.8 transfer rules: `transfer_rules` is hub configuration only, nothing reads a list of scheduled transfers, and the `4354 → Natasha` transfer is obsolete now that rent goes Akelius-from-Mercury. Needs code before it is worth recording.
+- §5.10 BoA 5819: left as is, no statement evidence either way. `task gaps:offline` still reports 5819 and Wells Signify 4637 without payment entries (down from four).
+
+Still to do by hand: delete the Quickbooks event and re-point the Chase event in the Zoho calendar; confirm the Akelius posting day and the Zoho billing day from statements; find the three annual renewal months.

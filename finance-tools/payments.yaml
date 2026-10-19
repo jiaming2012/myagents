@@ -444,14 +444,18 @@ accounts:
 
 payments:
   # --- Business ---
-  - name: "Quickbooks"
-    amount: 38.00
-    day_of_month: 11
-    funding_account: chase-ink-7667
+  # Quickbooks ($38 on Chase Ink, 11th) removed 2026-10-18: cancelled per owner; Bills sheet showed $0
+  # and its last funding account (BoA 0551) closed Jun 2026. Delete the Zoho calendar event too.
+
+  - name: "Zoho Books"
+    amount: 8.00
+    day_of_month: 1
+    funding_account: boa-business-1778
     autopay: true
     autopay_type: null
     category: business
-    zoho_match: "Quickbooks"
+    zoho_match: null
+    notes: "Added 2026-10-18 from the Bills sheet (PAYPAL *ZOHODISTRIB, BoA 1778), owner-confirmed still active. Billing day unknown: set to the 1st, fix from a BoA 1778 statement."
 
   - name: "OnPay"
     amount: 61.00
@@ -472,34 +476,57 @@ payments:
     zoho_match: "Spotify"
 
   # --- Personal ---
-  - name: "Rent"
+  - name: "Rent (food truck location)"
     amount: 1000.00
     day_of_month: 1
-    funding_account: boa-business-1778
+    funding_account: mercury-biz-outgoing-5396
+    autopay: false
+    autopay_type: null
+    category: business
+    zoho_match: "Rent"
+    notes: "Business location rent. Bills sheet: 'Rent | Business | 1,000 | BoA-1778'; Zoho Books posts it as Commerce Management from Mercury 5396 on the 1st, so 5396 is the funding account (2026-10-18)."
+
+  - name: "Rent (Akelius)"
+    amount: 2099.00
+    day_of_month: 1
+    funding_account: mercury-personal-6343
     autopay: false
     autopay_type: null
     category: personal
-    zoho_match: "Rent"
-    notes: "CONFIRM amount and account. Jul 2026 shows $1,900 'Bilt Payment' (7/6) and $2,184 'Akelius' (7/7) leaving Lafayette checking 0621, not $1,000 from BoA 1778. Lafayette's Monarch feed is stale since 2026-08-03 and BoA 1778 has no balance source at all, so the forecast cannot see this bill's funding."
+    zoho_match: null
+    notes: "Personal rent, owner-confirmed 2026-10-18: AKELIUSRES ~$2,099 from Mercury Personal 6343. Day assumed 1st (rent due date); the only observed posting was 7/7/2026 via Bilt on Lafayette 0621 before the switch. Mercury Personal has no balance/transaction feed yet, so verify amount and posting day from a 6343 statement. Replaces the sheet's 'Rent - RESA $1,350 to Natasha from 4354'."
 
   - name: "Progressive (Insurance)"
     amount: 450.10
-    day_of_month: 30
+    day_of_month: 28
     funding_account: boa-business-1778
     autopay: true
     autopay_type: null
-    category: personal
+    category: business
     zoho_match: "Progressive"
+    notes: "Business policy; posts the 28th (Bills sheet cross-check 2026-10-17, was 30th / personal)."
 
-  - name: "Chase Credit Card"
-    amount: 156.00
+  - name: "Chase Ink (min)"
+    amount: 164.00
     day_of_month: 9
-    funding_account: cap1-recurring-4354
-    autopay: null
-    autopay_type: null
-    category: personal
+    funding_account: boa-business-1778
+    pays_account: chase-ink-7667
+    autopay: true
+    autopay_type: min
+    category: business
     zoho_match: "Chase"
-    notes: "CONFIRM: Zoho says $156 on the 9th from 4354, but no Chase debit posted to 4354 on/near the 9th in Jun-Oct 2026. Likely a duplicate of 'Whole Foods Chase (full)' or paid from a card -- pick one and delete the other."
+    notes: "Was 'Chase Credit Card' $156 from 4354. Bills sheet: Chase Ink 7667 min 164, due the 8th, business-card autopay deducts from BoA; owner confirmed BoA 1778 as the funding account 2026-10-18. Explains why no Chase debit ever hit 4354. Update the Zoho calendar event's account."
+
+  - name: "BoA CORP 2119 (min)"
+    amount: 45.00
+    day_of_month: 6
+    funding_account: boa-business-1778
+    pays_account: boa-corp-2119
+    autopay: true
+    autopay_type: min
+    category: business
+    zoho_match: null
+    notes: "Added 2026-10-18 from the Bills sheet C.C. tab (business cards autopay min from BoA). Amount is the last known minimum; BoA 1778 has no feed to confirm."
 
   - name: "Sling"
     amount: 10.00
@@ -622,25 +649,8 @@ payments:
   # 2026-02-28) and no BILT debit hit 4354 in Jun-Oct 2026. The $1,900 "Bilt Payment"
   # on Lafayette 0621 (7/6) is a rent payment routed through Bilt -- see Rent.
 
-  - name: "ESCI - Heartland"
-    amount: 55.00
-    day_of_month: 10
-    funding_account: cap1-recurring-4354
-    autopay: true
-    autopay_type: null
-    category: null
-    zoho_match: null
-    notes: "CONFIRM: no ESCI debit on 4354 in Jun-Oct 2026. Paid from a card, or discontinued?"
-
-  - name: "ESCI - Gov"
-    amount: 39.04
-    day_of_month: 10
-    funding_account: cap1-recurring-4354
-    autopay: true
-    autopay_type: null
-    category: null
-    zoho_match: null
-    notes: "CONFIRM: no ESCI debit on 4354 in Jun-Oct 2026. Paid from a card, or discontinued?"
+  # ESCI - Heartland ($55) and ESCI - Gov ($39.04) removed 2026-10-18: the Bills sheet Loans tab shows
+  # ECSI is the servicer for the Perkins loan, which the 'Perkins Loan' entry below already covers.
 
   # --- Added 2026-10-15 from Monarch history (Jun-Oct 2026); all debit Recurring ACH 4354 ---
   - name: "Truist Auto Loan"
@@ -727,7 +737,7 @@ payments:
     autopay_type: null
     category: personal
     zoho_match: "IRS"
-    notes: "CONFIRM: $256.00 debited 2026-10-13, first IRS debit in 120 days. Installment agreement? If one-off, remove."
+    notes: "Monthly installment agreement (Bills sheet Loans tab, cross-check 2026-10-17). First debit seen 2026-10-13."
 
   - name: "Lafayette FCU Personal Loan"
     amount: 615.64
@@ -739,6 +749,36 @@ payments:
     category: personal
     zoho_match: "Lafayette"
     notes: "CONFIRM: $615.64 debited 2026-10-14, first Lafayette debit from 4354 in 120 days (earlier months likely paid from Lafayette checking 0621, whose Monarch feed is stale since 2026-08-03). Loan balance $20,578."
+
+# =============================================================
+# Annual Payments
+# =============================================================
+# Once-a-year draws, owner-confirmed active 2026-10-18 from the Bills sheet. Kept OUT of
+# `payments:` on purpose: every loader treats `payments:` as monthly (a null day_of_month
+# makes the forecast fire every day). Nothing reads this list yet; when the renewal months
+# are known, add `frequency: annual` support to payment_forecast.py and move them up.
+annual_payments:
+  - name: "Northwest Registered Agent (annual)"
+    amount: 125.00
+    month: null          # renewal month unknown; find it on a BoA 1778 statement
+    day_of_month: null
+    funding_account: boa-business-1778
+    category: business
+    notes: "Registered-agent renewal, distinct from the $20/month 'Northwest (Mail Forwarding)' entry."
+
+  - name: "Namecheap (annual)"
+    amount: 82.02        # 61.04 yumyums.kitchen + 20.98 jamalcole.me
+    month: null
+    day_of_month: null
+    funding_account: null   # not stated in the sheet
+    category: business
+
+  - name: "Wyoming Agents (annual)"
+    amount: 188.00       # 25 + 163
+    month: null
+    day_of_month: null
+    funding_account: null   # not stated in the sheet; marked personal there
+    category: personal
 
 # =============================================================
 # Transfer Rules
