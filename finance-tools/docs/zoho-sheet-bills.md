@@ -97,9 +97,17 @@ To have Bills inside the WorkDrive folder, the file has to be put there through 
   already rewritten to `DATE()` (conditional formats, validations and the `Accounts` name
   verified intact). Drag it into the WorkDrive folder; WorkDrive opens xlsx in Zoho Sheet
   and the formulas calculate. No API step needed.
-- Or by API: WorkDrive `POST https://www.zohoapis.com/workdrive/api/v1/upload` with
-  `parent_id=<folder id>` and `content=<file>`, scope `WorkDrive.files.CREATE` (a fourth
-  refresh token; the Sheet token does not cover it). Not built; the drag is faster.
+- Or by API (**what was done, 2026-10-19**): the operator re-minted `ZOHO_SHEET_REFRESH_TOKEN`
+  with `ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ,WorkDrive.files.CREATE` (the script's
+  `SCOPE` now includes it), then
+  `task zoho:workdrive:upload -- exports/bills-zoho-ready.xlsx --folder efajy36818489827748c8a271759dd235e0d6 --name Bills.xlsx`
+  put **Bills.xlsx** in the WorkDrive folder **bills** (My Folders of team Yumyums Smokin
+  Grille): file id `efajyb8b15e86a20a48e0b3edab6cf4fb18c5`,
+  https://workdrive.zoho.com/file/efajyb8b15e86a20a48e0b3edab6cf4fb18c5. WorkDrive's MD5
+  matched the local file. The folder id is the tail of the folder's WorkDrive URL; the token
+  cannot list folders (no `WorkDrive.files.READ`), so the operator supplies it.
+
+This WorkDrive file is now the copy to use. The two Sheet-API workbooks are orphans.
 
 ## Google-only functions → Zoho (done 2026-10-19)
 
