@@ -194,11 +194,6 @@ tasks:
     cmds:
       - python zoho_sheet.py --list
 
-  zoho:sheet:bills:
-    desc: "Create the 'Bills' Zoho Sheet workbook from the Google Sheets export in exports/ (all 9 tabs, formulas and formatting)"
-    cmds:
-      - python zoho_sheet.py --upload exports/bills-google-sheet-2026-08-17.xlsx --name Bills
-
   zoho:sheet:upload:
     desc: "Upload any xlsx/csv/ods as a new Zoho Sheet workbook: task zoho:sheet:upload -- <file> [--name <name>]"
     cmds:

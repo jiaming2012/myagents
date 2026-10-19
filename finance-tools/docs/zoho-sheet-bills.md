@@ -48,18 +48,22 @@ secret; a third refresh token, stored as `ZOHO_SHEET_REFRESH_TOKEN`.
    that has no `.env` of its own; `$FINANCE_TOOLS_DATA` overrides) and refuses the token if
    the Sheet scope is missing.
 
-## Then (same directory)
+## Result (2026-10-19)
 
+Operator minted the token and ran the upload the same day. Zoho Sheet workbook **Bills**,
+resource id `efajya53a7d6ef7a54db598c92cc10e9bc7cb`, all nine worksheets present
+(verified with `worksheet.list`). Nothing further to run for this sheet.
+
+The upload itself was a one-off, so it has no task target of its own (operator rule:
+targets are for reusable commands). It was run through the generic target:
 ```
-task zoho:sheet:bills      # creates the "Bills" workbook; prints resource id + URL
-task zoho:sheet:list       # sanity check: lists workbooks the token can see
+task zoho:sheet:upload -- exports/bills-google-sheet-2026-08-17.xlsx --name Bills
 ```
+Uploading again creates a second workbook named Bills; delete the extra in the Zoho UI.
 
-Once the branch is on main, `cd ~/projects/myagents/finance-tools` works for all of these.
-
-`task zoho:sheet:bills` is not idempotent: running it twice creates two workbooks named
-Bills (delete the extra one in the Zoho Sheet UI). For a different file:
-`task zoho:sheet:upload -- <file> [--name <name>]`.
+Reusable targets: `zoho:sheet:auth` (re-mint the token), `zoho:sheet:list`,
+`zoho:sheet:upload -- <file> [--name <name>]`. Once the branch is on main,
+`cd ~/projects/myagents/finance-tools` works for all of these.
 
 ## Files
 
