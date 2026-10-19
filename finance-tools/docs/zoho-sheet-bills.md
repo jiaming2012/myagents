@@ -82,6 +82,25 @@ Reusable targets: `zoho:sheet:auth` (re-mint the token), `zoho:sheet:list`,
 | Token | `.env` → `ZOHO_SHEET_REFRESH_TOKEN`; access-token cache `.zoho_sheet_token.json` (55 min, gitignored) |
 | API | `https://sheet.zoho.com/api/v2/upload` (`workbook.upload`), `/workbooks` (`workbook.list`); header `Authorization: Zoho-oauthtoken <access>` |
 
+## Where API uploads actually go, and the WorkDrive folder
+
+Correction (2026-10-19, later the same day): the first copy was still listed by
+`workbook.list` after the trial team was deleted, so it never lived in that team. The Zoho
+Sheet Data API files its uploads in **Zoho Sheet's own document space** (the old Zoho Docs
+area, visible at https://sheet.zoho.com and by direct link), **not in WorkDrive**. That is why
+neither WorkDrive team, nor the operator's new WorkDrive folder "bills", ever showed it.
+Both API copies open fine by their links; they just cannot be browsed or moved from WorkDrive.
+
+To have Bills inside the WorkDrive folder, the file has to be put there through WorkDrive:
+
+- **`exports/bills-zoho-ready.xlsx`** is the same export with the eight TO_DATE formulas
+  already rewritten to `DATE()` (conditional formats, validations and the `Accounts` name
+  verified intact). Drag it into the WorkDrive folder; WorkDrive opens xlsx in Zoho Sheet
+  and the formulas calculate. No API step needed.
+- Or by API: WorkDrive `POST https://www.zohoapis.com/workdrive/api/v1/upload` with
+  `parent_id=<folder id>` and `content=<file>`, scope `WorkDrive.files.CREATE` (a fourth
+  refresh token; the Sheet token does not cover it). Not built; the drag is faster.
+
 ## Google-only functions → Zoho (done 2026-10-19)
 
 All 120 formulas in the export were inventoried. Functions used: IF, MAX, MIN, SUM, SUMIF,
