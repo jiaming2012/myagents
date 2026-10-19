@@ -34,7 +34,32 @@ import requests
 from dotenv import load_dotenv
 
 HERE = Path(__file__).parent
-DATA_DIR = Path(os.getenv("FINANCE_TOOLS_DATA", HERE))
+
+
+def _data_dir():
+    """Where .env and the token cache live.
+
+    $FINANCE_TOOLS_DATA wins. Otherwise this directory, unless it has no .env and we are
+    inside a git worktree, in which case fall back to finance-tools/ of the main checkout
+    (.env is gitignored and only exists there)."""
+    env = os.getenv("FINANCE_TOOLS_DATA")
+    if env:
+        return Path(env)
+    if (HERE / ".env").exists():
+        return HERE
+    try:
+        import subprocess
+        common = subprocess.run(["git", "-C", str(HERE), "rev-parse", "--git-common-dir"],
+                                capture_output=True, text=True, check=True).stdout.strip()
+        main = Path(common).resolve().parent / HERE.name
+        if (main / ".env").exists():
+            return main
+    except Exception:
+        pass
+    return HERE
+
+
+DATA_DIR = _data_dir()
 load_dotenv(DATA_DIR / ".env")
 load_dotenv(HERE / ".env")
 

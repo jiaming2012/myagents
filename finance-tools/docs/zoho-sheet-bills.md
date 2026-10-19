@@ -37,20 +37,25 @@ secret; a third refresh token, stored as `ZOHO_SHEET_REFRESH_TOKEN`.
    (Server-based client instead: open
    `https://accounts.zoho.com/oauth/v2/auth?response_type=code&client_id=<ID>&scope=ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ&redirect_uri=<registered>&access_type=offline&prompt=consent`,
    copy `code` from the redirect, and add `--redirect-uri <registered>` to the auth task.)
-3. Within those minutes:
+3. Within those minutes, from the checkout that has the `zoho:sheet:*` targets (the
+   `worktree-session-resume-task` worktree until this branch is merged to main):
    ```
-   cd ~/projects/myagents/finance-tools
+   cd ~/projects/myagents/.claude/worktrees/session-resume-task/finance-tools
    task zoho:sheet:auth -- <code>
    ```
-   This writes `ZOHO_SHEET_REFRESH_TOKEN` into `finance-tools/.env` and refuses the token if
+   This writes `ZOHO_SHEET_REFRESH_TOKEN` into the **main checkout's** `finance-tools/.env`
+   (the script finds it through `git rev-parse --git-common-dir` when run from a worktree
+   that has no `.env` of its own; `$FINANCE_TOOLS_DATA` overrides) and refuses the token if
    the Sheet scope is missing.
 
-## Then
+## Then (same directory)
 
 ```
 task zoho:sheet:bills      # creates the "Bills" workbook; prints resource id + URL
 task zoho:sheet:list       # sanity check: lists workbooks the token can see
 ```
+
+Once the branch is on main, `cd ~/projects/myagents/finance-tools` works for all of these.
 
 `task zoho:sheet:bills` is not idempotent: running it twice creates two workbooks named
 Bills (delete the extra one in the Zoho Sheet UI). For a different file:
