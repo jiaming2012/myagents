@@ -74,11 +74,30 @@ Reusable targets: `zoho:sheet:auth` (re-mint the token), `zoho:sheet:list`,
 | Token | `.env` → `ZOHO_SHEET_REFRESH_TOKEN`; access-token cache `.zoho_sheet_token.json` (55 min, gitignored) |
 | API | `https://sheet.zoho.com/api/v2/upload` (`workbook.upload`), `/workbooks` (`workbook.list`); header `Authorization: Zoho-oauthtoken <access>` |
 
+## Google-only functions → Zoho (done 2026-10-19)
+
+All 120 formulas in the export were inventoried. Functions used: IF, MAX, MIN, SUM, SUMIF,
+SUMIFS, AVERAGE, NOW, DAY, MONTH, YEAR, OR, IFERROR, ROUNDDOWN, CONCATENATE, and one
+Google-only function, **`TO_DATE`**, in `Recurring!J2:J10` ("Days Due", rows 2–5 and 7–10).
+No GOOGLEFINANCE / IMPORTRANGE / QUERY / ARRAYFORMULA anywhere.
+
+Google's xlsx export wraps unsupported functions as
+`=IFERROR(__xludf.DUMMYFUNCTION("…"),<cached value>)`, so after upload those eight cells
+were frozen at their cached values. Replaced in the Zoho workbook through the API
+(`cell.content.set`, which evaluates content starting with `=`):
+
+| Google | Zoho |
+|---|---|
+| `=MAX(0, ROUNDDOWN(TO_DATE(CONCATENATE($L$2,"/",I2,"/",$M$2)-$N$2)))` | `=MAX(0, ROUNDDOWN(DATE($M$2,$L$2,I2)-$N$2,0))` |
+
+Same meaning: whole days from today (`N2 = NOW()`) to this month's auto-debit day (`I`),
+floored at 0. Read back after the write: J9 (Progressive, day 28) = 8 on 2026-10-19, the
+rest 0; the same expression evaluated in a scratch cell gave 8.78 → 8. The committed xlsx
+export is left as Google produced it; if it is ever re-uploaded, redo these eight cells.
+
 ## Caveats
 
 - This is a snapshot, not a sync. Edits in Google Sheets after 2026-08-17 (there were none as
   of 2026-10-19) will not appear in Zoho; re-export and run `task zoho:sheet:upload` again.
-- Google-only functions (e.g. `GOOGLEFINANCE`, `IMPORTRANGE`) export as cached values and
-  will not recalculate in Zoho. Check the Investments tab after upload.
 - The Chart of Accounts tab is 2023 data; Recurring, C.C. - Zero Balance and Loans are the
   live parts (see `bills-sheet-crosscheck.md`).
