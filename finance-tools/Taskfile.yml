@@ -195,9 +195,14 @@ tasks:
       - python zoho_sheet.py --list
 
   zoho:sheet:upload:
-    desc: "Upload any xlsx/csv/ods as a new Zoho Sheet workbook: task zoho:sheet:upload -- <file> [--name <name>]"
+    desc: "Upload any xlsx/csv/ods as a new Zoho Sheet workbook (lands in Zoho Sheet's own space, not WorkDrive): task zoho:sheet:upload -- <file> [--name <name>]"
     cmds:
       - python zoho_sheet.py --upload {{.CLI_ARGS}}
+
+  zoho:workdrive:upload:
+    desc: "Upload a file into a WorkDrive folder (token needs WorkDrive.files.CREATE): task zoho:workdrive:upload -- <file> --folder <id from the folder's URL>"
+    cmds:
+      - python zoho_sheet.py --workdrive-upload {{.CLI_ARGS}}
 
   budget:
     desc: Monarch budget and goal tracker

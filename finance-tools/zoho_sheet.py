@@ -65,7 +65,10 @@ load_dotenv(HERE / ".env")
 
 TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
 SHEET_BASE = "https://sheet.zoho.com/api/v2"
-SCOPE = "ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ"
+WORKDRIVE_BASE = "https://www.zohoapis.com/workdrive/api/v1"
+# WorkDrive.files.CREATE lets --workdrive-upload put a file in a WorkDrive folder; the Sheet
+# scopes alone cannot reach WorkDrive (Sheet API uploads live in Zoho Sheet's own space).
+SCOPE = "ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ,WorkDrive.files.CREATE"
 TOKEN_CACHE = DATA_DIR / ".zoho_sheet_token.json"
 ENV_FILE = DATA_DIR / ".env"
 ENV_KEY = "ZOHO_SHEET_REFRESH_TOKEN"
@@ -167,6 +170,36 @@ def upload(path, name=None):
     return d
 
 
+def workdrive_upload(path, folder_id, name=None):
+    """Upload a file into a WorkDrive folder (needs WorkDrive.files.CREATE on the token).
+
+    folder_id is the long id at the end of the folder's URL in WorkDrive
+    (…/privatespace/folders/<id> or …/teamfolders/…/<id>). An xlsx dropped this way opens
+    in Zoho Sheet from inside the folder."""
+    path = Path(path)
+    if not path.exists():
+        sys.exit(f"{path} not found")
+    name = name or path.name
+    with path.open("rb") as fh:
+        r = requests.post(f"{WORKDRIVE_BASE}/upload",
+                          params={"parent_id": folder_id, "filename": name, "override-name-exist": "false"},
+                          files={"content": (name, fh)},
+                          headers={**_headers(), "Accept": "application/vnd.api+json"}, timeout=180)
+    try:
+        d = r.json()
+    except ValueError:
+        sys.exit(f"WorkDrive HTTP {r.status_code}: {r.text[:400]}")
+    if r.status_code >= 400 or "errors" in d:
+        sys.exit(f"WorkDrive error HTTP {r.status_code}: {json.dumps(d)[:600]}\n"
+                 "Check the folder id (end of the folder's WorkDrive URL) and that the token "
+                 "was minted with WorkDrive.files.CREATE.")
+    print(json.dumps(d, indent=2)[:1500])
+    for item in d.get("data", []):
+        a = item.get("attributes", {})
+        print(f"\nUploaded {a.get('FileName') or name} -> resource {a.get('resource_id')} {a.get('Permalink', '')}")
+    return d
+
+
 def _json(r):
     try:
         d = r.json()
@@ -188,13 +221,19 @@ def main():
     g.add_argument("--auth", metavar="GRANT_CODE", help="exchange a grant code for ZOHO_SHEET_REFRESH_TOKEN")
     g.add_argument("--upload", metavar="FILE", help="xlsx/csv/ods to upload as a new workbook")
     g.add_argument("--list", action="store_true", help="list workbooks")
-    ap.add_argument("--name", help="workbook name for --upload (default: file stem)")
+    g.add_argument("--workdrive-upload", metavar="FILE", help="upload a file into a WorkDrive folder (--folder)")
+    ap.add_argument("--folder", metavar="FOLDER_ID", help="WorkDrive folder id for --workdrive-upload")
+    ap.add_argument("--name", help="workbook/file name (default: file stem for --upload, file name for WorkDrive)")
     ap.add_argument("--redirect-uri", help="only for a server-based OAuth client")
     a = ap.parse_args()
     if a.auth:
         auth(a.auth, a.redirect_uri)
     elif a.upload:
         upload(a.upload, a.name)
+    elif a.workdrive_upload:
+        if not a.folder:
+            ap.error("--workdrive-upload needs --folder <WorkDrive folder id>")
+        workdrive_upload(a.workdrive_upload, a.folder, a.name)
     else:
         list_workbooks()
 
