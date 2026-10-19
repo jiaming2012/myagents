@@ -57,3 +57,29 @@ tasks:
           fi
         done
         git worktree prune
+
+  session:find:
+    desc: "Find Claude Code sessions whose transcript contains a phrase: task session:find -- 'four things only you can answer'"
+    cmds:
+      - |
+        [ -n "{{.CLI_ARGS}}" ] || { echo "usage: task session:find -- '<phrase>'"; exit 1; }
+        grep -rlF -- {{.CLI_ARGS}} "$HOME/.claude/projects" 2>/dev/null | while read -r f; do
+          id=$(basename "$f" .jsonl)
+          cwd=$(grep -o '"cwd":"[^"]*"' "$f" | head -1 | cut -d'"' -f4)
+          last=$(grep -o '"timestamp":"[^"]*"' "$f" | tail -1 | cut -d'"' -f4)
+          printf '%s  last=%s  cwd=%s\n' "$id" "$last" "$cwd"
+        done
+
+  session:resume:
+    desc: "Reopen a Claude Code session by id (prefix ok) in the directory it ran from: task session:resume -- 1477311a"
+    interactive: true
+    cmds:
+      - |
+        [ -n "{{.CLI_ARGS}}" ] || { echo "usage: task session:resume -- <session-id-or-prefix>"; exit 1; }
+        f=$(ls "$HOME"/.claude/projects/*/{{.CLI_ARGS}}*.jsonl 2>/dev/null | head -1)
+        [ -n "$f" ] || { echo "no session matching {{.CLI_ARGS}}"; exit 1; }
+        id=$(basename "$f" .jsonl)
+        cwd=$(grep -o '"cwd":"[^"]*"' "$f" | head -1 | cut -d'"' -f4)
+        [ -d "$cwd" ] || cwd=$(pwd)
+        echo "resuming $id in $cwd"
+        cd "$cwd" && exec claude --resume "$id"
