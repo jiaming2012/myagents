@@ -50,9 +50,17 @@ secret; a third refresh token, stored as `ZOHO_SHEET_REFRESH_TOKEN`.
 
 ## Result (2026-10-19)
 
-Operator minted the token and ran the upload the same day. Zoho Sheet workbook **Bills**,
-resource id `efajya53a7d6ef7a54db598c92cc10e9bc7cb`, all nine worksheets present
-(verified with `worksheet.list`). Nothing further to run for this sheet.
+Operator minted the token and ran the upload the same day. The first copy
+(`efajya53a7d6ef7a54db598c92cc10e9bc7cb`) landed in the account's default WorkDrive team,
+an expired **Yumyums** trial team whose listing was paywalled, so it was invisible in the
+live **Yumyums Smokin Grille** team. The operator deleted the trial team (only one team
+remains now, so API uploads can only land there) and the file was re-uploaded:
+
+Zoho Sheet workbook **Bills**, resource id **`efajy8c81bb8baeec4004bbff764f3c2fea8c`**,
+https://sheet.zoho.com/sheet/open/efajy8c81bb8baeec4004bbff764f3c2fea8c, all nine
+worksheets present (`worksheet.list`), TO_DATE fix below re-applied. The Sheet API has no
+`workbook.delete` method, so the first copy may linger in `task zoho:sheet:list` until the
+deleted team's 90-day purge; trash it from the Zoho Sheet UI if it still shows.
 
 The upload itself was a one-off, so it has no task target of its own (operator rule:
 targets are for reusable commands). It was run through the generic target:
