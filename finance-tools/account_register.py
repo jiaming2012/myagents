@@ -20,7 +20,7 @@ ones. This module proves, on every run, that the three layers agree:
                                 active Monarch depository/credit account is
                                 claimed by exactly one entry
   4. registry <-> Zoho Books   - the same for business entries via
-                                zoho_books_match and Books' bank/credit_card
+                                zoho_match and Books' bank/credit_card
                                 accounts
 
   5. balances                 - for every row matched through 1-4, the sheet's
@@ -74,7 +74,7 @@ REGISTRY_TYPES = {"depository": "debit", "credit": "credit"}        # loan/inves
 MONARCH_TYPES = {"depository": "debit", "credit": "credit"}         # brokerage/loan/other skipped
 BOOKS_TYPES = {"bank": "debit", "credit_card": "credit"}            # cash (Petty Cash etc.) skipped
 
-MATCH_FIELD = {"personal": "monarch_match", "business": "zoho_books_match"}
+MATCH_FIELD = {"personal": "monarch_match", "business": "zoho_match"}
 SOURCE_NAME = {"personal": "Monarch", "business": "Zoho Books"}
 BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
 AS_OF_COLUMN = "As of"

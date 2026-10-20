@@ -38,9 +38,9 @@ CONFIG = {"accounts": [
     {"id": "boa-5153", "name": "Plat 1", "last4": "5153", "type": "credit",
      "category": "personal", "monarch_match": "BankAmericard Platinum Plus Mastercard (...5153)"},
     {"id": "chase-7667", "name": "Chase Ink", "last4": "7667", "type": "credit",
-     "category": "business", "zoho_books_match": "Chase Ink ••7667"},
+     "category": "business", "zoho_match": "Chase Ink ••7667"},
     {"id": "mercury-0551", "name": "Operations old", "last4": "0551", "type": "depository",
-     "category": "business", "inactive": True, "zoho_books_match": "Operations ••0551 (closed)"},
+     "category": "business", "inactive": True, "zoho_match": "Operations ••0551 (closed)"},
     {"id": "truist-loan", "name": "Auto Loan", "last4": "1001", "type": "loan",
      "category": "personal", "monarch_match": "Auto Loan (...1001)"},
 ]}

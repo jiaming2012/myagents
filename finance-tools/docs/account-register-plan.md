@@ -52,7 +52,7 @@ warning tier for this check.
 `institution + last4`, both sides. Names drift; last4 does not. Every open register row
 must have a last4 (the two Mercury rows are the first errors the check will raise).
 Where a live account has no last4 (some investments), the registry's `monarch_match`
-or a new `zoho_books_match` name is the fallback key, and the register row must carry
+or a new `zoho_match` name is the fallback key, and the register row must carry
 the same name.
 
 ### One register, three layers
@@ -132,8 +132,11 @@ separate command; `accounts:check` any time, `accounts:sync` on demand once trus
 
 ### Registry changes
 
-- `zoho_books_match:` on business accounts (the Books `account_name`), mirroring
-  `monarch_match`. `xero_account_id` stays until Xero is fully retired.
+- `zoho_match:` on business accounts (the Books `account_name`), mirroring
+  `monarch_match`. `xero_account_id` stays until Xero is fully retired. The same field,
+  same name and values, was added independently on the unmerged branch
+  `worktree-finance-week-funding` (debt_plan.py reads it); whichever branch merges second
+  will see identical-content conflicts on four accounts, resolved by keeping one line.
 - `status: closed` replaces today's `inactive: true` so the word matches the sheet.
 
 ## Phases
@@ -141,9 +144,9 @@ separate command; `accounts:check` any time, `accounts:sync` on demand once trus
 | # | Deliverable | Done when |
 |---|-------------|-----------|
 | 0 | **DONE 2026-10-19.** Read the converted native sheet by its WorkDrive id through the Sheet Data API with the existing token. | `task zoho:sheet:worksheets -- efajyb8b15e86a20a48e0b3edab6cf4fb18c5` lists the tabs and `task zoho:sheet:records -- <id> --sheet "Chart of Accounts"` prints 43 rows keyed by header, formulas evaluated, each with `row_index`. The id survived the xlsx-to-native conversion. The native workbook now has four tabs: Chart of Accounts, Credit Cards (was C.C. - Zero Balance), Recurring Charges (was Recurring), Loans; the Yumyum Bank Accounts, Plan, Investments, Propane and Notes tabs are gone, which already settles two of the schema changes below. |
-| 1 | **DONE 2026-10-19.** Membership check: `account_register.py` with checks 1–4, `task accounts:check` (`--category`, `--offline`, `--no-sheet`, `--json`), 13 unit tests in `tests/test_account_register.py`. Registry gained `zoho_books_match` on every business account (Lafayette checking's last4 corrected 3617 → 7011 per Books). | First live run: 39 errors, listed under "First run" below. Operator fixes the sheet and registry until it exits 0. |
+| 1 | **DONE 2026-10-19.** Membership check: `account_register.py` with checks 1–4, `task accounts:check` (`--category`, `--offline`, `--no-sheet`, `--json`), 13 unit tests in `tests/test_account_register.py`. Registry gained `zoho_match` on every business account (Lafayette checking's last4 corrected 3617 → 7011 per Books). | First live run: 39 errors, listed under "First run" below. Operator fixes the sheet and registry until it exits 0. |
 | 2 | **DONE 2026-10-19.** Balance check (check 5, on by default, `--no-balances` to skip) and `task accounts:sync` (`--dry-run`, `--category`), 7 more unit tests. Sheet writes go through `worksheet.records.update` with criteria `"Account Last 4"="<last4>"` (verified live with a no-op write). | Live dry run: sync refused (39 membership errors), then 16 `balance_mismatch` on the rows that already link, e.g. Recurring ACH 1826 in the sheet vs 4853.21 in Monarch. Once membership is clean, `task accounts:sync` writes the balances and re-checks; a hand-edited balance then makes `accounts:check` exit 1. |
-| 3 | **DONE 2026-10-19.** There is no `finance:sync-status` target in the repo (the plan assumed one); the register is wired into the weekly health report instead (`task health`, `health:email`, `health:preview`) as section 6, with one summary action item ("REGISTER: n membership error(s), m balance mismatch(es) → task accounts:check"). `Yumyum Bank Accounts` was already retired by the operator's conversion. Every check function has unit tests. | `task health` shows section 6 and the REGISTER action item whenever the register drifts; the emailed report carries the same table. |
+| 3 | **DONE 2026-10-19.** `task finance:sync-status` exists only on the unmerged branch `worktree-finance-week-funding` (sync_status.py, Oct 17), so the register is wired into the weekly health report instead (`task health`, `health:email`, `health:preview`) as section 6, with one summary action item ("REGISTER: n membership error(s), m balance mismatch(es) → task accounts:check"). `Yumyum Bank Accounts` was already retired by the operator's conversion. Every check function has unit tests. | `task health` shows section 6 and the REGISTER action item whenever the register drifts; the emailed report carries the same table. |
 
 Phase 0 is small and gates everything; phases 1 and 2 are each one sitting.
 
