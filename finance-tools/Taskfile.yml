@@ -199,6 +199,16 @@ tasks:
     cmds:
       - python zoho_sheet.py --upload {{.CLI_ARGS}}
 
+  zoho:sheet:worksheets:
+    desc: "List the tabs of a workbook (native Zoho Sheet in WorkDrive works by its file id): task zoho:sheet:worksheets -- <resource id>"
+    cmds:
+      - python zoho_sheet.py --worksheets {{.CLI_ARGS}}
+
+  zoho:sheet:records:
+    desc: "Print one tab's rows keyed by header: task zoho:sheet:records -- <resource id> --sheet \"<tab name>\" [--json]"
+    cmds:
+      - python zoho_sheet.py --records {{.CLI_ARGS}}
+
   zoho:workdrive:upload:
     desc: "Upload a file into a WorkDrive folder (token needs WorkDrive.files.CREATE): task zoho:workdrive:upload -- <file> --folder <id from the folder's URL>"
     cmds:

@@ -152,6 +152,33 @@ def list_workbooks():
     return books
 
 
+def list_worksheets(resource_id):
+    """Tabs of one workbook (works for a native Zoho Sheet stored in WorkDrive by its file id)."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}", data={"method": "worksheet.list"},
+                      headers=_headers(), timeout=30)
+    d = _json(r)
+    sheets = d.get("worksheet_names", [])
+    for s in sheets:
+        print(f"{s.get('worksheet_id')}  {s.get('worksheet_name')}")
+    return sheets
+
+
+def fetch_records(resource_id, worksheet_name, as_json=False):
+    """Rows of one tab as dicts keyed by the header row (Sheet Data API worksheet.records.fetch)."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.records.fetch", "worksheet_name": worksheet_name},
+                      headers=_headers(), timeout=60)
+    d = _json(r)
+    rows = d.get("records", [])
+    if as_json:
+        print(json.dumps(rows, indent=2))
+    else:
+        for i, row in enumerate(rows, 1):
+            cells = {k: v for k, v in row.items() if v not in ("", None)}
+            print(f"{i:3} {cells}")
+    return rows
+
+
 def upload(path, name=None):
     path = Path(path)
     if not path.exists():
@@ -225,6 +252,10 @@ def main():
     g.add_argument("--upload", metavar="FILE", help="xlsx/csv/ods to upload as a new workbook")
     g.add_argument("--list", action="store_true", help="list workbooks")
     g.add_argument("--workdrive-upload", metavar="FILE", help="upload a file into a WorkDrive folder (--folder)")
+    g.add_argument("--worksheets", metavar="RESOURCE_ID", help="list the tabs of a workbook")
+    g.add_argument("--records", metavar="RESOURCE_ID", help="print the rows of one tab (--sheet)")
+    ap.add_argument("--sheet", help="worksheet name for --records")
+    ap.add_argument("--json", action="store_true", help="with --records: raw JSON rows")
     ap.add_argument("--folder", metavar="FOLDER_ID", help="WorkDrive folder id for --workdrive-upload")
     ap.add_argument("--name", help="workbook/file name (default: file stem for --upload, file name for WorkDrive)")
     ap.add_argument("--replace", action="store_true",
@@ -239,6 +270,12 @@ def main():
         if not a.folder:
             ap.error("--workdrive-upload needs --folder <WorkDrive folder id>")
         workdrive_upload(a.workdrive_upload, a.folder, a.name, replace=a.replace)
+    elif a.worksheets:
+        list_worksheets(a.worksheets)
+    elif a.records:
+        if not a.sheet:
+            ap.error("--records needs --sheet <worksheet name>")
+        fetch_records(a.records, a.sheet, as_json=a.json)
     else:
         list_workbooks()
 

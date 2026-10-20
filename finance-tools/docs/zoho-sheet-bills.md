@@ -128,6 +128,24 @@ WorkDrive kept the file id (`efajyb8b15e86a20a48e0b3edab6cf4fb18c5`), stored the
 version 2.0 with the original as version 1.0, and reported MD5 `e2ab13d5…` matching the
 local file. Without `--replace` a second `Bills.xlsx` would have been created instead.
 
+### Converted to a native Zoho Sheet (operator, 2026-10-19)
+
+The operator converted Bills.xlsx to Zoho's native format from WorkDrive. The file kept
+the same id, so the link above still works, and the Sheet Data API reads it by that id
+even though `workbook.list` does not show it (that call only lists Sheet-space
+workbooks). Reusable read targets:
+
+```
+task zoho:sheet:worksheets -- efajyb8b15e86a20a48e0b3edab6cf4fb18c5
+task zoho:sheet:records -- efajyb8b15e86a20a48e0b3edab6cf4fb18c5 --sheet "Chart of Accounts" [--json]
+```
+
+`worksheet.list` returns `worksheet_names`; `worksheet.records.fetch` returns rows keyed by
+the header row with formulas evaluated and a `row_index`. After conversion the workbook
+has four tabs: Chart of Accounts, Credit Cards, Recurring Charges, Loans. The committed
+xlsx export is now behind the live file; it stays as the 2026-08-17 Google snapshot only.
+Next: `account-register-plan.md`.
+
 ## Google-only functions → Zoho (done 2026-10-19)
 
 All 120 formulas in the export were inventoried. Functions used: IF, MAX, MIN, SUM, SUMIF,
