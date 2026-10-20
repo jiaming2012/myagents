@@ -163,13 +163,17 @@ def list_worksheets(resource_id):
     return sheets
 
 
-def fetch_records(resource_id, worksheet_name, as_json=False):
-    """Rows of one tab as dicts keyed by the header row (Sheet Data API worksheet.records.fetch)."""
+def records(resource_id, worksheet_name):
+    """Rows of one tab as dicts keyed by the header row, formulas evaluated, each
+    with a 1-based `row_index` (Sheet Data API worksheet.records.fetch)."""
     r = requests.post(f"{SHEET_BASE}/{resource_id}",
                       data={"method": "worksheet.records.fetch", "worksheet_name": worksheet_name},
                       headers=_headers(), timeout=60)
-    d = _json(r)
-    rows = d.get("records", [])
+    return _json(r).get("records", [])
+
+
+def fetch_records(resource_id, worksheet_name, as_json=False):
+    rows = records(resource_id, worksheet_name)
     if as_json:
         print(json.dumps(rows, indent=2))
     else:
