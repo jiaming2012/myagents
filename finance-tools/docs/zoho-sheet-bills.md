@@ -109,6 +109,25 @@ To have Bills inside the WorkDrive folder, the file has to be put there through 
 
 This WorkDrive file is now the copy to use. The two Sheet-API workbooks are orphans.
 
+### Clipped header row (fixed 2026-10-19)
+
+In WorkDrive/Zoho Sheet the row-1 headers ("Routing Number", "Debit Balance", …) showed only
+their first line. Google's xlsx export sets `customHeight="1"` on every sheet's
+`<sheetFormatPr>`, which tells readers every row is pinned to the 15.75 pt default; Google
+and Excel auto-grow wrapped rows on screen anyway, Zoho takes the flag literally, and the
+preview is read-only so dragging the row there changes nothing. `exports/bills-zoho-ready.xlsx`
+was patched (zip-level, no openpyxl round-trip): the sheet-wide flag removed on all nine sheets
+and row 1 set to 31.5 pt on the two sheets whose header cells wrap (Chart of Accounts,
+Investments). Re-uploaded over the same WorkDrive file with the new `--replace` flag:
+
+```
+task zoho:workdrive:upload -- exports/bills-zoho-ready.xlsx --folder efajy36818489827748c8a271759dd235e0d6 --name Bills.xlsx --replace
+```
+
+WorkDrive kept the file id (`efajyb8b15e86a20a48e0b3edab6cf4fb18c5`), stored the result as
+version 2.0 with the original as version 1.0, and reported MD5 `e2ab13d5…` matching the
+local file. Without `--replace` a second `Bills.xlsx` would have been created instead.
+
 ## Google-only functions → Zoho (done 2026-10-19)
 
 All 120 formulas in the export were inventoried. Functions used: IF, MAX, MIN, SUM, SUMIF,

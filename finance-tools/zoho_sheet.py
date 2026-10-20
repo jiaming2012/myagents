@@ -170,19 +170,22 @@ def upload(path, name=None):
     return d
 
 
-def workdrive_upload(path, folder_id, name=None):
+def workdrive_upload(path, folder_id, name=None, replace=False):
     """Upload a file into a WorkDrive folder (needs WorkDrive.files.CREATE on the token).
 
     folder_id is the long id at the end of the folder's URL in WorkDrive
     (…/privatespace/folders/<id> or …/teamfolders/…/<id>). An xlsx dropped this way opens
-    in Zoho Sheet from inside the folder."""
+    in Zoho Sheet from inside the folder. With replace=True a file of the same name in the
+    folder is overwritten (WorkDrive keeps the old content as a version) instead of a
+    second copy being created."""
     path = Path(path)
     if not path.exists():
         sys.exit(f"{path} not found")
     name = name or path.name
     with path.open("rb") as fh:
         r = requests.post(f"{WORKDRIVE_BASE}/upload",
-                          params={"parent_id": folder_id, "filename": name, "override-name-exist": "false"},
+                          params={"parent_id": folder_id, "filename": name,
+                                  "override-name-exist": "true" if replace else "false"},
                           files={"content": (name, fh)},
                           headers={**_headers(), "Accept": "application/vnd.api+json"}, timeout=180)
     try:
@@ -224,6 +227,8 @@ def main():
     g.add_argument("--workdrive-upload", metavar="FILE", help="upload a file into a WorkDrive folder (--folder)")
     ap.add_argument("--folder", metavar="FOLDER_ID", help="WorkDrive folder id for --workdrive-upload")
     ap.add_argument("--name", help="workbook/file name (default: file stem for --upload, file name for WorkDrive)")
+    ap.add_argument("--replace", action="store_true",
+                    help="with --workdrive-upload: overwrite a same-named file in the folder (new version) instead of creating a copy")
     ap.add_argument("--redirect-uri", help="only for a server-based OAuth client")
     a = ap.parse_args()
     if a.auth:
@@ -233,7 +238,7 @@ def main():
     elif a.workdrive_upload:
         if not a.folder:
             ap.error("--workdrive-upload needs --folder <WorkDrive folder id>")
-        workdrive_upload(a.workdrive_upload, a.folder, a.name)
+        workdrive_upload(a.workdrive_upload, a.folder, a.name, replace=a.replace)
     else:
         list_workbooks()
 
