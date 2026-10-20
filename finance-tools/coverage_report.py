@@ -99,6 +99,23 @@ def get_upcoming_payments(payments, days):
     return upcoming
 
 
+def monarch_signed_balance(acct):
+    """The balance in this codebase's convention (assets positive, liabilities
+    negative = amount owed), taken from what the Monarch app shows rather than the
+    provider's raw `currentBalance`.
+
+    `displayBalance` is the app's number: liabilities as the amount owed, positive,
+    with the account's "invert balance" setting applied. Plaid feeds report card
+    balances negative and Finicity feeds (Discover) report them positive, so the raw
+    value is not sign-consistent across cards; the display balance is. Accounts
+    without a display balance fall back to the raw value."""
+    display = acct.get("displayBalance")
+    if display is None:
+        return acct.get("currentBalance", 0)
+    signed = display if acct.get("isAsset", True) else -display
+    return signed or 0.0          # -0.0 -> 0.0
+
+
 async def fetch_monarch_balances():
     """Fetch all account balances from Monarch Money."""
     if MonarchMoney is None:
@@ -120,7 +137,7 @@ async def fetch_monarch_balances():
     for acct in data.get("accounts", []):
         name = acct.get("displayName", "")
         entry = {
-            "balance": acct.get("currentBalance", 0),
+            "balance": monarch_signed_balance(acct),
             # What the Monarch app shows: liabilities as the amount owed, positive, with any
             # per-account sign inversion applied (currentBalance is the provider's raw value).
             "display_balance": acct.get("displayBalance"),

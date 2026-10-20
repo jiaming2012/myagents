@@ -34,6 +34,7 @@ except ImportError:
 MonarchMoneyEndpoints.BASE_URL = "https://api.monarch.com"
 
 from monarch_client import get_monarch_client, is_auth_error, auth_error_message
+from coverage_report import monarch_signed_balance
 
 
 async def fetch_and_display(force_login=False, account_type=None):
@@ -74,7 +75,7 @@ async def fetch_and_display(force_login=False, account_type=None):
         print(f"  {'-' * 50}")
         for acct in sorted(accts, key=lambda a: a.get("displayName", "")):
             name = acct.get("displayName", "(unnamed)")
-            balance = acct.get("currentBalance", 0)
+            balance = monarch_signed_balance(acct)   # app's number, sign-consistent across feeds
             institution = acct.get("institution", {}).get("name", "")
 
             net_worth += balance

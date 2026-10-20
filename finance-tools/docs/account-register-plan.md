@@ -103,9 +103,14 @@ re-reads the sheet and runs the check. If the tab has an `As of` column, today's
 written there too and every matched row is refreshed; without it only rows whose balance
 differs are touched. Membership errors are never auto-fixed: a missing or extra account
 is always a human decision, so sync refuses to write if any membership check fails.
-Sign convention: the sheet's `Credit Balance` is the amount owed, positive. Monarch
-reports cards negative, so the check flips the sign; Zoho Books already reports cards
-as owed.
+Sign convention: the sheet's `Credit Balance` is the amount owed, positive. Zoho Books
+already reports cards that way. Monarch is read through `displayBalance`, the number its
+app shows (owed positive, with the account's "invert balance" setting applied), because
+the raw `currentBalance` is not sign-consistent across feeds: Plaid reports cards
+negative, Finicity (Discover) positive. `coverage_report.monarch_signed_balance()` turns
+the display balance into this codebase's convention (liabilities negative) for every
+other script, so the forecast, gaps and `task balances` see the same corrected numbers
+(found and fixed 2026-10-19 on Discover 9035).
 
 Recommended cadence: `accounts:check` inside `task finance:sync-status` (the banner that
 runs before every numbers task), `accounts:sync` on demand or from the keep-warm launchd
