@@ -97,10 +97,15 @@ only sheet-vs-registry), `--json`.
 
 A strict balance check will fail every day unless something writes live balances into
 the sheet. `accounts:sync` fetches the same live data, writes `Debit Balance` /
-`Credit Balance` / an `As of` column into the matched sheet rows (Sheet Data API
-`records.update`, scope `ZohoSheet.dataAPI.UPDATE` already held), then runs the check.
-Membership errors are never auto-fixed: a missing or extra account is always a human
-decision, so sync refuses to write if any membership check fails.
+`Credit Balance` into the matched sheet rows (Sheet Data API `worksheet.records.update`,
+criteria on `Account Last 4`, scope `ZohoSheet.dataAPI.UPDATE` already held), then
+re-reads the sheet and runs the check. If the tab has an `As of` column, today's date is
+written there too and every matched row is refreshed; without it only rows whose balance
+differs are touched. Membership errors are never auto-fixed: a missing or extra account
+is always a human decision, so sync refuses to write if any membership check fails.
+Sign convention: the sheet's `Credit Balance` is the amount owed, positive. Monarch
+reports cards negative, so the check flips the sign; Zoho Books already reports cards
+as owed.
 
 Recommended cadence: `accounts:check` inside `task finance:sync-status` (the banner that
 runs before every numbers task), `accounts:sync` on demand or from the keep-warm launchd
@@ -132,7 +137,7 @@ agent once trusted.
 |---|-------------|-----------|
 | 0 | **DONE 2026-10-19.** Read the converted native sheet by its WorkDrive id through the Sheet Data API with the existing token. | `task zoho:sheet:worksheets -- efajyb8b15e86a20a48e0b3edab6cf4fb18c5` lists the tabs and `task zoho:sheet:records -- <id> --sheet "Chart of Accounts"` prints 43 rows keyed by header, formulas evaluated, each with `row_index`. The id survived the xlsx-to-native conversion. The native workbook now has four tabs: Chart of Accounts, Credit Cards (was C.C. - Zero Balance), Recurring Charges (was Recurring), Loans; the Yumyum Bank Accounts, Plan, Investments, Propane and Notes tabs are gone, which already settles two of the schema changes below. |
 | 1 | **DONE 2026-10-19.** Membership check: `account_register.py` with checks 1–4, `task accounts:check` (`--category`, `--offline`, `--no-sheet`, `--json`), 13 unit tests in `tests/test_account_register.py`. Registry gained `zoho_books_match` on every business account (Lafayette checking's last4 corrected 3617 → 7011 per Books). | First live run: 39 errors, listed under "First run" below. Operator fixes the sheet and registry until it exits 0. |
-| 2 | Balance check (check 5) and `task accounts:sync`. | `accounts:sync && accounts:check` exits 0; a hand-edited balance in the sheet makes `accounts:check` exit 1. |
+| 2 | **DONE 2026-10-19.** Balance check (check 5, on by default, `--no-balances` to skip) and `task accounts:sync` (`--dry-run`, `--category`), 7 more unit tests. Sheet writes go through `worksheet.records.update` with criteria `"Account Last 4"="<last4>"` (verified live with a no-op write). | Live dry run: sync refused (39 membership errors), then 16 `balance_mismatch` on the rows that already link, e.g. Recurring ACH 1826 in the sheet vs 4853.21 in Monarch. Once membership is clean, `task accounts:sync` writes the balances and re-checks; a hand-edited balance then makes `accounts:check` exit 1. |
 | 3 | Wire into `finance:sync-status`; retire `Yumyum Bank Accounts`; tests for every check function on fixture data. | `task finance:sync-status` fails loudly when the register drifts. |
 
 Phase 0 is small and gates everything; phases 1 and 2 are each one sitting.

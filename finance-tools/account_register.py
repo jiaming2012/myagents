@@ -23,9 +23,17 @@ ones. This module proves, on every run, that the three layers agree:
                                 zoho_books_match and Books' bank/credit_card
                                 accounts
 
+  5. balances                 - for every row matched through 1-4, the sheet's
+                                Debit/Credit Balance equals the live balance to
+                                the cent (credit = amount owed, positive)
+
 Every finding is an error (there is no warning tier for a register); `main()`
-prints them and exits 1 if any exist. Balances are NOT compared yet (phase 2 of
-docs/account-register-plan.md).
+prints them and exits 1 if any exist.
+
+`--sync` writes the live balances (and today's date into an `As of` column, if
+the sheet has one) into the matched rows before checking, so a clean register
+stays clean day to day. It refuses to write while any membership error (1-4)
+exists: adding or removing an account is always a human decision.
 
 Scope (docs/account-register-plan.md, decisions of 2026-10-19): investments are
 excluded until the Investments tab is rebuilt. Loans are also excluded for now:
@@ -37,6 +45,8 @@ Usage:
     python account_register.py --category business
     python account_register.py --offline          # sheet <-> registry only
     python account_register.py --no-sheet         # registry <-> live only
+    python account_register.py --no-balances      # membership only
+    python account_register.py --sync [--dry-run] # write live balances into the sheet, then check
     python account_register.py --json
 """
 
@@ -66,6 +76,22 @@ BOOKS_TYPES = {"bank": "debit", "credit_card": "credit"}            # cash (Pett
 
 MATCH_FIELD = {"personal": "monarch_match", "business": "zoho_books_match"}
 SOURCE_NAME = {"personal": "Monarch", "business": "Zoho Books"}
+BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
+AS_OF_COLUMN = "As of"
+KEY_COLUMN = "Account Last 4"
+BALANCE_KINDS = {"balance_mismatch", "sheet_balance_missing"}   # the kinds --sync is allowed to fix
+
+
+def _num(v):
+    """Sheet cell -> float or None ('' and text stay None; '-12.5' and 1826 parse)."""
+    if isinstance(v, bool):
+        return None
+    if isinstance(v, (int, float)):
+        return float(v)
+    try:
+        return float(str(v).replace(",", "").replace("$", "").strip())
+    except (TypeError, ValueError):
+        return None
 
 
 def norm_name(s):
@@ -146,10 +172,8 @@ def sheet_accounts(rows):
                                f"{ref} '{name}' ({typ}): no Account Last 4.",
                                "Fill Account Last 4; it is the join key to the registry."))
             continue
-        bal_col = "Credit Balance" if kind == "credit" else "Debit Balance"
-        bal = row.get(bal_col)
-        balance = float(bal) if isinstance(bal, (int, float)) or (isinstance(bal, str) and bal.strip().lstrip("-").replace(".", "", 1).isdigit()) else None
-        accounts.append(_acct(key, name, owner, kind, closed=closed, balance=balance, ref=ref))
+        accounts.append(_acct(key, name, owner, kind, closed=closed,
+                              balance=_num(row.get(BALANCE_COLUMN[kind])), ref=ref))
     errors += _duplicate_keys(accounts, "sheet_duplicate_last4", "Chart of Accounts")
     return accounts, errors
 
@@ -172,14 +196,18 @@ def registry_accounts(config):
 def monarch_accounts(balances):
     """coverage_report.fetch_monarch_balances() shape ({display name: {balance,
     type, hidden, deactivated}}) -> active depository/credit accounts. Hidden or
-    deactivated connections are dropped: they are Monarch's stale duplicates."""
+    deactivated connections are dropped: they are Monarch's stale duplicates.
+    Monarch reports a card's owed amount negative; the sheet's Credit Balance is
+    the amount owed, positive, so credit balances are sign-flipped here."""
     out = []
     for name, d in (balances or {}).items():
         kind = MONARCH_TYPES.get(d.get("type"))
         if kind is None or d.get("hidden") or d.get("deactivated"):
             continue
-        out.append(_acct(last4_of(name), name, "personal", kind, balance=d.get("balance"),
-                         ref="monarch"))
+        bal = _num(d.get("balance"))
+        if bal is not None and kind == "credit":
+            bal = -bal or 0.0          # `or 0.0` turns -0.0 into 0.0
+        out.append(_acct(last4_of(name), name, "personal", kind, balance=bal, ref="monarch"))
     return out
 
 
@@ -322,11 +350,74 @@ def check_sources(source_status):
     return errors
 
 
-def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None, source_status=None):
+def matched_triples(sheet, registry, live, owner):
+    """(sheet row, registry entry, live account) for every open account of `owner`
+    that links cleanly through last4 (sheet <-> registry) and the match name
+    (registry <-> live). Anything that does not link is a membership error
+    reported elsewhere, so it is simply absent here."""
+    s = {a["key"]: a for a in sheet if a["owner"] == owner and a["key"] and not a["closed"]}
+    live_by_name = {}
+    for a in live:
+        live_by_name.setdefault(norm_name(a["name"]), []).append(a)
+    out = []
+    for ra in registry:
+        if ra["owner"] != owner or ra["closed"] or not ra["key"] or not ra["match"]:
+            continue
+        sa = s.get(ra["key"])
+        hits = live_by_name.get(norm_name(ra["match"]), [])
+        if sa and len(hits) == 1 and not hits[0]["closed"]:
+            out.append((sa, ra, hits[0]))
+    return out
+
+
+def check_balances(sheet, registry, live, owner):
+    """Sheet balance == live balance, to the cent, for every matched account."""
+    errors = []
+    source = SOURCE_NAME[owner]
+    for sa, ra, la in matched_triples(sheet, registry, live, owner):
+        col = BALANCE_COLUMN[ra["kind"]]
+        if la["balance"] is None:
+            continue
+        if sa["balance"] is None:
+            errors.append(_err("sheet_balance_missing",
+                               f"{sa['ref']} '{sa['name']}' ({owner} {ra['key']}): {col} is empty; "
+                               f"{source} says {la['balance']:.2f}.",
+                               "Run accounts:sync, or type the balance."))
+        elif round(sa["balance"], 2) != round(la["balance"], 2):
+            errors.append(_err("balance_mismatch",
+                               f"{sa['ref']} '{sa['name']}' ({owner} {ra['key']}): {col} {sa['balance']:.2f} "
+                               f"but {source} says {la['balance']:.2f}.",
+                               "Run accounts:sync to write the live balance into the sheet."))
+    return errors
+
+
+def plan_sync(sheet, registry, live, owner, as_of=None, has_as_of_column=False):
+    """Writes needed to make the sheet's balances equal the live ones:
+    [{criteria, data, ref, name, old, new}]. Rows already equal are skipped
+    unless an As of column exists (then the date is refreshed too)."""
+    writes = []
+    for sa, ra, la in matched_triples(sheet, registry, live, owner):
+        if la["balance"] is None:
+            continue
+        new = round(la["balance"], 2)
+        same = sa["balance"] is not None and round(sa["balance"], 2) == new
+        if same and not has_as_of_column:
+            continue
+        data = {BALANCE_COLUMN[ra["kind"]]: new}
+        if has_as_of_column and as_of:
+            data[AS_OF_COLUMN] = as_of
+        writes.append({"criteria": f'"{KEY_COLUMN}"="{ra["key"]}"', "data": data, "ref": sa["ref"],
+                       "name": sa["name"], "old": sa["balance"], "new": new})
+    return writes
+
+
+def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None, source_status=None,
+               balances=True):
     """All checks over pre-fetched data. A side passed as None is skipped (its
     checks are not run), which is how --offline and --no-sheet work."""
     errors = check_sources(source_status)
     registry = [a for a in registry_accounts(config) if not category or a["owner"] == category]
+    sheet = None
     if sheet_rows is not None:
         sheet, sheet_errors = sheet_accounts(sheet_rows)
         sheet = [a for a in sheet if not category or a["owner"] == category]
@@ -334,11 +425,18 @@ def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None,
         errors += check_sheet_vs_registry(sheet, registry, category)
     else:
         errors += _duplicate_keys(registry, "registry_duplicate_last4", "payments.yaml")
-    if monarch is not None and category in (None, "personal"):
-        errors += check_registry_vs_live(registry, monarch_accounts(monarch), "personal")
-    if books is not None and category in (None, "business"):
-        errors += check_registry_vs_live(registry, books_accounts(books), "business")
+    for owner, raw, normalise in (("personal", monarch, monarch_accounts), ("business", books, books_accounts)):
+        if raw is None or category not in (None, owner):
+            continue
+        live = normalise(raw)
+        errors += check_registry_vs_live(registry, live, owner)
+        if balances and sheet is not None:
+            errors += check_balances(sheet, registry, live, owner)
     return errors
+
+
+def membership_errors(errors):
+    return [e for e in errors if e["kind"] not in BALANCE_KINDS]
 
 
 # ---------------------------------------------------------------------------
@@ -392,19 +490,67 @@ def _gather_books(source_status):
     return None
 
 
-async def run_all(category=None, offline=False, no_sheet=False, sheet_id=None):
+async def gather(category=None, offline=False, no_sheet=False, sheet_id=None):
     from coverage_report import load_payments_yaml
     config = load_payments_yaml()
     status = {}
-    sheet_rows = None if no_sheet else _gather_sheet(status, sheet_id or os.getenv(SHEET_ID_ENV, DEFAULT_SHEET_ID))
+    sheet_id = sheet_id or os.getenv(SHEET_ID_ENV, DEFAULT_SHEET_ID)
+    sheet_rows = None if no_sheet else _gather_sheet(status, sheet_id)
     monarch = books = None
     if not offline:
         if category in (None, "personal"):
             monarch = await _gather_monarch(status)
         if category in (None, "business"):
             books = _gather_books(status)
-    return run_checks(config, sheet_rows=sheet_rows, monarch=monarch, books=books,
-                      category=category, source_status=status)
+    return dict(config=config, sheet_rows=sheet_rows, monarch=monarch, books=books,
+                category=category, source_status=status), sheet_id
+
+
+def sync(inputs, sheet_id, dry_run=False, log=print):
+    """Write live balances into the sheet. Refuses while membership errors exist.
+    Returns the number of rows written (0 on refusal or dry run)."""
+    from datetime import date
+    errors = run_checks(balances=False, **inputs)
+    if errors:
+        log(f"  sync refused: {len(errors)} membership error(s) must be fixed by hand first "
+            f"(run accounts:check).")
+        return 0
+    rows = inputs["sheet_rows"] or []
+    has_as_of = bool(rows) and AS_OF_COLUMN in rows[0]
+    sheet, _ = sheet_accounts(rows)
+    registry = registry_accounts(inputs["config"])
+    writes = []
+    for owner, raw, normalise in (("personal", inputs["monarch"], monarch_accounts),
+                                  ("business", inputs["books"], books_accounts)):
+        if raw is None or inputs["category"] not in (None, owner):
+            continue
+        writes += plan_sync(sheet, registry, normalise(raw), owner, as_of=date.today().isoformat(),
+                            has_as_of_column=has_as_of)
+    if not writes:
+        log("  sync: nothing to write.")
+        return 0
+    for w in writes:
+        old = "empty" if w["old"] is None else f"{w['old']:.2f}"
+        log(f"  {'would write' if dry_run else 'write'} {w['ref']} '{w['name']}': {old} -> {w['new']:.2f}")
+    if dry_run:
+        return 0
+    from zoho_sheet import update_records
+    n = 0
+    for w in writes:
+        n += update_records(sheet_id, SHEET_TAB, w["criteria"], w["data"])
+    log(f"  sync: {n} row(s) written.")
+    return n
+
+
+async def run_all(category=None, offline=False, no_sheet=False, sheet_id=None, balances=True,
+                  do_sync=False, dry_run=False):
+    inputs, sheet_id = await gather(category, offline, no_sheet, sheet_id)
+    if do_sync:
+        if inputs["sheet_rows"] is None or (inputs["monarch"] is None and inputs["books"] is None):
+            print("  sync needs the sheet and at least one live source (no --offline / --no-sheet).")
+        elif sync(inputs, sheet_id, dry_run=dry_run) and not dry_run:
+            inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read what we wrote
+    return run_checks(balances=balances, **inputs)
 
 
 # ---------------------------------------------------------------------------
@@ -431,10 +577,15 @@ def main():
     p.add_argument("--offline", action="store_true", help="skip Monarch and Zoho Books (sheet <-> registry only)")
     p.add_argument("--no-sheet", action="store_true", help="skip the sheet (registry <-> live only)")
     p.add_argument("--sheet-id", help=f"Zoho Sheet resource id (default ${SHEET_ID_ENV} or {DEFAULT_SHEET_ID})")
+    p.add_argument("--no-balances", action="store_true", help="membership checks only")
+    p.add_argument("--sync", action="store_true",
+                   help="write live balances into the sheet first (refused while membership errors exist)")
+    p.add_argument("--dry-run", action="store_true", help="with --sync: show the writes, change nothing")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     a = p.parse_args()
     errors = asyncio.run(run_all(category=a.category, offline=a.offline, no_sheet=a.no_sheet,
-                                 sheet_id=a.sheet_id))
+                                 sheet_id=a.sheet_id, balances=not a.no_balances,
+                                 do_sync=a.sync, dry_run=a.dry_run))
     if a.json:
         print(json.dumps(errors, indent=2))
     else:

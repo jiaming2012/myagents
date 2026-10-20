@@ -6,14 +6,18 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from account_register import (  # noqa: E402
     books_accounts,
+    check_balances,
     check_registry_vs_live,
     check_sheet_vs_registry,
     check_sources,
     last4_of,
+    membership_errors,
     monarch_accounts,
+    plan_sync,
     registry_accounts,
     run_checks,
     sheet_accounts,
+    sync,
 )
 
 
@@ -44,7 +48,7 @@ CONFIG = {"accounts": [
 SHEET = [
     row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 100}),
     row(3, "Plat 1", "Personal Credit", "5153", **{"Credit Balance": 5603}),
-    row(4, "Chase Ink", "Business Credit", "7667"),
+    row(4, "Chase Ink", "Business Credit", "7667", **{"Credit Balance": 5708.07}),
     row(5, "Etrade", "Investment", "9503"),
 ]
 
@@ -157,6 +161,68 @@ def test_missing_match_name_is_an_error_only_when_open():
     registry[2]["match"] = None
     assert kinds(check_registry_vs_live(registry, books_accounts(BOOKS), "business")) == [
         "live_not_in_registry", "registry_no_match_name"]
+
+
+# --- balances and sync ----------------------------------------------------------
+
+def test_monarch_credit_balances_are_sign_flipped_to_amount_owed():
+    by_key = {a["key"]: a["balance"] for a in monarch_accounts(MONARCH)}
+    assert by_key == {"4354": 100.0, "5153": 5603.0}
+
+
+def test_balances_equal_is_clean_and_mismatch_is_an_error():
+    sheet, _ = sheet_accounts(SHEET)
+    registry = registry_accounts(CONFIG)
+    assert check_balances(sheet, registry, monarch_accounts(MONARCH), "personal") == []
+    books = books_accounts(BOOKS)
+    assert check_balances(sheet, registry, books, "business") == []
+    blank, _ = sheet_accounts([row(4, "Chase Ink", "Business Credit", "7667")])
+    assert kinds(check_balances(blank, registry, books, "business")) == ["sheet_balance_missing"]
+    sheet2, _ = sheet_accounts([row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 99.99})])
+    errors = check_balances(sheet2, registry, monarch_accounts(MONARCH), "personal")
+    assert kinds(errors) == ["balance_mismatch"] and "99.99" in errors[0]["message"]
+
+
+def test_run_checks_includes_balances_unless_disabled():
+    rows = [row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 1})] + SHEET[1:]
+    assert kinds(run_checks(CONFIG, sheet_rows=rows, monarch=MONARCH, books=BOOKS)) == ["balance_mismatch"]
+    assert run_checks(CONFIG, sheet_rows=rows, monarch=MONARCH, books=BOOKS, balances=False) == []
+
+
+def test_plan_sync_writes_only_what_differs():
+    sheet, _ = sheet_accounts([row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 1}),
+                               row(3, "Plat 1", "Personal Credit", "5153", **{"Credit Balance": 5603})])
+    writes = plan_sync(sheet, registry_accounts(CONFIG), monarch_accounts(MONARCH), "personal")
+    assert [(w["criteria"], w["data"], w["old"], w["new"]) for w in writes] == [
+        ('"Account Last 4"="4354"', {"Debit Balance": 100.0}, 1.0, 100.0)]
+    # with an As of column every matched row is refreshed, equal or not
+    writes = plan_sync(sheet, registry_accounts(CONFIG), monarch_accounts(MONARCH), "personal",
+                       as_of="2026-10-19", has_as_of_column=True)
+    assert [w["data"] for w in writes] == [{"Debit Balance": 100.0, "As of": "2026-10-19"},
+                                           {"Credit Balance": 5603.0, "As of": "2026-10-19"}]
+
+
+def test_sync_refuses_while_membership_errors_exist():
+    log = []
+    inputs = dict(config=CONFIG, sheet_rows=SHEET + [row(9, "Extra", "Personal Credit", "9999")],
+                  monarch=MONARCH, books=BOOKS, category=None, source_status={})
+    assert sync(inputs, "sheet-id", dry_run=True, log=log.append) == 0
+    assert log and "refused" in log[0]
+
+
+def test_sync_dry_run_plans_but_writes_nothing():
+    log = []
+    rows = [row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 1})] + SHEET[1:]
+    inputs = dict(config=CONFIG, sheet_rows=rows, monarch=MONARCH, books=BOOKS, category=None,
+                  source_status={})
+    assert sync(inputs, "sheet-id", dry_run=True, log=log.append) == 0
+    assert [l for l in log if "would write" in l] == [
+        "  would write sheet row 2 'Recurring ACH': 1.00 -> 100.00"]
+
+
+def test_membership_errors_excludes_balance_kinds():
+    errors = [{"kind": "balance_mismatch"}, {"kind": "sheet_not_in_registry"}, {"kind": "sheet_balance_missing"}]
+    assert [e["kind"] for e in membership_errors(errors)] == ["sheet_not_in_registry"]
 
 
 def test_sources_and_category_narrowing():

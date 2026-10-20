@@ -172,6 +172,17 @@ def records(resource_id, worksheet_name):
     return _json(r).get("records", [])
 
 
+def update_records(resource_id, worksheet_name, criteria, data, first_match_only=True):
+    """Update the row(s) matching `criteria` (e.g. '"Account Last 4"="5153"') with the
+    header-keyed `data` dict (worksheet.records.update). Returns the affected-row count."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.records.update", "worksheet_name": worksheet_name,
+                            "criteria": criteria, "data": json.dumps(data),
+                            "first_match_only": "true" if first_match_only else "false"},
+                      headers=_headers(), timeout=60)
+    return _json(r).get("no_of_affected_rows", 0)
+
+
 def fetch_records(resource_id, worksheet_name, as_json=False):
     rows = records(resource_id, worksheet_name)
     if as_json:

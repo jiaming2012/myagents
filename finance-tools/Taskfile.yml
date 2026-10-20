@@ -92,9 +92,14 @@ tasks:
       - python registry_gaps.py --category business {{.CLI_ARGS}}
 
   accounts:check:
-    desc: "Prove the Bills sheet (Chart of Accounts), payments.yaml and Monarch / Zoho Books are one-to-one; exit 1 on any break. Flags: --category personal|business, --offline, --no-sheet, --json"
+    desc: "Prove the Bills sheet (Chart of Accounts), payments.yaml and Monarch / Zoho Books are one-to-one, balances to the cent; exit 1 on any break. Flags: --category personal|business, --offline, --no-sheet, --no-balances, --json"
     cmds:
       - python account_register.py {{.CLI_ARGS}}
+
+  accounts:sync:
+    desc: "Write live Monarch / Zoho Books balances into the Bills sheet, then run accounts:check. Refuses while membership errors exist. Flags: --dry-run, --category personal|business"
+    cmds:
+      - python account_register.py --sync {{.CLI_ARGS}}
 
   forecast:email:
     desc: Email forecast summary (default 30 days)
