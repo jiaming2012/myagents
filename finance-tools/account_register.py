@@ -197,16 +197,22 @@ def monarch_accounts(balances):
     """coverage_report.fetch_monarch_balances() shape ({display name: {balance,
     type, hidden, deactivated}}) -> active depository/credit accounts. Hidden or
     deactivated connections are dropped: they are Monarch's stale duplicates.
-    Monarch reports a card's owed amount negative; the sheet's Credit Balance is
-    the amount owed, positive, so credit balances are sign-flipped here."""
+    Balance = Monarch's display balance (what the app shows: a card's owed amount,
+    positive, with any per-account sign inversion applied), which is the sheet's
+    convention. Older callers that only carry the raw `balance` get it
+    sign-flipped for cards instead (the provider reports owed amounts negative)."""
     out = []
     for name, d in (balances or {}).items():
         kind = MONARCH_TYPES.get(d.get("type"))
         if kind is None or d.get("hidden") or d.get("deactivated"):
             continue
-        bal = _num(d.get("balance"))
-        if bal is not None and kind == "credit":
-            bal = -bal or 0.0          # `or 0.0` turns -0.0 into 0.0
+        bal = _num(d.get("display_balance"))
+        if bal is None:
+            bal = _num(d.get("balance"))
+            if bal is not None and kind == "credit":
+                bal = -bal
+        if bal is not None:
+            bal = bal or 0.0           # `or 0.0` turns -0.0 into 0.0
         out.append(_acct(last4_of(name), name, "personal", kind, balance=bal, ref="monarch"))
     return out
 

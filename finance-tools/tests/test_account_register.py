@@ -170,6 +170,17 @@ def test_monarch_credit_balances_are_sign_flipped_to_amount_owed():
     assert by_key == {"4354": 100.0, "5153": 5603.0}
 
 
+def test_monarch_display_balance_wins_over_raw_balance():
+    # Discover via Finicity: raw +1403.12, display balance fixed by the operator's invert
+    # setting in Monarch. The display balance is used as is, no flip.
+    accts = monarch_accounts({"Discover it Card (...9035)": {"balance": 1403.12, "display_balance": 1403.12,
+                                                             "type": "credit", "hidden": False, "deactivated": None},
+                              "Zero (...0000)": {"balance": 0.0, "display_balance": -0.0, "type": "credit",
+                                                 "hidden": False, "deactivated": None}})
+    assert [(a["key"], a["balance"]) for a in accts] == [("9035", 1403.12), ("0000", 0.0)]
+    assert str(accts[1]["balance"]) == "0.0"
+
+
 def test_balances_equal_is_clean_and_mismatch_is_an_error():
     sheet, _ = sheet_accounts(SHEET)
     registry = registry_accounts(CONFIG)

@@ -121,6 +121,9 @@ async def fetch_monarch_balances():
         name = acct.get("displayName", "")
         entry = {
             "balance": acct.get("currentBalance", 0),
+            # What the Monarch app shows: liabilities as the amount owed, positive, with any
+            # per-account sign inversion applied (currentBalance is the provider's raw value).
+            "display_balance": acct.get("displayBalance"),
             "type": (acct.get("type") or {}).get("name", ""),
             "hidden": bool(acct.get("isHidden")),
             "deactivated": acct.get("deactivatedAt"),
