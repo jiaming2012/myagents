@@ -8,6 +8,8 @@ Runs:
   3. Budget pacing (spending vs plan per category)
   4. Goal progress (savings contributions vs targets)
   5. Registry gaps (liabilities the forecast cannot see; Monarch/Xero drift and outages)
+  6. Account register (the Bills sheet one-to-one with payments.yaml, Monarch and
+     Zoho Books, balances to the cent — see docs/account-register-plan.md)
 
 A failing data source (expired Monarch login, disconnected Xero org) no longer
 aborts the report: the affected section is empty and the outage is reported
@@ -39,6 +41,7 @@ except ImportError:
 
 from coverage_report import fetch_monarch_balances, load_payments_yaml
 from registry_gaps import run_checks, format_gaps
+import account_register
 
 try:
     from xero_balances import fetch_xero_balances, xero_connection_status, fetch_xero_latest_activity
@@ -165,12 +168,25 @@ async def gather_all_data():
         xero_latest=xero_latest,
     )
 
+    # Account register (section 6): the Bills sheet <-> payments.yaml <-> Monarch / Zoho Books.
+    # Sheet and Books are fetched here (sync, each failure recorded as a register error).
+    reg_status = {"monarch": status.get("monarch", "unknown")}
+    sheet_rows = account_register._gather_sheet(reg_status, os.getenv(account_register.SHEET_ID_ENV,
+                                                                       account_register.DEFAULT_SHEET_ID))
+    books = account_register._gather_books(reg_status)
+    status["sheet"], status["books"] = reg_status["sheet"], reg_status["books"]
+    register = account_register.run_checks(
+        config, sheet_rows=sheet_rows, monarch=monarch_balances or None, books=books,
+        source_status=reg_status,
+    )
+
     return {
         "audit": audit_result,
         "forecast": forecast,
         "budget": budget_analysis,
         "goals": goal_progress,
         "gaps": gaps,
+        "register": register,
         "source_status": status,
         "run_at": datetime.now(),
     }
@@ -222,6 +238,19 @@ def count_action_items(data):
     for g in data.get("gaps", []):
         tag = "GAP" if g["severity"] == "error" else "gap"
         items.append(f"{tag}: {g['message']}")
+
+    # Account register: one line, not one per row — the detail is in section 6 / accounts:check
+    register = data.get("register", [])
+    if register:
+        n_member = len(account_register.membership_errors(register))
+        n_bal = len(register) - n_member
+        parts = []
+        if n_member:
+            parts.append(f"{n_member} membership error(s)")
+        if n_bal:
+            parts.append(f"{n_bal} balance mismatch(es)")
+        items.append(f"REGISTER: {', '.join(parts)} → task accounts:check"
+                     + ("" if n_member else " / task accounts:sync"))
 
     return items
 
@@ -346,6 +375,12 @@ def print_terminal_report(data):
     print(f"\n  {Color.BOLD}5. REGISTRY GAPS{Color.RESET} (what the forecast cannot see)")
     print(f"  {'─' * 55}")
     print(format_gaps(gaps, color=sys.stdout.isatty()))
+
+    # --- Section 6: Account Register ---
+    register = data.get("register", [])
+    print(f"\n  {Color.BOLD}6. ACCOUNT REGISTER{Color.RESET} (Bills sheet ↔ payments.yaml ↔ Monarch / Zoho Books)")
+    print(f"  {'─' * 55}")
+    print(account_register.format_errors(register, color=sys.stdout.isatty()))
 
     # --- Action Items ---
     items = count_action_items(data)
@@ -476,6 +511,30 @@ def build_health_email_html(data):
     else:
         gaps_html = '<p style="color: #16a34a; margin-bottom: 16px;">Registry gaps: none</p>'
 
+    # Account register HTML
+    reg_rows = ""
+    for e in sorted(data.get("register", []), key=lambda e: (e["kind"], e["message"])):
+        fix = f'<br><span style="color: #6b7280; font-size: 12px;">fix: {e["fix"]}</span>' if e.get("fix") else ""
+        reg_rows += (
+            f'<tr style="background: #fee2e2;">'
+            f'<td style="padding: 6px 8px; border: 1px solid #e5e7eb; white-space: nowrap;">{e["kind"]}</td>'
+            f'<td style="padding: 6px 8px; border: 1px solid #e5e7eb;">{e["message"]}{fix}</td>'
+            f'</tr>\n'
+        )
+    if reg_rows:
+        register_html = f"""
+<h3 style="color: #1f2937;">Account Register ({len(data.get("register", []))})</h3>
+<p style="color: #6b7280; font-size: 13px;">Bills sheet ↔ payments.yaml ↔ Monarch / Zoho Books. <code>task accounts:check</code> for the live list; <code>task accounts:sync</code> writes balances once membership is clean.</p>
+<table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
+<tr style="background: #f3f4f6;">
+<th style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: left;">Kind</th>
+<th style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: left;">Error</th>
+</tr>
+{reg_rows}</table>
+"""
+    else:
+        register_html = '<p style="color: #16a34a; margin-bottom: 16px;">Account register: one-to-one</p>'
+
     # Action items HTML
     action_html = ""
     if items:
@@ -553,6 +612,7 @@ def build_health_email_html(data):
 </table>
 
 {gaps_html}
+{register_html}
 {action_html}
 
 <p style="color: #9ca3af; font-size: 12px; margin-top: 24px;">Generated by Banking Payment Forecaster</p>

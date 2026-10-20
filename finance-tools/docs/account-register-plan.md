@@ -112,9 +112,9 @@ the display balance into this codebase's convention (liabilities negative) for e
 other script, so the forecast, gaps and `task balances` see the same corrected numbers
 (found and fixed 2026-10-19 on Discover 9035).
 
-Recommended cadence: `accounts:check` inside `task finance:sync-status` (the banner that
-runs before every numbers task), `accounts:sync` on demand or from the keep-warm launchd
-agent once trusted.
+Cadence: the register runs as section 6 of the weekly health report (`task health`, and
+the emailed report from the launchd agent), so drift is seen at least weekly without a
+separate command; `accounts:check` any time, `accounts:sync` on demand once trusted.
 
 ### Sheet schema changes (operator does these in Zoho Sheet)
 
@@ -143,7 +143,7 @@ agent once trusted.
 | 0 | **DONE 2026-10-19.** Read the converted native sheet by its WorkDrive id through the Sheet Data API with the existing token. | `task zoho:sheet:worksheets -- efajyb8b15e86a20a48e0b3edab6cf4fb18c5` lists the tabs and `task zoho:sheet:records -- <id> --sheet "Chart of Accounts"` prints 43 rows keyed by header, formulas evaluated, each with `row_index`. The id survived the xlsx-to-native conversion. The native workbook now has four tabs: Chart of Accounts, Credit Cards (was C.C. - Zero Balance), Recurring Charges (was Recurring), Loans; the Yumyum Bank Accounts, Plan, Investments, Propane and Notes tabs are gone, which already settles two of the schema changes below. |
 | 1 | **DONE 2026-10-19.** Membership check: `account_register.py` with checks 1–4, `task accounts:check` (`--category`, `--offline`, `--no-sheet`, `--json`), 13 unit tests in `tests/test_account_register.py`. Registry gained `zoho_books_match` on every business account (Lafayette checking's last4 corrected 3617 → 7011 per Books). | First live run: 39 errors, listed under "First run" below. Operator fixes the sheet and registry until it exits 0. |
 | 2 | **DONE 2026-10-19.** Balance check (check 5, on by default, `--no-balances` to skip) and `task accounts:sync` (`--dry-run`, `--category`), 7 more unit tests. Sheet writes go through `worksheet.records.update` with criteria `"Account Last 4"="<last4>"` (verified live with a no-op write). | Live dry run: sync refused (39 membership errors), then 16 `balance_mismatch` on the rows that already link, e.g. Recurring ACH 1826 in the sheet vs 4853.21 in Monarch. Once membership is clean, `task accounts:sync` writes the balances and re-checks; a hand-edited balance then makes `accounts:check` exit 1. |
-| 3 | Wire into `finance:sync-status`; retire `Yumyum Bank Accounts`; tests for every check function on fixture data. | `task finance:sync-status` fails loudly when the register drifts. |
+| 3 | **DONE 2026-10-19.** There is no `finance:sync-status` target in the repo (the plan assumed one); the register is wired into the weekly health report instead (`task health`, `health:email`, `health:preview`) as section 6, with one summary action item ("REGISTER: n membership error(s), m balance mismatch(es) → task accounts:check"). `Yumyum Bank Accounts` was already retired by the operator's conversion. Every check function has unit tests. | `task health` shows section 6 and the REGISTER action item whenever the register drifts; the emailed report carries the same table. |
 
 Phase 0 is small and gates everything; phases 1 and 2 are each one sitting.
 
