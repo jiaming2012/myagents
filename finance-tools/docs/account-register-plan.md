@@ -1,6 +1,6 @@
 # Plan: the Bills sheet as the account register, enforced one-to-one
 
-Status: proposal, 2026-10-19. Nothing here is built yet.
+Status: agreed 2026-10-19 (decisions below). Nothing here is built yet.
 
 ## Goal
 
@@ -137,18 +137,20 @@ agent once trusted.
 
 Phase 0 is small and gates everything; phases 1 and 2 are each one sitting.
 
-## Decisions needed before phase 1
+## Decisions (operator, 2026-10-19)
 
-1. **Business granularity.** One register row per Zoho Books bank account (recommended,
-   strict one-to-one) or one row per institution with sub-accounts summed?
-2. **Investments.** Monarch tracks them; are they in scope for the personal check, or
-   excluded until the `Investments` tab is rebuilt?
-3. **Balance truth for business.** Zoho Books book balance (recommended, it is what the
-   books say) or the bank feed balance? The two differ whenever lines are uncategorised,
-   and `zoho_books_recon.py` already flags that difference.
-4. **Where this is tracked.** `.planning/` has a closed v1.0 milestone; this would be
-   milestone v1.1 if the GSD workflow is to track it, or it stays a docs-only plan like
-   the October Zoho work.
+1. **Business granularity:** one register row per Zoho Books bank account. Mercury
+   sub-accounts, LFCU checking and savings, and Wells Signify each get their own row.
+2. **Investments:** excluded from the personal check until the `Investments` tab is
+   rebuilt. Rows with `Type = Investment` are skipped by every check; Monarch investment
+   accounts are likewise ignored, so they cannot appear as "extra" on the Monarch side.
+3. **Business balance truth:** the Zoho Books book balance (`balance`), not the bank feed
+   (`bank_balance`). Feed-versus-book differences stay the job of `zoho_books_recon.py`.
+4. **Tracking:** docs-only, like the October Zoho work. No GSD milestone is opened;
+   progress is recorded in this file and the runbooks.
+
+Still needed before phase 0 can run: the converted native workbook's id, the tail of
+its WorkDrive URL.
 
 ## Out of scope
 
