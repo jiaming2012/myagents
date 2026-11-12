@@ -123,7 +123,7 @@ zoho_only_accounts:
     statement_import: true
     closed: "2026-06-02"
 
-# --- Bank of America: Zoho feed only (`task zoho:boa`), no bank API ---------------
+# --- Bank of America: Zoho feed only (`task zoho:feed`), no bank API ---------------
 # The feed is the data; the independent check is the monthly statement closing
 # balance in closing_balances.yaml. Lines are classified on payee + description:
 # boa_transfers -> boa_merchants -> the shared merchants: block above.
