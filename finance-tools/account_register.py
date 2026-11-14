@@ -12,7 +12,9 @@ ones. This module proves, on every run, that the three layers agree:
 "One-to-one" is checked on OPEN accounts, both directions, per owner:
 
   1. sheet rows well formed   - every row has a Type (Personal/Business x
-                                Debit/Credit), a last4, and no duplicate last4
+                                Debit/Credit), a last4, and no duplicate last4;
+                                every open credit row has AutoPay Type full or
+                                min (blank means no autopay, which is not allowed)
   2. sheet <-> registry        - same set of last4s per owner; a row or entry
                                 marked closed on one side must be closed on both
   3. registry <-> Monarch      - every personal entry's monarch_match resolves to
@@ -80,6 +82,9 @@ BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
 AS_OF_COLUMN = "As of"
 KEY_COLUMN = "Account Last 4"
 BALANCE_KINDS = {"balance_mismatch", "sheet_balance_missing"}   # the kinds --sync is allowed to fix
+AUTOPAY_COLUMN = "AutoPay Type"
+CREDIT_AUTOPAY_TYPES = {"full", "min"}
+NON_MEMBERSHIP_KINDS = BALANCE_KINDS | {"sheet_credit_autopay"}  # errors that do not block --sync
 
 
 def _num(v):
@@ -139,9 +144,10 @@ def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref=""
 def sheet_accounts(rows):
     """Chart of Accounts rows (Sheet Data API records: header-keyed dicts with
     row_index) -> (accounts, errors). Investment rows are skipped; rows with no
-    Type, an unknown Type, or no last4 are errors. Closed = Status column says
-    closed (case-insensitive); a 'Closed' note alone is an error so the operator
-    adds the column rather than relying on free text."""
+    Type, an unknown Type, or no last4 are errors, as is an open credit row whose
+    AutoPay Type is not full or min. Closed = Status column says closed
+    (case-insensitive); a 'Closed' note alone is an error so the operator adds
+    the column rather than relying on free text."""
     accounts, errors = [], []
     for row in rows:
         ref = f"sheet row {row.get('row_index', '?')}"
@@ -166,6 +172,12 @@ def sheet_accounts(rows):
             errors.append(_err("sheet_row_closed_in_notes",
                                f"{ref} '{name}': notes say closed but there is no Status column / value.",
                                "Add a Status column to Chart of Accounts and set it to 'closed'."))
+        autopay = str(row.get(AUTOPAY_COLUMN) or "").strip()
+        if kind == "credit" and not closed and autopay.casefold() not in CREDIT_AUTOPAY_TYPES:
+            errors.append(_err("sheet_credit_autopay",
+                               f"{ref} '{name}' ({typ}): AutoPay Type is {repr(autopay) if autopay else 'blank'}; "
+                               f"credit cards must be one of {sorted(CREDIT_AUTOPAY_TYPES)}.",
+                               "Set up autopay at the issuer, then set AutoPay Type to full or min."))
         key = str(row.get("Account Last 4") or "").strip() or None
         if key is None and not closed:
             errors.append(_err("sheet_row_no_last4",
@@ -442,7 +454,7 @@ def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None,
 
 
 def membership_errors(errors):
-    return [e for e in errors if e["kind"] not in BALANCE_KINDS]
+    return [e for e in errors if e["kind"] not in NON_MEMBERSHIP_KINDS]
 
 
 # ---------------------------------------------------------------------------
