@@ -47,8 +47,8 @@ CONFIG = {"accounts": [
 
 SHEET = [
     row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 100}),
-    row(3, "Plat 1", "Personal Credit", "5153", **{"Credit Balance": 5603}),
-    row(4, "Chase Ink", "Business Credit", "7667", **{"Credit Balance": 5708.07}),
+    row(3, "Plat 1", "Personal Credit", "5153", **{"Credit Balance": 5603, "AutoPay Type": "min"}),
+    row(4, "Chase Ink", "Business Credit", "7667", **{"Credit Balance": 5708.07, "AutoPay Type": "full"}),
     row(5, "Etrade", "Investment", "9503"),
 ]
 
@@ -93,6 +93,23 @@ def test_sheet_accounts_skips_investments_and_flags_bad_rows():
     assert accounts[0]["balance"] == 100 and accounts[1]["balance"] == 5603
     assert kinds(errors) == ["sheet_duplicate_last4", "sheet_row_closed_in_notes",
                              "sheet_row_no_last4", "sheet_row_type_unknown", "sheet_row_untyped"]
+
+
+def test_open_credit_rows_need_full_or_min_autopay():
+    rows = [row(2, "Blank", "Personal Credit", "1111"),
+            row(3, "Fixed", "Business Credit", "2222", **{"AutoPay Type": "fixed"}),
+            row(4, "None", "Personal Credit", "3333", **{"AutoPay Type": "none"}),
+            row(5, "Min", "Business Credit", "4444", **{"AutoPay Type": "Min "}),
+            row(6, "Full", "Personal Credit", "5555", **{"AutoPay Type": "full"}),
+            row(7, "Closed", "Personal Credit", "6666", Status="closed"),
+            row(8, "Checking", "Personal Debit", "7777"),
+            row(9, "New card", "Personal Credit", "")]
+    accounts, errors = sheet_accounts(rows)
+    assert len(accounts) == 7
+    assert kinds(errors) == ["sheet_credit_autopay"] * 4 + ["sheet_row_no_last4"]
+    flagged = {e["message"].split("'")[1] for e in errors if e["kind"] == "sheet_credit_autopay"}
+    assert flagged == {"Blank", "Fixed", "None", "New card"}
+    assert kinds(membership_errors(errors)) == ["sheet_row_no_last4"]
 
 
 def test_sheet_status_column_closes_a_row():
