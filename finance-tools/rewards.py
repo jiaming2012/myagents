@@ -262,10 +262,15 @@ def credit_usage(card, txns, year, today):
     for credit in card.get("credits") or []:
         kind = credit["period"]
         amount = float(credit["amount"])
+        begins = credit.get("start")
+        if begins is not None and not isinstance(begins, date):
+            begins = date.fromisoformat(str(begins)[:10])
         periods = []
         for label, start, end in periods_in_year(kind, year):
             if start > today:
                 continue
+            if begins and end < begins:
+                continue                 # the benefit did not exist yet: not "missed"
             in_period = [t for t in txns if start <= txn_date(t) <= end]
             spend = sum(-t["amount"] for t in in_period
                         if t["amount"] < 0 and matches_merchant(credit.get("merchant"), t))

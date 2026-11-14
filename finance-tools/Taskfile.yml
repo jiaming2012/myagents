@@ -338,6 +338,12 @@ tasks:
       - task: sync-status:warn
       - python rewards.py --card amex-platinum-2004 {{.CLI_ARGS}}
 
+  rewards:delta:
+    desc: "Rewards report for the Amex Delta SkyMiles Gold only (rideshare credit)"
+    cmds:
+      - task: sync-status:warn
+      - python rewards.py --card amex-delta-1008 {{.CLI_ARGS}}
+
   rewards:json:
     desc: "Rewards report as JSON from the last snapshot"
     cmds:
