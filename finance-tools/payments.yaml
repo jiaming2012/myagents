@@ -261,13 +261,13 @@ accounts:
 
   # --- Citi ---
   - id: citi-rewards-8281
-    name: "Rewards+"
+    name: "Strata"   # product-changed from Rewards+; the card app now says Citi Strata
     institution: "Citi"
     last4: "8281"
     type: credit
     category: personal
     monarch_match: "Citi Strata Card (...8281)"
-    nicknames: ["Citi", "Citi 8281", "Citi Rewards", "Rewards+"]
+    nicknames: ["Citi", "Citi 8281", "Citi Strata", "Citi Rewards", "Rewards+"]
 
   # --- Amex ---
   - id: amex-delta-1008

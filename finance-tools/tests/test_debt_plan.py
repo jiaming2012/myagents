@@ -6,12 +6,15 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from debt_plan import (  # noqa: E402
+    amortized_payment,
     build_debts,
     headroom_by_account,
     monarch_lookup,
     months_until,
     owed_balance,
     pool_headroom,
+    promo_action_line,
+    promo_statuses,
     simulate,
     solve_monthly_extra,
     xero_shaped_from_zoho,
@@ -207,3 +210,86 @@ def test_headroom_and_pools():
     assert pools["personal"]["unknown"] == ["Mercury Personal"]
     assert pools["business"]["safe"] == 450.18
     assert [r["id"] for r in pools["business"]["at_risk"]] == ["b1"]
+
+
+# --- promotional rates -------------------------------------------------------
+
+TODAY = date(2026, 11, 14)
+PROMO_CFG = {"promos": [{"account": "citi", "apr": 9.99, "until": date(2027, 7, 1), "standard_apr": 28.74,
+                         "activate_by": date(2026, 12, 28), "activated": True, "credit_limit": 10000,
+                         "target_utilization": 30}]}
+PROMO_CONFIG = {
+    "accounts": [{"id": "citi", "name": "Strata", "institution": "Citi", "last4": "8281", "type": "credit",
+                  "category": "personal", "monarch_match": "Citi Strata Card (...8281)"},
+                 {"id": "boa", "name": "BoA Plat", "type": "credit", "category": "personal", "monarch_match": "BoA"}],
+    "payments": [{"name": "Citi (full)", "pays_account": "citi", "autopay_type": "full", "amount": 556.68,
+                  "funding_account": "cap1"}],
+}
+MONARCH = {"Citi Strata Card (...8281)": {"balance": -1000.0}, "BoA": {"balance": -4000.0}}
+
+
+def test_promo_card_simulates_at_promo_rate_then_standard_rate():
+    d = debt("citi", 1000, 9.99, 10)
+    d.update(promo_until=date(2027, 1, 1), apr_after=28.74)
+    r = simulate([d], start=START)
+    # Nov + Dec at 9.99%, Jan at 28.74%
+    assert r["schedule"][0]["interest"] == round(1000 * 9.99 / 1200, 2)
+    assert r["schedule"][2]["interest"] > r["schedule"][1]["interest"] * 2.5
+
+
+def test_promo_rate_end_retargets_avalanche():
+    promo = debt("citi", 1000, 9.99, 25)
+    promo.update(promo_until=date(2027, 2, 1), apr_after=28.74)
+    other = debt("boa", 5000, 24.99, 100)
+    r = simulate([promo, other], monthly_extra=300, start=START)
+    # once Citi jumps to 28.74% it outranks the 24.99% card and is cleared first
+    assert r["payoff"]["citi"] < r["payoff"]["boa"]
+
+
+def test_build_debts_carries_promo_card_despite_full_autopay():
+    debts, _ = build_debts(PROMO_CONFIG, PROMO_CFG, MONARCH, {}, today=TODAY)
+    citi = next(d for d in debts if d["id"] == "citi")
+    assert citi["carried"] and citi["apr"] == 9.99 and citi["apr_after"] == 28.74
+    assert citi["promo_until"] == date(2027, 7, 1)
+
+
+def test_build_debts_ignores_expired_promo():
+    debts, _ = build_debts(PROMO_CONFIG, PROMO_CFG, MONARCH, {}, today=date(2027, 7, 1))
+    citi = next(d for d in debts if d["id"] == "citi")
+    assert not citi["carried"] and citi["promo_until"] is None
+
+
+def test_amortized_payment():
+    assert amortized_payment(1200, 0.0, 12) == 100.0
+    assert amortized_payment(0, 9.99, 3) == 0.0
+    assert 3030 < amortized_payment(3000, 9.99, 3) * 3 < 3060
+
+
+def test_promo_status_fill_phase_room_cap_and_target():
+    debts, _ = build_debts(PROMO_CONFIG, PROMO_CFG, MONARCH, {}, today=TODAY)
+    [s] = promo_statuses(PROMO_CONFIG, PROMO_CFG, MONARCH, {}, debts, today=TODAY)
+    assert s["phase"] == "fill"
+    assert s["cap"] == 3000.0 and s["room"] == 2000.0 and s["utilization"] == 10.0
+    assert s["stop_adding"] == date(2027, 4, 1)
+    assert s["payoff_months"] == 3 and s["payoff_balance"] == 3000.0
+    assert s["target"]["id"] == "boa"
+    assert s["est_savings"] > 0
+    assert s["autopay_full"]          # registry still says pay in full
+    assert "autopay" in promo_action_line(s)
+
+
+def test_promo_status_payoff_phase_and_unknown_limit():
+    cfg = {"promos": [dict(PROMO_CFG["promos"][0], credit_limit=None)]}
+    config = dict(PROMO_CONFIG, payments=[])
+    [s] = promo_statuses(config, cfg, MONARCH, {}, [], today=TODAY)
+    assert s["room"] is None and "credit_limit" in promo_action_line(s)
+    [s] = promo_statuses(config, PROMO_CFG, MONARCH, {}, [], today=date(2027, 5, 10))
+    assert s["phase"] == "payoff" and s["payoff_months"] == 2
+    assert s["payoff_payment"] == amortized_payment(1000.0, 9.99, 2)
+    assert "no new charges" in promo_action_line(s)
+
+
+def test_promo_status_room_line_when_autopay_fixed():
+    config = dict(PROMO_CONFIG, payments=[])
+    [s] = promo_statuses(config, PROMO_CFG, MONARCH, {}, [], today=TODAY)
+    assert "$2,000.00 of room" in promo_action_line(s)

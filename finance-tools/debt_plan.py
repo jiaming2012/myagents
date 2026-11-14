@@ -22,6 +22,11 @@ Headroom is deliberately conservative: income is not modeled, so it is "what is
 sitting in the account today beyond what is already spoken for". Money you can
 safely send this instant, not a forecast of next month.
 
+Promotional rates (debts.yaml `promos:`) are honored: the card plans at the promo APR
+until the promo ends, then at its standard APR, and section 4 says how much more of
+your everyday spending to put on it (up to a credit-utilization cap), when to stop, and
+what monthly payment clears it before the rate jumps.
+
 APR / minimum come from debts.yaml. A debt missing there is still listed, with an
 ASSUMED APR (cards 24.99%, loans 9.99%) so the plan runs; fill the file in to make
 the numbers yours. Cards whose registry payment is autopay_type: full are "paid in
@@ -51,6 +56,8 @@ ASSUMED_APR = {"credit": 24.99, "loan": 9.99}
 ASSUMED_MIN_PCT = 0.02          # 2% of balance when nothing better is known
 ASSUMED_MIN_FLOOR = 25.0
 MAX_MONTHS = 600
+PROMO_DEFAULT_UTILIZATION = 30.0   # % of the card's limit; see debts.yaml promos for why
+PROMO_STOP_MONTHS_BEFORE = 3       # stop adding this many months before the promo ends
 
 
 # --- inputs ------------------------------------------------------------------
@@ -124,9 +131,10 @@ def owed_balance(account, monarch_by_name, zoho_by_name):
     return None, None
 
 
-def build_debts(config, debts_cfg, monarch_by_name, zoho_by_name):
+def build_debts(config, debts_cfg, monarch_by_name, zoho_by_name, today=None):
     """Every live liability with APR, minimum, funding account and provenance flags."""
     overrides = {d["account"]: d for d in debts_cfg.get("debts", []) if d.get("account")}
+    promos = active_promos(debts_cfg, today)
     pays = {}
     for p in config.get("payments", []):
         if p.get("pays_account"):
@@ -140,7 +148,8 @@ def build_debts(config, debts_cfg, monarch_by_name, zoho_by_name):
         o = overrides.get(a["id"], {})
         reg = pays.get(a["id"], [])
         paid_in_full = any(p.get("autopay_type") == "full" for p in reg)
-        carried = o.get("carried", not paid_in_full)
+        promo = promos.get(a["id"])
+        carried = o.get("carried", True if promo else not paid_in_full)
         if owed is None:
             notes.append(f"{a.get('name', a['id'])}: balance unknown (no live source) — skipped")
             continue
@@ -148,9 +157,14 @@ def build_debts(config, debts_cfg, monarch_by_name, zoho_by_name):
             continue
         assumed = []
         apr = o.get("apr")
+        if apr is None and promo and promo.get("standard_apr") is not None:
+            apr = promo["standard_apr"]
         if apr is None:
             apr = ASSUMED_APR.get(a["type"], 19.99)
             assumed.append("apr")
+        apr_after, promo_until = None, None
+        if promo:
+            apr_after, apr, promo_until = float(apr), float(promo["apr"]), _as_date(promo["until"])
         min_payment = o.get("min_payment")
         if min_payment is None:
             amounts = [p.get("amount", 0) for p in reg if p.get("autopay_type") != "full" and p.get("amount")]
@@ -167,6 +181,7 @@ def build_debts(config, debts_cfg, monarch_by_name, zoho_by_name):
             "min_payment": float(min(min_payment, owed)), "funding_account": funding,
             "carried": bool(carried), "paid_in_full": paid_in_full and not o.get("carried"),
             "assumed": assumed, "notes": o.get("notes", ""),
+            "promo_until": promo_until, "apr_after": apr_after,
         })
     debts.sort(key=lambda d: (-d["apr"], -d["balance"]))
     return debts, notes
@@ -245,6 +260,10 @@ def simulate(debts, monthly_extra=0.0, strategy="avalanche", rollover=True, lump
             break
         paid_this_month = 0.0
         interest_this_month = 0.0
+        month_start = _add_months(start, month - 1)
+        for d in live:
+            if d.get("promo_until") and month_start >= d["promo_until"]:
+                d["apr"], d["promo_until"] = d["apr_after"], None   # promo over: standard rate, re-targeted
         for d in open_debts:
             i = d["_bal"] * d["apr"] / 1200.0
             d["_bal"] += i
@@ -319,6 +338,114 @@ def solve_monthly_extra(debts, target_months, strategy="avalanche", rollover=Tru
     return round(hi + 0.499)
 
 
+# --- promotional rates ---------------------------------------------------------
+
+
+def _as_date(v):
+    if v is None or isinstance(v, date):
+        return v
+    return datetime.strptime(str(v)[:10], "%Y-%m-%d").date()
+
+
+def active_promos(debts_cfg, today=None):
+    """{account id: promo entry} for promos that have not ended yet."""
+    today = today or date.today()
+    out = {}
+    for p in debts_cfg.get("promos") or []:
+        until = _as_date(p.get("until"))
+        if p.get("account") and p.get("apr") is not None and until and today < until:
+            out[p["account"]] = p
+    return out
+
+
+def amortized_payment(balance, apr, months):
+    """Level monthly payment that takes balance to zero in `months` at `apr`."""
+    if balance <= 0.005:
+        return 0.0
+    months = max(1, months)
+    r = apr / 1200.0
+    if r == 0:
+        return round(balance / months, 2)
+    return round(balance * r / (1 - (1 + r) ** -months), 2)
+
+
+def _months_between(a, b):
+    """Monthly payments left from date a until date b: one per calendar month a..b-1."""
+    return (b.year - a.year) * 12 + (b.month - a.month)
+
+
+def promo_statuses(config, debts_cfg, monarch_by_name, zoho_by_name, debts=None, today=None):
+    """One dict per active promo: how much more spending the card can take (up to the
+    utilization cap), the phase (fill vs pay off), the payment that clears it before the
+    rate jumps, and which debt the freed cash should go to. Pure: nothing is fetched."""
+    today = today or date.today()
+    accounts = {a["id"]: a for a in config.get("accounts", [])}
+    out = []
+    for acct_id, p in active_promos(debts_cfg, today).items():
+        a = accounts.get(acct_id)
+        if not a:
+            continue
+        owed, _src = owed_balance(a, monarch_by_name, zoho_by_name)
+        until = _as_date(p["until"])
+        apr = float(p["apr"])
+        limit = float(p["credit_limit"]) if p.get("credit_limit") else None
+        pct = float(p.get("target_utilization", PROMO_DEFAULT_UTILIZATION))
+        stop = _as_date(p.get("stop_adding")) or _add_months(until.replace(day=1), -PROMO_STOP_MONTHS_BEFORE)
+        phase = "fill" if today < stop else "payoff"
+        cap = round(limit * pct / 100.0, 2) if limit else None
+        room = round(max(0.0, cap - (owed or 0.0)), 2) if cap is not None and owed is not None else None
+        util = round(100.0 * (owed or 0.0) / limit, 1) if limit and owed is not None else None
+        # In the fill phase assume the card reaches the cap by the stop date.
+        payoff_from = stop if phase == "fill" else today
+        payoff_months = max(1, _months_between(payoff_from, until))
+        payoff_balance = cap if phase == "fill" else owed
+        if phase == "fill" and cap is None:
+            payoff_balance = None             # can't size the payoff without the limit
+        payoff_payment = amortized_payment(payoff_balance, apr, payoff_months) if payoff_balance is not None else None
+        autopay_full = [x for x in config.get("payments", [])
+                        if x.get("pays_account") == acct_id and x.get("autopay_type") == "full"]
+        others = sorted((d for d in (debts or []) if d["carried"] and d["id"] != acct_id
+                         and d["category"] == a.get("category", "personal") and d["apr"] > apr),
+                        key=lambda d: -d["apr"])
+        target = others[0] if others else None
+        est = None
+        if target and room:
+            # rough: the shifted dollars cost the promo rate instead of the target's rate
+            # from now until the promo ends
+            est = round(room * (target["apr"] - apr) / 100.0 * max(0, _months_between(today, until)) / 12.0, 2)
+        out.append({
+            "account": acct_id, "name": a.get("name", acct_id), "institution": a.get("institution", ""),
+            "last4": a.get("last4", ""), "apr": apr, "standard_apr": p.get("standard_apr"),
+            "until": until, "days_left": (until - today).days, "activate_by": _as_date(p.get("activate_by")),
+            "activated": bool(p.get("activated", True)), "balance": owed, "credit_limit": limit,
+            "target_utilization": pct, "cap": cap, "room": room, "utilization": util,
+            "stop_adding": stop, "phase": phase, "payoff_months": payoff_months,
+            "payoff_balance": round(payoff_balance, 2) if payoff_balance is not None else None,
+            "payoff_payment": payoff_payment,
+            "autopay_full": autopay_full, "target": target, "est_savings": est,
+        })
+    return out
+
+
+def promo_action_line(s):
+    """One line for the weekly health action items, or None when nothing is asked."""
+    card = f"{s['institution']} {s['name']} {s['last4']}".strip()
+    if not s["activated"]:
+        return f"PROMO: activate the {s['apr']:.2f}% offer on {card} by {s['activate_by']}"
+    if s["autopay_full"]:
+        return (f"PROMO: {card} autopay still pays the statement in full — switch it to the minimum payment "
+                f"or the {s['apr']:.2f}% promo saves nothing → task finance:debt")
+    if s["phase"] == "fill":
+        if s["room"] is None:
+            return f"PROMO: add credit_limit for {card} to debts.yaml so the spending cap can be computed"
+        if s["room"] > 0:
+            return (f"PROMO: put everyday spending on {card} — {_m(s['room'])} of room at {s['apr']:.2f}% "
+                    f"until {s['stop_adding']:%b %d} → task finance:debt")
+        return None
+    return (f"PROMO: no new charges on {card}; pay {_m(s['payoff_payment'])}/mo to clear "
+            f"{_m(s['balance'])} before {s['until']:%b %d, %Y} ({s['standard_apr']}% after)")
+
+
 # --- orchestration -----------------------------------------------------------
 
 
@@ -335,9 +462,10 @@ async def gather(days=30, fresh=False):
     xero_shaped = xero_shaped_from_zoho(config, zoho_by_name)
     forecast = build_forecast(config, monarch_by_name, xero_shaped, days=days, warn_missing=False)
     debts, notes = build_debts(config, debts_cfg, monarch_by_name, zoho_by_name)
+    promos = promo_statuses(config, debts_cfg, monarch_by_name, zoho_by_name, debts)
     rows = headroom_by_account(forecast, config)
     return {"config": config, "debts_cfg": debts_cfg, "sync": sync, "debts": debts, "notes": notes,
-            "headroom": rows, "pools": pool_headroom(rows), "days": days}
+            "promos": promos, "headroom": rows, "pools": pool_headroom(rows), "days": days}
 
 
 def plan(data, monthly_extra=None, strategy="avalanche", rollover=True, by=None, use_headroom=True):
@@ -444,9 +572,13 @@ def print_report(data, result):
         if p["unknown"]:
             print(f"  {'':<8} {C.DIM}no balance for: {', '.join(p['unknown'])}{C.RESET}")
 
-    # 4. outlook
+    # 4. promotional rates
+    if data.get("promos"):
+        print_promos(data["promos"], acct_name)
+
+    # 5. outlook (4 when there is no promo)
     b, w = result["baseline"], result["with_plan"]
-    print(f"\n{C.BOLD}4. Outlook{C.RESET}")
+    print(f"\n{C.BOLD}{5 if data.get('promos') else 4}. Outlook{C.RESET}")
     roll = "paid-off minimums roll forward" if result.get("rollover", True) else "no rollover"
     print(f"  minimums only ({roll}): debt-free {_when(b['months'])}, interest {_m(b['total_interest'])}")
     lump_total = sum(result["lump"].values()) if result["lump"] else 0.0
@@ -466,6 +598,43 @@ def print_report(data, result):
                   + (f" and the {_m(lump_total)} sent now" if lump_total else "") + ")")
     print(f"\n  {C.DIM}Edit debts.yaml for real APRs/minimums and a monthly_extra; headroom ignores income, "
           f"so it is a floor, not a ceiling.{C.RESET}")
+
+
+def print_promos(promos, acct_name):
+    print(f"\n{C.BOLD}4. Promo-rate spending{C.RESET}")
+    for s in promos:
+        card = f"{s['institution']} {s['name']} {s['last4']}".strip()
+        after = f", then {s['standard_apr']}%" if s["standard_apr"] is not None else ""
+        print(f"  {C.BOLD}{card}{C.RESET}: {s['apr']:.2f}% on new purchases until {s['until']:%b %d, %Y}"
+              f"{after} — {s['days_left']} days left")
+        if not s["activated"]:
+            print(f"    {C.RED}not activated — activate it in the card's app by {s['activate_by']}{C.RESET}")
+        if s["credit_limit"]:
+            print(f"    balance {_m(s['balance'])} of {_m(s['credit_limit'])} limit ({s['utilization']}%) · "
+                  f"cap {s['target_utilization']:.0f}% = {_m(s['cap'])} · room {_m(s['room'])}")
+        else:
+            print(f"    balance {_m(s['balance'])} · {C.YEL}credit_limit unknown — add it under promos in debts.yaml{C.RESET}")
+        if s["phase"] == "fill":
+            if s["room"]:
+                t = s["target"]
+                where = f" toward {C.BOLD}{t['name']}{C.RESET} ({t['apr']:.2f}%)" if t else " toward your highest-rate debt"
+                print(f"    {C.GRN}→ put everyday spending on this card until it reaches {_m(s['cap'])} "
+                      f"({_m(s['room'])} more){C.RESET}, and send the cash you would have spent{where}")
+                if s["est_savings"]:
+                    print(f"    {C.DIM}worth roughly {_m(s['est_savings'])} of interest if you fill it now and clear it by "
+                          f"{s['until']:%b %Y}{C.RESET}")
+            elif s["room"] == 0:
+                print(f"    {C.YEL}at the {s['target_utilization']:.0f}% cap — keep spending elsewhere until it comes down{C.RESET}")
+            print(f"    pay only the minimum until you stop adding on {s['stop_adding']:%b %d, %Y}; then pay "
+                  f"{C.BOLD}{_m(s['payoff_payment'])}/mo{C.RESET} for {s['payoff_months']} months to clear "
+                  f"{_m(s['payoff_balance'])} before the rate jumps")
+        else:
+            print(f"    {C.YEL}pay-off phase: no new charges{C.RESET}; pay {C.BOLD}{_m(s['payoff_payment'])}/mo{C.RESET} "
+                  f"for {s['payoff_months']} months to clear {_m(s['balance'])} by {s['until']:%b %d}")
+        for x in s["autopay_full"]:
+            print(f"    {C.RED}✗ autopay \"{x.get('name')}\" pays the statement in full from "
+                  f"{acct_name.get(x.get('funding_account'), x.get('funding_account'))} — switch it to the minimum "
+                  f"payment in the card's app, then set autopay_type: min in payments.yaml{C.RESET}")
 
 
 def main():

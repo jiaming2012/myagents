@@ -24,6 +24,35 @@ plan:
   strategy: avalanche
   monthly_extra: 0
 
+# Promotional APRs. While one is active the card is planned at `apr` (and counted as
+# carried even if its registry autopay pays in full), then at `standard_apr` from
+# `until` on — so the avalanche re-targets it the month the rate jumps. Section 4 of
+# `task finance:debt` and the weekly health action items say how much more everyday
+# spending to put on the card, when to stop, and the payment that clears it in time.
+#
+#   account:            registry id
+#   apr / until:        promo rate and the date it ends (YYYY-MM-DD)
+#   standard_apr:       the purchase APR after `until`
+#   activated:          false -> prompt to activate by `activate_by`
+#   credit_limit:       the card's limit (Monarch does not expose it; read it off the card's app)
+#   target_utilization: fill the card up to this % of its limit. Scores read utilization
+#                       per card AND overall: under 30% is the usual "no visible damage" line,
+#                       under 10% scores best, 50% on one card typically costs points while it
+#                       is reported. FICO 8 / VantageScore keep no memory of it — the score
+#                       recovers once the balance is paid down — so a higher cap is safe only
+#                       if no loan/mortgage/card application is coming before the payoff.
+#   stop_adding:        last day to add charges (default: 3 months before `until`)
+promos:
+  - account: citi-rewards-8281
+    apr: 9.99              # Citi offer: 9.99% on all new purchases until 07/01/2027
+    until: 2027-07-01
+    standard_apr: 28.74    # variable, follows Prime
+    activate_by: 2026-12-28
+    activated: true        # activated Nov 2026
+    credit_limit:          # FILL IN from the Citi app
+    target_utilization: 30
+    # stop_adding: 2027-04-01
+
 debts:
   # --- business ---
   - account: chase-ink-7667

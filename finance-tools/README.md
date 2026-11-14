@@ -224,6 +224,15 @@ send this instant, not a forecast of next month. The outlook simulates minimums 
 versus your plan, month by month, rolling each paid-off minimum into the next target,
 and `--by` binary-searches the monthly extra a deadline needs.
 
+**Promo-rate cards** (`promos:` in debts.yaml, e.g. Citi Strata 8281 at 9.99% on new
+purchases until 2027-07-01): the card is planned at the promo rate and switches to its
+standard rate the month the promo ends, so the avalanche re-targets it then. Section 4
+says how much more everyday spending to put on the card (up to `target_utilization`
+of `credit_limit`, default 30%), which debt the freed cash should go to, the stop date
+(default 3 months before the end), and the monthly payment that clears it before the
+rate jumps. It flags a registry autopay that still pays the card in full. `task health`
+carries the same prompt as a `PROMO:` action item.
+
 ## Zoho Books reconciliation (the business books)
 
 ```bash
