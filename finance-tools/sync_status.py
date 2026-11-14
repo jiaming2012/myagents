@@ -105,6 +105,15 @@ def _finding(source, severity, subject, message, fix=""):
 # --- Monarch -----------------------------------------------------------------
 
 
+def monarch_signed_balance(a):
+    """Same rule as coverage_report.monarch_signed_balance (kept here so this module stays
+    import-light): the app's displayBalance, liabilities negative; raw value as fallback."""
+    display = a.get("displayBalance")
+    if display is None:
+        return a.get("currentBalance", 0)
+    return (display if a.get("isAsset", True) else -display) or 0.0
+
+
 def slim_monarch_account(a):
     """Keep only what the rules need, so the cache stays small."""
     cred = a.get("credential") or {}
@@ -114,7 +123,7 @@ def slim_monarch_account(a):
         "name": a.get("displayName") or "(unnamed)",
         "type": (a.get("type") or {}).get("name", ""),
         "institution": inst.get("name") or cred_inst.get("name") or "",
-        "balance": a.get("currentBalance", 0),
+        "balance": monarch_signed_balance(a),   # display balance, liabilities negative
         "updated": a.get("displayLastUpdatedAt") or a.get("updatedAt"),
         "is_manual": bool(a.get("isManual")),
         "hidden": bool(a.get("isHidden")),

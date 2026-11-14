@@ -19,3 +19,67 @@ tasks:
     desc: List all available tasks
     cmds:
       - task --list-all
+
+  merge:ff:
+    desc: "Fast-forward main to a worktree branch that already contains main, then push: task merge:ff BRANCH=<branch>"
+    requires:
+      vars: [BRANCH]
+    preconditions:
+      - sh: '[ "$(git rev-parse --abbrev-ref HEAD)" = "main" ]'
+        msg: "Run from the main checkout (current branch is not main)."
+      - sh: 'git diff --quiet && git diff --cached --quiet'
+        msg: "The main checkout has uncommitted changes; commit or discard them first."
+    cmds:
+      - git merge --ff-only {{.BRANCH}}
+      - git push origin main
+
+  worktrees:status:
+    desc: Show each worktree branch and how many of its commits are not yet on main
+    cmds:
+      - |
+        for b in $(git for-each-ref --format='%(refname:short)' refs/heads/worktree-*); do
+          printf '%-40s %s unmerged\n' "$b" "$(git rev-list --count main..$b)"
+        done
+
+  worktrees:prune:
+    desc: Remove worktrees whose branch is fully on main and delete those local branches (locked or dirty worktrees are skipped)
+    cmds:
+      - |
+        git worktree list --porcelain | awk '/^worktree /{wt=$2} /^branch /{print wt, $2}' | while read -r wt ref; do
+          b=${ref#refs/heads/}
+          case "$b" in worktree-*) ;; *) continue ;; esac
+          n=$(git rev-list --count "main..$b")
+          if [ "$n" != 0 ]; then echo "keep   $b ($n commits not on main)"; continue; fi
+          if git worktree remove "$wt" 2>/dev/null; then
+            git branch -d "$b" >/dev/null 2>&1 && echo "pruned $b" || echo "pruned $b (worktree removed; branch left in place)"
+          else
+            echo "skip   $b (locked or has uncommitted changes: $wt)"
+          fi
+        done
+        git worktree prune
+
+  session:find:
+    desc: "Find Claude Code sessions whose transcript contains a phrase: task session:find -- 'four things only you can answer'"
+    cmds:
+      - |
+        [ -n "{{.CLI_ARGS}}" ] || { echo "usage: task session:find -- '<phrase>'"; exit 1; }
+        grep -rlF -- {{.CLI_ARGS}} "$HOME/.claude/projects" 2>/dev/null | while read -r f; do
+          id=$(basename "$f" .jsonl)
+          cwd=$(grep -o '"cwd":"[^"]*"' "$f" | head -1 | cut -d'"' -f4)
+          last=$(grep -o '"timestamp":"[^"]*"' "$f" | tail -1 | cut -d'"' -f4)
+          printf '%s  last=%s  cwd=%s\n' "$id" "$last" "$cwd"
+        done
+
+  session:resume:
+    desc: "Reopen a Claude Code session by id (prefix ok) in the directory it ran from: task session:resume -- 1477311a"
+    interactive: true
+    cmds:
+      - |
+        [ -n "{{.CLI_ARGS}}" ] || { echo "usage: task session:resume -- <session-id-or-prefix>"; exit 1; }
+        f=$(ls "$HOME"/.claude/projects/*/{{.CLI_ARGS}}*.jsonl 2>/dev/null | head -1)
+        [ -n "$f" ] || { echo "no session matching {{.CLI_ARGS}}"; exit 1; }
+        id=$(basename "$f" .jsonl)
+        cwd=$(grep -o '"cwd":"[^"]*"' "$f" | head -1 | cut -d'"' -f4)
+        [ -d "$cwd" ] || cwd=$(pwd)
+        echo "resuming $id in $cwd"
+        cd "$cwd" && exec claude --resume "$id"

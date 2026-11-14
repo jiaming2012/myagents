@@ -224,6 +224,18 @@ send this instant, not a forecast of next month. The outlook simulates minimums 
 versus your plan, month by month, rolling each paid-off minimum into the next target,
 and `--by` binary-searches the monthly extra a deadline needs.
 
+## Zoho Books reconciliation (the business books)
+
+```bash
+task zoho:recon / zoho:recon:apply      # Mercury accounts (bank API + feed), Toast payouts
+task zoho:boa / zoho:boa:apply          # feed-only accounts: BoA, Lafayette FCU, Bluevine, Chase Ink, Wells Fargo
+task zoho:reconcile / zoho:boa:reconcile -- --apply   # month-end records
+```
+
+`zoho_books_recon.py` with `merchants.yaml` (classification), `closing_balances.yaml`
+(statement balances) and the `.zoho_recon_state.json` checkpoint. Start with
+`docs/zoho-books-runbook.md`; `docs/zoho-books-handoff-boa.md` §0 is the per-account status.
+
 ## Registry Gaps (what the forecast can't see)
 
 ```bash

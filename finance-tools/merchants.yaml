@@ -104,7 +104,7 @@ merchants:
   # --- added 2026-10-16 from the Zoho recon review list ---
   - {pattern: "Public Storage",       account: "6310"}   # Rent - Other (storage unit, like CubeSmart)
   - {pattern: "Cummins",              account: "6140"}   # Equipment & Tools (engine/generator service; review)
-  - {pattern: "Jd Transport",         account: "6090"}   # Contract Labor (Square-paid hauling/delivery service; review)
+  - {pattern: "Jd Transport",         account: "6440"}   # Vehicle Expense: truck mechanic/repairs, paid via Square (confirmed by operator 2026-10-15)
   - {pattern: "Commerce Management",  account: "6300"}   # Rent - Real Estate: food truck location rent (operator, 2026-10-16)
 
   # --- 0551 (closed Jun 2026) merchants, added 2026-10-16 ---
@@ -122,3 +122,89 @@ zoho_only_accounts:
     xero_bank_account: "Mercury: Operations (0551) * Closed"
     statement_import: true
     closed: "2026-06-02"
+
+# --- Bank of America: Zoho feed only (`task zoho:boa`), no bank API ---------------
+# The feed is the data; the independent check is the monthly statement closing
+# balance in closing_balances.yaml. Lines are classified on payee + description:
+# boa_transfers -> boa_merchants -> the shared merchants: block above.
+zoho_feed_only_accounts:
+  - xero_bank_account: "BoA: Business Checking (1778)"   # Zoho "Business Adv Fundamentals" 1622286000000143048
+    kind: bank
+  - xero_bank_account: "BoA: CORP Account (2119)"         # Zoho "CORP Account - ... - 2119" 1622286000000143054
+    kind: credit_card
+  - xero_bank_account: "Bluevine: Checking * Closed"      # Zoho "Bluevine Checking ••2189 (closed)" 1622286000000207062, feed-linked 2026-10-17
+    kind: bank
+    closed: "2026-06-02"
+  - xero_bank_account: "Chase: Ink (7667)"                # Zoho "Chase Ink ••7667" 1622286000000212046; closed card, 2026 activity imported from the statements 2026-10-17
+    kind: credit_card
+    no_rules: true                                        # no feed, nothing new arrives
+  - xero_bank_account: "LFCU: Checking"                   # Zoho "LFCU Business Checking ••7011" 1622286000000207096, feed-linked 2026-10-17
+    kind: bank
+    opened: "2026-03-04"                                  # no reconciliation records before this
+  - xero_bank_account: "LFCU: Savings"                    # Zoho "LFCU Share Savings ••3617" 1622286000000207090
+    kind: bank
+    opened: "2026-03-04"
+  - xero_bank_account: "Wells: Signify Business (4637)"   # Zoho 1622286000000207157, feed-linked 2026-10-17; never used (operator), 0 lines
+    kind: credit_card
+
+# description substring -> the other account of the transfer (Xero bank name)
+boa_transfers:
+  "payment to CRD 2119":          "BoA: CORP Account (2119)"          # checking -> card (online payment)
+  "BUSINESS CARD Bill Payment":   "BoA: CORP Account (2119)"          # checking -> card (autopay)
+  "OVERDRAFT PROTECTION FROM":    "BoA: CORP Account (2119)"          # card ..445819 funds the checking overdraft
+  "PAYMENT - THANK YOU":          "BoA: Business Checking (1778)"     # card side of the autopay
+  "PAYMENT FROM CHK 1":           "BoA: Business Checking (1778)"     # card side of the online payment
+  "OVERDRAFT ADVANCE":            "BoA: Business Checking (1778)"     # card side of the overdraft pull
+  # other own accounts with no feed in Zoho (created by the script, kind in BANK_TYPES)
+  "CHASE CREDIT CRD":             "Chase: Ink (7667)"                 # autopay of the Chase Ink business card (operator 2026-10-17: a liability)
+  "DES:Bluevine":                 "Bluevine: Checking * Closed"       # BoA side: transfer out of the closed Bluevine checking (operator 2026-10-17)
+  "Transfer to Bank of Ame":      "BoA: Business Checking (1778)"     # Bluevine side of the same transfer
+  "AUTOMATIC PAYMENT - THANK YOU": "BoA: Business Checking (1778)"    # Chase side of the autopay
+  "Payment Thank You":            "BoA: Business Checking (1778)"     # Chase side of the retried autopay
+  "Returned Payment":             "BoA: Business Checking (1778)"     # Chase side of a bounced autopay (BoA: RETURN OF POSTED CHECK)
+  # Lafayette FCU: S 0000 = share savings, S 0001 = business checking; *****0621 is the owner's personal LFCU account
+  "Transfer From S 0000":         "LFCU: Savings"                     # checking side: savings -> checking (incl. overdraft transfer)
+  "Transfer To S 0001":           "LFCU: Checking"                    # savings side of the same
+
+boa_merchants:
+  # --- owner (2803 is the personal BoA checking) ---
+  - {pattern: "transfer from CHK 2803",   account: "3100"}   # Owner's Equity: owner contribution
+  - {pattern: "Zelle payment from JAMAL COLE", account: "3100"}
+  - {pattern: "transfer to CHK 2803",     account: "3200"}   # Owner's Draws
+  - {pattern: "Transfer From Jamal Cole", account: "3100"}   # LFCU: from the owner's personal 0621 -> owner contribution
+  - {pattern: "Transfer To Jamal Cole",   account: "3200"}   # LFCU: to the owner's personal 0621 -> owner draw
+  - {pattern: "Dividend Deposit",         account: "4400"}   # LFCU share dividends -> Interest Income
+  - {pattern: "Monthly Maintenance Fee",  account: "6050"}   # LFCU
+  # --- bank / card fees ---
+  - {pattern: "OVERDRAFT ITEM FEE",       account: "6050"}   # Bank Fees and Charges
+  - {pattern: "Monthly Fee Business Adv", account: "6050"}
+  - {pattern: "Dormancy Fee",             account: "6050"}   # Bluevine
+  - {pattern: "LATE PAYMENT FEE",         account: "6055"}   # Credit Card Charges (card 2119)
+  - {pattern: "FINANCE CHARGE",           account: "6055"}
+  - {pattern: "PURCHASE INTEREST CHARGE", account: "6055"}   # Chase Ink
+  - {pattern: "QBooks",                   account: "6340"}   # Intuit QuickBooks on the Chase Ink (descriptor "INTUIT *QBooks")
+  - {pattern: "LASTPASS",                 account: "6340"}
+  # --- vendors not already in merchants: ---
+  - {pattern: "GOOGLE *ADS",              account: "6000"}   # Advertising
+  - {pattern: "Google ADS",               account: "6000"}
+  - {pattern: "GOOGLE*ADS",               account: "6000"}
+  - {pattern: "GOOGLE*CLOUD",             account: "6340"}   # Software & Web
+  - {pattern: "GOOGLE*WORKSPACE",         account: "6340"}
+  - {pattern: "NAME-CHEAP",               account: "6340"}
+  - {pattern: "Adobe",                    account: "6340"}
+  - {pattern: "ZOHODISTRIB",              account: "6340"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
+  - {pattern: "Angel Mechanic",           account: "6440"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
+  - {pattern: "VERIZON WIRELESS",         account: "6390"}   # Telephone and Internet
+  - {pattern: "PROG CASUALTY",            account: "6210"}   # Progressive by its ACH descriptor (bank rules see only the description)
+  - {pattern: "GOOGLE *Worksp",           account: "6340"}   # Google Workspace by its card descriptor
+  # --- operator answers 2026-10-17 ---
+  - {pattern: "Counter Credit",           account: "4000"}   # cash sales deposited at the counter
+  - {pattern: "BKOFAMERICA ATM",          account: "4000"}   # cash sales deposited at the ATM
+  - {pattern: "AVIS RENT-A-CAR",          account: "3200"}   # personal trip -> owner draw
+  - {pattern: "U-HAUL",                   account: "6310"}   # Rent - Other: move to a storage unit closer to the truck
+  - {pattern: "Spotify",                  account: "6340"}   # Software & Web: music on the truck (operator 2026-10-17)
+  - {pattern: "MEDIUM.COM",               account: "3200"}   # Owner's Draws (operator 2026-10-17)
+  - {pattern: "DOORDASHDASHPAS",          account: "3200"}   # DashPass -> owner draw
+  - {pattern: "PEACOCKTVLL",              account: "3200"}   # Peacock TV -> owner draw
+  - {pattern: "UBER *",                   account: "3200"}   # owner draw
+  - {pattern: "APPLE CASH SENT MONEY",    account: "6450"}   # Wages and Salaries: payroll sent to an employee

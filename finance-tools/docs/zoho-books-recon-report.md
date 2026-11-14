@@ -43,7 +43,7 @@ side), 192 expenses, 21 owner draws, 2 expense refunds, 144 Toast payout journal
 | date | account | amount | merchant | mapped to |
 |---|---|---|---|---|
 | 2026-10-02 | 5396 | −1,000.00 | Commerce Management | 6300 Rent - Real Estate — food truck location rent (operator) |
-| 2026-10-04 | 4613 | −338.00 | Jd Transport | 6090 Contract Labor (Square-paid hauling; review) |
+| 2026-10-04 | 4613 | −338.00 | Jd Transport | 6440 Vehicle Expense — truck mechanic, propane line repair (operator; posted as 6090 on 2026-10-16, re-coded with its bank rule on 2026-10-17) |
 | 2026-10-11 | 4613 | −53.31 | Public Storage | 6310 Rent - Other (storage, like CubeSmart) |
 | 2026-10-16 | 4613 | −482.19 | Cummins Sales and Service | 6140 Equipment & Tools (engine/generator service; review) |
 

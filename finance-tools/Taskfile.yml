@@ -146,6 +146,16 @@ tasks:
     cmds:
       - python registry_gaps.py --category business {{.CLI_ARGS}}
 
+  accounts:check:
+    desc: "Prove the Bills sheet (Chart of Accounts), payments.yaml and Monarch / Zoho Books are one-to-one, balances to the cent; exit 1 on any break. Flags: --category personal|business, --offline, --no-sheet, --no-balances, --json"
+    cmds:
+      - python account_register.py {{.CLI_ARGS}}
+
+  accounts:sync:
+    desc: "Write live Monarch / Zoho Books balances into the Bills sheet, then run accounts:check. Refuses while membership errors exist. Flags: --dry-run, --category personal|business"
+    cmds:
+      - python account_register.py --sync {{.CLI_ARGS}}
+
   forecast:email:
     desc: Email forecast summary (default 30 days)
     cmds:
@@ -224,6 +234,56 @@ tasks:
     cmds:
       - task: sync-status:warn
       - python zoho_books_recon.py --reconcile {{.CLI_ARGS}}
+
+  zoho:boa:
+    desc: "Dry-run the feed-only accounts (BoA, LFCU, Bluevine, Chase Ink, Wells Fargo): classify uncategorized lines (docs/zoho-books-handoff-boa.md)"
+    cmds:
+      - python zoho_books_recon.py --feed-only {{.CLI_ARGS}}
+
+  zoho:boa:apply:
+    desc: "Post the feed-only accounts' lines to Zoho (resumes from .zoho_recon_state.json)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --apply {{.CLI_ARGS}}
+
+  zoho:boa:reconcile:
+    desc: "Month-end records for the feed-only accounts from closing_balances.yaml statement balances (dry run unless -- --apply)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --reconcile {{.CLI_ARGS}}
+
+  zoho:boa:rules:
+    desc: "Bank rules on the live feed-only accounts for the boa_merchants patterns (dry run unless -- --apply)"
+    cmds:
+      - python zoho_books_recon.py --feed-only --rules {{.CLI_ARGS}}
+
+  zoho:sheet:auth:
+    desc: "One-time: exchange a Zoho grant code (Self Client, scope ZohoSheet.dataAPI.UPDATE,ZohoSheet.dataAPI.READ) for ZOHO_SHEET_REFRESH_TOKEN (docs/zoho-sheet-bills.md)"
+    cmds:
+      - python zoho_sheet.py --auth {{.CLI_ARGS}}
+
+  zoho:sheet:list:
+    desc: "List Zoho Sheet workbooks visible to the Sheet token"
+    cmds:
+      - python zoho_sheet.py --list
+
+  zoho:sheet:upload:
+    desc: "Upload any xlsx/csv/ods as a new Zoho Sheet workbook (lands in Zoho Sheet's own space, not WorkDrive): task zoho:sheet:upload -- <file> [--name <name>]"
+    cmds:
+      - python zoho_sheet.py --upload {{.CLI_ARGS}}
+
+  zoho:sheet:worksheets:
+    desc: "List the tabs of a workbook (native Zoho Sheet in WorkDrive works by its file id): task zoho:sheet:worksheets -- <resource id>"
+    cmds:
+      - python zoho_sheet.py --worksheets {{.CLI_ARGS}}
+
+  zoho:sheet:records:
+    desc: "Print one tab's rows keyed by header: task zoho:sheet:records -- <resource id> --sheet \"<tab name>\" [--json]"
+    cmds:
+      - python zoho_sheet.py --records {{.CLI_ARGS}}
+
+  zoho:workdrive:upload:
+    desc: "Upload a file into a WorkDrive folder (token needs WorkDrive.files.CREATE): task zoho:workdrive:upload -- <file> --folder <id from the folder's URL>"
+    cmds:
+      - python zoho_sheet.py --workdrive-upload {{.CLI_ARGS}}
 
   budget:
     desc: Monarch budget and goal tracker
