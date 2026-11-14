@@ -49,7 +49,7 @@ promos:
     standard_apr: 28.74    # variable, follows Prime
     activate_by: 2026-12-28
     activated: true        # activated Nov 2026
-    credit_limit:          # FILL IN from the Citi app
+    credit_limit: 1270     # from the Citi app, Nov 14 2026
     target_utilization: 30
     # stop_adding: 2027-04-01
 
