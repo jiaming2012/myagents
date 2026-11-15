@@ -1,0 +1,235 @@
+# Triview model of the credit-card rewards tool (finance-tools/rewards.py + the
+# card-related parts of debt_plan.py). Schema: ~/projects/statemate/triview-architecture.md §3.1.
+# Harel syntax inside on: / guard: / do:. Constructs the schema cannot carry are listed
+# in CARD_STATES.statemate.md under "Blocked on schema" — nothing was invented here.
+#
+# Spike: hand-synced with ../board/model.js (which adds only layout).
+
+dictionary:
+  events:
+    # external, from the transaction feed (Monarch or the snapshot), one per settled line
+    - PURCHASE            # a negative Monarch amount on this card, not excluded, not a posted credit
+    - REFUND              # a positive amount that is not a posted statement credit
+    - QUALIFYING_SPEND    # a PURCHASE whose merchant matches a credit's `merchant:` list
+    - CREDIT_POSTED       # the issuer's statement-credit line (positive, matches `posted:`)
+    - FEE_POSTED          # "RENEWAL MEMBERSHIP FEE" line (excluded from spend)
+    - BALANCE_TYPED       # operator appends a reading to rewards.yaml › balances
+    - ENROLL              # operator flips a credit's enrolled: false -> true
+    - ACTIVATE            # operator flips debts.yaml promo activated: false -> true
+    - CLOSE_CARD          # operator sets inactive: true / status: closed in payments.yaml
+    - PERIOD_ROLLOVER     # a capped earn rule's calendar period ended (derived: tr(TODAY > CAP_P_END))
+  conditions:
+    - OFFLINE             # --offline flag
+    - MONARCH_OK          # get_monarch_client() returned a client
+    - SNAPSHOT_EXISTS     # .rewards_snapshot.json present
+    - CARDS_RESOLVED      # every rewards.yaml account id is in payments.yaml
+    - ENROLLED_FLAG       # credit.enrolled (default true)
+    - SUB_DEFINED         # card.signup_bonus is not null
+    - ANNIV_KNOWN         # card.anniversary is not null
+    - PROMO_DEFINED       # debts.yaml promos has this card
+    - ACTIVATED           # promo.activated
+    - AUTOPAY_FULL        # registry payment for this card has autopay_type: full
+    - CARRIED_FLAG        # debts.yaml carried: true
+  data:
+    TODAY:        {type: date, desc: "--as-of or date.today(); every ch(TODAY) is a daily tick"}
+    DATE:         {type: date, desc: "date of the transaction carried by PURCHASE / REFUND / CREDIT_POSTED"}
+    AMT:          {type: real, desc: "absolute amount of the transaction carried by the event"}
+    SPEND:        {type: real, desc: "qualifying spend in the open credit period"}
+    POSTED:       {type: real, desc: "posted statement credits in the open credit period"}
+    USED_AMT:     {type: real, desc: "min(AMOUNT, max(SPEND, POSTED))"}
+    AMOUNT:       {type: real, desc: "credit.amount per period"}
+    P_START:      {type: date}
+    P_END:        {type: date}
+    BENEFIT_START: {type: date, desc: "credit.start; periods ending before it are NOT_COUNTED"}
+    DAYS_LEFT:    {type: integer}
+    WARNINGS:     {type: string, desc: "report warnings, e.g. `not enrolled: Equinox`"}
+    CAP_AMOUNT:   {type: real, desc: "rule.cap.amount"}
+    CAP_USED:     {type: real, desc: "spend counted under the cap in the current cap period"}
+    RATE:         {type: real, desc: "rule.rate"}
+    BASE_RATE:    {type: real, desc: "rate of the last (base) rule"}
+    POINTS:       {type: real}
+    REFUND_AMT:   {type: real}
+    OPENED:       {type: date}
+    DEADLINE:     {type: date}
+    SPEND_TARGET: {type: real}
+    SUB_SPEND:    {type: real}
+    DAILY_NEEDED: {type: real}
+    NEXT_ANNIV:   {type: date}
+    FEE_DATE:     {type: date}
+    DAYS_UNTIL:   {type: integer}
+    AS_OF:        {type: date, desc: "date of the latest typed-in balance"}
+    REPORTED:     {type: real, desc: "points the issuer reported at AS_OF"}
+    PTS:          {type: real, desc: "points carried by BALANCE_TYPED"}
+    PTS_EARNED:   {type: real, desc: "points the earn rules allocate to one PURCHASE"}
+    EARNED_SINCE: {type: real}
+    EXPECTED_NOW: {type: real}
+    DRIFT:        {type: real, desc: "issuer delta minus computed delta between two readings"}
+    UNTIL:        {type: date, desc: "promo.until"}
+    ACTIVATE_BY:  {type: date}
+    STOP_DATE:    {type: date, desc: "promo.stop_adding, default UNTIL - 3 months"}
+    APR:          {type: real}
+    STANDARD_APR: {type: real}
+    CREDIT_LIMIT: {type: real}
+    TARGET_UTIL:  {type: real, desc: "promo.target_utilization / 100"}
+    BAL:          {type: real, desc: "live card balance (Monarch)"}
+    ROOM:         {type: real, desc: "spend still worth adding before the utilization target"}
+    EXIT_CODE:    {type: integer}
+
+activities:
+  REWARDS:
+    desc: "one run of `task rewards` (rewards.py)"
+    children: [FETCH_MONARCH, READ_SNAPSHOT, WRITE_SNAPSHOT, LOAD_RULES, TRACK_CARD, RENDER_REPORT, REWARDS_CONTROL]
+    flows:
+      - {from: OPERATOR, to: REWARDS_CONTROL, data: OFFLINE}
+      - {from: MONARCH, to: FETCH_MONARCH, data: TRANSACTIONS}
+      - {from: FETCH_MONARCH, to: WRITE_SNAPSHOT, data: TRANSACTIONS}
+      - {from: SNAPSHOT_STORE, to: READ_SNAPSHOT, data: TRANSACTIONS}
+      - {from: WRITE_SNAPSHOT, to: SNAPSHOT_STORE, data: TRANSACTIONS}
+      - {from: RULES_FILES, to: LOAD_RULES, data: CARDS}
+      - {from: LOAD_RULES, to: TRACK_CARD, data: CARDS}
+      - {from: READ_SNAPSHOT, to: TRACK_CARD, data: TRANSACTIONS}
+      - {from: FETCH_MONARCH, to: TRACK_CARD, data: TRANSACTIONS}
+      - {from: TRACK_CARD, to: RENDER_REPORT, data: CARD_REPORT}
+      - {from: RENDER_REPORT, to: OPERATOR, data: REPORT}
+  OPERATOR: {external: true, desc: "the CLI user; also edits rewards.yaml / debts.yaml / payments.yaml"}
+  MONARCH: {external: true, desc: "Monarch Money GraphQL (monarch_client.py)"}
+  SNAPSHOT_STORE: {external: true, desc: ".rewards_snapshot.json"}
+  RULES_FILES: {external: true, desc: "rewards.yaml + payments.yaml (+ debts.yaml for PROMO_RATE / PAYDOWN_ROLE)"}
+  REWARDS_CONTROL: {controlled_by: REWARDS_CONTROL, desc: "control activity of REWARDS"}
+  FETCH_MONARCH: {desc: "fetch_transactions(): paged pull of the year's settled transactions"}
+  READ_SNAPSHOT: {desc: "read_snapshot()"}
+  WRITE_SNAPSHOT: {desc: "write_snapshot()"}
+  LOAD_RULES: {desc: "load_rewards() + load_registry() + resolve_cards()"}
+  TRACK_CARD:
+    desc: "analyze_card() for ONE card. Generic (ch. 14): REWARDS starts one instance per resolved card"
+    children: [FILTER_TXNS, ACCUMULATE_EARN, TRACK_CREDITS, TRACK_BONUS, CHECK_BALANCE, CARD_STATES]
+  FILTER_TXNS: {desc: "card_transactions(): this card's settled, non-excluded lines, oldest first (mini-spec: the exclude: block)"}
+  ACCUMULATE_EARN: {desc: "apply_earn(): first matching rule wins, caps per calendar period"}
+  TRACK_CREDITS: {desc: "credit_usage() + expiring_credits()"}
+  TRACK_BONUS: {desc: "signup_progress()"}
+  CHECK_BALANCE: {desc: "balance_check()"}
+  CARD_STATES: {controlled_by: CARD_STATES, desc: "control activity of TRACK_CARD"}
+  RENDER_REPORT: {desc: "render_text() or json.dumps()"}
+
+statecharts:
+
+  REWARDS_CONTROL:
+    initial: FETCHING          # see Blocked on schema: the real initial is a C connector on OFFLINE
+    states:
+      FETCHING:         {desc: "throughout FETCH_MONARCH", starts: [FETCH_MONARCH]}
+      READING_SNAPSHOT: {desc: "throughout READ_SNAPSHOT", starts: [READ_SNAPSHOT]}
+      WRITING_SNAPSHOT: {desc: "throughout WRITE_SNAPSHOT", starts: [WRITE_SNAPSHOT]}
+      LOADING_RULES:    {desc: "throughout LOAD_RULES", starts: [LOAD_RULES]}
+      ANALYZING:        {desc: "throughout TRACK_CARD, one instance per card", starts: [TRACK_CARD]}
+      RENDERING:        {desc: "throughout RENDER_REPORT", starts: [RENDER_REPORT]}
+      FAILED:           {desc: "SystemExit", entry: ["EXIT_CODE := 1"]}
+    transitions:
+      # C connector after the default entrance (schema gap): [not OFFLINE] -> FETCHING, [OFFLINE] -> READING_SNAPSHOT
+      - {from: FETCHING, to: WRITING_SNAPSHOT, on: "sp(FETCH_MONARCH)", guard: "MONARCH_OK"}
+      - {from: FETCHING, to: FAILED, on: "sp(FETCH_MONARCH)", guard: "not MONARCH_OK"}
+      - {from: READING_SNAPSHOT, to: LOADING_RULES, on: "sp(READ_SNAPSHOT)", guard: "SNAPSHOT_EXISTS"}
+      - {from: READING_SNAPSHOT, to: FAILED, on: "sp(READ_SNAPSHOT)", guard: "not SNAPSHOT_EXISTS"}
+      - {from: WRITING_SNAPSHOT, to: LOADING_RULES, on: "sp(WRITE_SNAPSHOT)"}
+      - {from: LOADING_RULES, to: ANALYZING, on: "sp(LOAD_RULES)", guard: "CARDS_RESOLVED"}
+      - {from: LOADING_RULES, to: FAILED, on: "sp(LOAD_RULES)", guard: "not CARDS_RESOLVED"}
+      - {from: ANALYZING, to: RENDERING, on: "sp(TRACK_CARD)"}
+      # RENDERING --sp(RENDER_REPORT) / EXIT_CODE := 0--> T ; FAILED --> T   (T connector: schema gap)
+
+  CARD_STATES:
+    initial: ACTIVE
+    states:
+      INACTIVE: {desc: "inactive: true / status: closed in payments.yaml"}
+      ACTIVE:
+        desc: "and-state; every component is a status rewards.py / debt_plan.py computes"
+        regions:
+          - PERIOD:                    # generic: one per credit x calendar period
+              desc: "credit_usage(): used | partial | missed | open, plus the two skipped cases"
+              states:
+                NOT_COUNTED: {desc: "period ended before credit.start"}
+                FUTURE: {}
+                OPEN:
+                  desc: "static reactions (schema gap, listed here): QUALIFYING_SPEND / SPEND := SPEND + AMT; CREDIT_POSTED / POSTED := POSTED + AMT; ch(SPEND) or ch(POSTED) / USED_AMT := min(AMOUNT, max(SPEND, POSTED)); ch(TODAY) / DAYS_LEFT := P_END - TODAY"
+                USED: {}
+                PARTIAL: {}
+                MISSED: {}
+          - ENROLLMENT:                # generic: one per credit
+              states:
+                NOT_ENROLLED: {entry: ["WARNINGS := WARNINGS & `not enrolled`"]}
+                ENROLLED: {desc: "counted in CREDITS_USED, CREDITS_AVAILABLE and EXPIRING"}
+          - EARN_CAP:                  # generic: one per earn rule
+              states:
+                UNDER_CAP:
+                  desc: "static reactions: PURCHASE / $U := min(SPEND, CAP_AMOUNT - CAP_USED); CAP_USED := CAP_USED + $U; POINTS := POINTS + $U*RATE + (SPEND - $U)*BASE_RATE ; REFUND / POINTS := POINTS - REFUND_AMT*RATE. A rule without cap: never leaves."
+                OVER_CAP:
+                  desc: "static reactions: PURCHASE / POINTS := POINTS + SPEND*BASE_RATE ; REFUND / POINTS := POINTS - REFUND_AMT*RATE"
+          - SIGNUP_BONUS:
+              states:
+                NO_BONUS: {}
+                IN_PROGRESS:
+                  desc: "static reactions: PURCHASE[OPENED <= DATE and DATE <= DEADLINE] / SUB_SPEND := SUB_SPEND + SPEND ; ch(TODAY) / DAILY_NEEDED := (SPEND_TARGET - SUB_SPEND) / (DEADLINE - TODAY)"
+                MET: {}
+                EXPIRED: {}
+          - FEE_CYCLE:
+              states:
+                ANNIV_UNKNOWN: {desc: "fee shown without a date"}
+                AWAITING_FEE: {desc: "static reaction: ch(TODAY) / DAYS_UNTIL := NEXT_ANNIV - TODAY"}
+          - BALANCE_CHECK:
+              states:
+                NO_READING: {}
+                ONE_READING:
+                  desc: "static reactions: PURCHASE[DATE > AS_OF] / EARNED_SINCE := EARNED_SINCE + PTS_EARNED ; ch(EARNED_SINCE) / EXPECTED_NOW := REPORTED + EARNED_SINCE"
+                TWO_READINGS:
+                  desc: "same reactions as ONE_READING; DRIFT is also reported"
+          - PROMO_RATE:                # debts.yaml › promos
+              states:
+                NO_PROMO: {}
+                PROMO_OFFERED: {desc: "activated: false; health report prompts to activate by ACTIVATE_BY"}
+                PROMO_ACTIVE:
+                  states:
+                    ADDING_SPEND: {desc: "static reaction: ch(TODAY) / ROOM := CREDIT_LIMIT*TARGET_UTIL - BAL"}
+                    STOP_ADDING: {desc: "last day to add charges has passed"}
+                STANDARD_RATE: {desc: "the avalanche re-targets this card"}
+          - PAYDOWN_ROLE:              # debt_plan.py
+              states:
+                PAID_IN_FULL: {desc: "out of the paydown plan"}
+                CARRIED: {desc: "in the avalanche / snowball"}
+    transitions:
+      - {from: ACTIVE, to: INACTIVE, on: CLOSE_CARD}
+      # PERIOD   (default is a C connector: [P_END < BENEFIT_START] -> NOT_COUNTED, else FUTURE)
+      - {from: ACTIVE.PERIOD.FUTURE, to: ACTIVE.PERIOD.OPEN, on: "tr(TODAY >= P_START)"}
+      - {from: ACTIVE.PERIOD.OPEN, to: ACTIVE.PERIOD.USED, on: "tr(USED_AMT >= AMOUNT)"}
+      - {from: ACTIVE.PERIOD.OPEN, to: ACTIVE.PERIOD.PARTIAL, on: "tr(TODAY > P_END)", guard: "USED_AMT < AMOUNT and USED_AMT > 0"}
+      - {from: ACTIVE.PERIOD.OPEN, to: ACTIVE.PERIOD.MISSED, on: "tr(TODAY > P_END)", guard: "USED_AMT = 0"}
+      # ENROLLMENT   (default C: [ENROLLED_FLAG] -> ENROLLED else NOT_ENROLLED)
+      - {from: ACTIVE.ENROLLMENT.NOT_ENROLLED, to: ACTIVE.ENROLLMENT.ENROLLED, on: ENROLL}
+      # EARN_CAP
+      - {from: ACTIVE.EARN_CAP.UNDER_CAP, to: ACTIVE.EARN_CAP.OVER_CAP, on: "tr(CAP_USED >= CAP_AMOUNT)"}
+      - {from: ACTIVE.EARN_CAP.OVER_CAP, to: ACTIVE.EARN_CAP.UNDER_CAP, on: PERIOD_ROLLOVER, do: ["CAP_USED := 0"]}
+      # SIGNUP_BONUS   (default C: [SUB_DEFINED] -> IN_PROGRESS else NO_BONUS)
+      - {from: ACTIVE.SIGNUP_BONUS.IN_PROGRESS, to: ACTIVE.SIGNUP_BONUS.MET, on: "tr(SUB_SPEND >= SPEND_TARGET)"}
+      - {from: ACTIVE.SIGNUP_BONUS.IN_PROGRESS, to: ACTIVE.SIGNUP_BONUS.EXPIRED, on: "tr(TODAY > DEADLINE)", guard: "SUB_SPEND < SPEND_TARGET"}
+      # FEE_CYCLE   (default C: [ANNIV_KNOWN] -> AWAITING_FEE else ANNIV_UNKNOWN)
+      - {from: ACTIVE.FEE_CYCLE.ANNIV_UNKNOWN, to: ACTIVE.FEE_CYCLE.AWAITING_FEE, on: FEE_POSTED, do: ["NEXT_ANNIV := FEE_DATE + 1Y"]}
+      - {from: ACTIVE.FEE_CYCLE.AWAITING_FEE, to: ACTIVE.FEE_CYCLE.AWAITING_FEE, on: "tr(TODAY > NEXT_ANNIV)", do: ["NEXT_ANNIV := NEXT_ANNIV + 1Y"]}
+      # BALANCE_CHECK
+      - {from: ACTIVE.BALANCE_CHECK.NO_READING, to: ACTIVE.BALANCE_CHECK.ONE_READING, on: BALANCE_TYPED, do: ["AS_OF := DATE", "REPORTED := PTS"]}
+      - {from: ACTIVE.BALANCE_CHECK.ONE_READING, to: ACTIVE.BALANCE_CHECK.TWO_READINGS, on: BALANCE_TYPED,
+         do: ["DRIFT := (PTS - REPORTED) - EARNED_SINCE", "REPORTED := PTS", "AS_OF := DATE", "EARNED_SINCE := 0"]}
+      - {from: ACTIVE.BALANCE_CHECK.TWO_READINGS, to: ACTIVE.BALANCE_CHECK.TWO_READINGS, on: BALANCE_TYPED,
+         do: ["DRIFT := (PTS - REPORTED) - EARNED_SINCE", "REPORTED := PTS", "AS_OF := DATE", "EARNED_SINCE := 0"]}
+      # PROMO_RATE   (default C: [not PROMO_DEFINED] -> NO_PROMO; [PROMO_DEFINED and not ACTIVATED] -> PROMO_OFFERED; [PROMO_DEFINED and ACTIVATED] -> PROMO_ACTIVE)
+      - {from: ACTIVE.PROMO_RATE.PROMO_OFFERED, to: ACTIVE.PROMO_RATE.PROMO_ACTIVE, on: ACTIVATE}
+      - {from: ACTIVE.PROMO_RATE.PROMO_OFFERED, to: ACTIVE.PROMO_RATE.NO_PROMO, on: "tr(TODAY > ACTIVATE_BY)"}
+      - {from: ACTIVE.PROMO_RATE.PROMO_ACTIVE.ADDING_SPEND, to: ACTIVE.PROMO_RATE.PROMO_ACTIVE.STOP_ADDING, on: "tr(TODAY >= STOP_DATE)"}
+      - {from: ACTIVE.PROMO_RATE.PROMO_ACTIVE, to: ACTIVE.PROMO_RATE.STANDARD_RATE, on: "tr(TODAY >= UNTIL)", do: ["APR := STANDARD_APR"]}
+      # PAYDOWN_ROLE   (default C: [AUTOPAY_FULL and not CARRIED_FLAG] -> PAID_IN_FULL else CARRIED)
+      - {from: ACTIVE.PAYDOWN_ROLE.PAID_IN_FULL, to: ACTIVE.PAYDOWN_ROLE.CARRIED, on: "en(PROMO_ACTIVE)"}
+      - {from: ACTIVE.PAYDOWN_ROLE.CARRIED, to: ACTIVE.PAYDOWN_ROLE.PAID_IN_FULL, on: "en(STANDARD_RATE)", guard: "AUTOPAY_FULL and not CARRIED_FLAG"}
+
+modules:
+  FINANCE_TOOLS:
+    desc: "~/projects/myagents/finance-tools"
+    implements: [REWARDS]
+    links:
+      - {to: MONARCH_MONEY, carries: TRANSACTIONS}
+  MONARCH_MONEY: {desc: "external SaaS"}

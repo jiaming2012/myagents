@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Reward Points Statecharts</title>
+<style>
+  :root {
+    --ink: #1f2937; --ink-soft: #4b5563; --muted: #9ca3af; --line: #d1d5db;
+    --paper: #ffffff; --grid: #e5e7eb; --accent: #2563eb; --conn: #fef3c7; --conn-ink: #92400e;
+    --bar: #f9fafb;
+    --sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; background: var(--paper); color: var(--ink); font-family: var(--sans); }
+  body { display: flex; flex-direction: column; }
+  header { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; padding: 8px 16px; border-bottom: 1px solid var(--line); background: var(--bar); }
+  header h1 { font-size: 15px; margin: 0; font-weight: 650; }
+  header .sub { font-size: 12px; color: var(--ink-soft); margin: 0; flex-basis: 100%; }
+  #tabs, .tools { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tools { margin-left: auto; }
+  button { font: 12px var(--sans); padding: 5px 10px; border: 1px solid var(--line); border-radius: 6px; background: #fff; color: var(--ink); cursor: pointer; }
+  button:hover { border-color: var(--ink-soft); }
+  button.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+  #tabs button { font-family: var(--mono); }
+  main { position: relative; flex: 1; min-height: 0; }
+  svg { width: 100%; height: 100%; display: block; touch-action: none; cursor: grab; }
+  svg:active { cursor: grabbing; }
+  .node { cursor: move; }
+  .node.dragging .state-rect { stroke: var(--accent); }
+  .state-rect { fill: #fff; stroke: var(--ink); stroke-width: 1.6; }
+  .state-rect.composite { fill: none; }
+  .region-rect { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 6 5; }
+  .region-name { font: 600 11px var(--mono); fill: var(--ink-soft); letter-spacing: .02em; }
+  .state-name { font: 600 13px var(--mono); fill: var(--ink); }
+  .and-note { font: italic 10px var(--sans); fill: var(--muted); }
+  .state-desc { font: italic 11px var(--sans); fill: var(--ink-soft); }
+  .state-act { font: 11px var(--mono); fill: var(--accent); }
+  .divider { stroke: var(--line); stroke-width: 1; }
+  .reaction { font: 11px var(--mono); fill: var(--ink); }
+  .default-dot { fill: var(--ink); }
+  .conn-circle { fill: var(--conn); stroke: var(--conn-ink); stroke-width: 1.4; }
+  .conn-circle.conn-T { fill: var(--ink); stroke: var(--ink); }
+  .conn-text { font: 700 12px var(--mono); fill: var(--conn-ink); }
+  .conn-T + .conn-text { fill: #fff; }
+  .edge { fill: none; stroke: var(--ink); stroke-width: 1.4; }
+  .edge-label { font: 11px var(--mono); fill: var(--ink); paint-order: stroke; stroke: #fff; stroke-width: 4px; stroke-linejoin: round; }
+  #hint { position: absolute; left: 12px; bottom: 10px; font-size: 11px; color: var(--muted); pointer-events: none; }
+  #legend { position: absolute; top: 12px; right: 12px; width: min(380px, calc(100% - 32px)); background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; box-shadow: 0 8px 24px rgba(0,0,0,.08); display: none; font-size: 12.5px; line-height: 1.45; }
+  #legend.open { display: block; }
+  #legend h2 { font-size: 13px; margin: 0 0 8px; display: flex; justify-content: space-between; align-items: center; }
+  #legend dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+  #legend dt { font-family: var(--mono); color: var(--conn-ink); white-space: nowrap; }
+  #legend dd { margin: 0; color: var(--ink-soft); }
+  #legend p { margin: 10px 0 0; color: var(--ink-soft); }
+  @media (max-width: 640px) { header { padding: 8px; } .tools { margin-left: 0; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="title">Statecharts</h1>
+  <div id="tabs"></div>
+  <div class="tools">
+    <button id="reactions" class="active" title="show / hide static reactions inside states">reactions</button>
+    <button id="fit" title="fit to window (f)">fit</button>
+    <button id="zin">+</button>
+    <button id="zout">−</button>
+    <button id="reset" title="forget dragged positions for this chart">reset layout</button>
+    <button id="svg-export">SVG</button>
+    <button id="png-export">PNG</button>
+    <button id="legend-btn">legend</button>
+  </div>
+  <p class="sub" id="subtitle"></p>
+</header>
+<main>
+  <svg id="svg" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+        <circle cx="1" cy="1" r="1" fill="#e5e7eb"/>
+      </pattern>
+      <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="9" markerHeight="9" orient="auto-start-reverse">
+        <path d="M0,0 L10,5 L0,10 z" fill="#1f2937"/>
+      </marker>
+    </defs>
+    <rect id="grid-rect" width="100%" height="100%" fill="url(#grid)"/>
+    <g id="world">
+      <g id="nodes"></g>
+      <g id="edges"></g>
+      <g id="labels"></g>
+    </g>
+  </svg>
+  <div id="hint">drag a state to move it (children follow) · drag the background to pan · wheel to zoom · f = fit</div>
+  <aside id="legend">
+    <h2>Notation (Harel &amp; Politi) <button id="legend-close">close</button></h2>
+    <dl>
+      <dt>●→</dt><dd>default entrance of the enclosing state (§4.3)</dd>
+      <dt>dashed box</dt><dd>an orthogonal component of an and-state; all run at once (§4.4, Fig. 4.14)</dd>
+      <dt>‹generic›</dt><dd>one instance per credit / rule / period; drawn once (ch. 14)</dd>
+      <dt>C</dt><dd>condition connector: guards must be exhaustive and exclusive (§4.5, §6.3.1)</dd>
+      <dt>T</dt><dd>termination connector: the activity stops itself (§7.2.2)</dd>
+      <dt>E[C] / A</dt><dd>transition label: event, guard, action (ch. 5)</dd>
+      <dt>tr(C)</dt><dd>the moment condition C becomes true</dd>
+      <dt>ch(X)</dt><dd>the value of X changed</dd>
+      <dt>en(S)</dt><dd>state S was entered; used across components (§4.4.2)</dd>
+      <dt>ns</dt><dd>“entering”: reaction on entry to this state (§5.4.1)</dd>
+      <dt>$U</dt><dd>context variable, visible inside one action (§5.2.2)</dd>
+      <dt>throughout A</dt><dd>activity A runs while the state is active (§7.3.3)</dd>
+    </dl>
+    <p>Lines under a state's divider are its static reactions (§5.4.2). Assignments see old values within a step (Fig. 6.4), which is why USED_AMT is recomputed on ch(SPEND) rather than in the same reaction.</p>
+  </aside>
+</main>
+<script src="model.js"></script>
+<script src="board.js"></script>
+</body>
+</html>
