@@ -1,0 +1,85 @@
+# Debt paydown inputs for debt_plan.py (`task finance:debt`).
+#
+# Balances are never typed here: they come live from Monarch (personal) and Zoho
+# Books (business) through the registry's monarch_match / zoho_match. This file adds
+# what those sources do not know: APR, the minimum payment, which account the
+# payment leaves from, and whether a card is carried or paid in full.
+#
+# Each entry:
+#   account:         registry id from payments.yaml (type credit or loan)
+#   apr:             annual rate in percent. Omit -> ASSUMED (cards 24.99, loans 9.99) and flagged.
+#   min_payment:     monthly minimum. Omit -> the registry payment that pays this account
+#                    (autopay_type: min, or a loan instalment), else 2% of balance.
+#   funding_account: registry id the payment leaves from. Omit -> from the registry payment.
+#   carried:         true to put a paid-in-full card into the paydown anyway (it revolves),
+#                    false to leave a debt out of the plan.
+#   notes:           anything the plan should print.
+#
+# plan:
+#   strategy:        avalanche (highest APR first) | snowball (smallest balance first)
+#   monthly_extra:   the extra you commit every month on top of minimums; `--monthly-extra`
+#                    overrides for one run; `--by YYYY-MM` solves for it.
+
+plan:
+  strategy: avalanche
+  monthly_extra: 0
+
+# Promotional APRs. While one is active the card is planned at `apr` (and counted as
+# carried even if its registry autopay pays in full), then at `standard_apr` from
+# `until` on — so the avalanche re-targets it the month the rate jumps. Section 4 of
+# `task finance:debt` and the weekly health action items say how much more everyday
+# spending to put on the card, when to stop, and the payment that clears it in time.
+#
+#   account:            registry id
+#   apr / until:        promo rate and the date it ends (YYYY-MM-DD)
+#   standard_apr:       the purchase APR after `until`
+#   activated:          false -> prompt to activate by `activate_by`
+#   credit_limit:       the card's limit (Monarch does not expose it; read it off the card's app)
+#   target_utilization: fill the card up to this % of its limit. Scores read utilization
+#                       per card AND overall: under 30% is the usual "no visible damage" line,
+#                       under 10% scores best, 50% on one card typically costs points while it
+#                       is reported. FICO 8 / VantageScore keep no memory of it — the score
+#                       recovers once the balance is paid down — so a higher cap is safe only
+#                       if no loan/mortgage/card application is coming before the payoff.
+#   stop_adding:        last day to add charges (default: 3 months before `until`)
+promos:
+  - account: citi-rewards-8281
+    apr: 9.99              # Citi offer: 9.99% on all new purchases until 07/01/2027
+    until: 2027-07-01
+    standard_apr: 28.74    # variable, follows Prime
+    activate_by: 2026-12-28
+    activated: true        # activated Nov 2026
+    credit_limit: 1270     # from the Citi app, Nov 14 2026
+    target_utilization: 30
+    # stop_adding: 2027-04-01
+
+debts:
+  # --- business ---
+  - account: chase-ink-7667
+    apr: 23.6              # derived: $113.18 interest on ~$5,760 (Sep 2026 statement) x 12
+    min_payment: 170       # autopay observed Jan-Oct 2026: $163-$179
+    funding_account: boa-business-1778   # Zoho "Business Adv Fundamentals"; ASSUMED = registry 1778
+    notes: "Card closed; paying down only. Autopay bounced Mar/Jul/Sep 2026 — keep the funding account above $170 by the 9th."
+
+  - account: boa-corp-2119
+    # apr: fill in from the statement
+    # min_payment: fill in
+    funding_account: boa-business-1778
+
+  # --- personal (minimum-payment cards and loans) ---
+  - account: boa-plat1-5153
+    # apr: fill in
+    # min_payment: 137 comes from the registry autopay entry
+  - account: boa-plat2-7250
+    # apr: fill in
+  - account: truist-auto-1001
+    # apr: fill in from the loan statement (instalment $702.91 is in the registry)
+  - account: lafayette-loan-0621
+    # apr: fill in (instalment $615.64 is in the registry)
+
+  # --- personal cards paid in full monthly ---
+  # These are left out of the paydown automatically because their registry payment is
+  # autopay_type: full. If one starts revolving, add it here with carried: true and its APR.
+  # - account: wells-autograph-8694
+  #   carried: true
+  #   apr: 28.49

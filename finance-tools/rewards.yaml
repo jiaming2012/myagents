@@ -33,6 +33,8 @@
 #                     so a Resy restaurant you forgot to list still shows "used".
 #                     Posted credits never earn or claw back points.
 #     enrolled:       false = you have not enrolled yet (reported as a warning)
+#     start:          YYYY-MM-DD the benefit begins; earlier periods are not counted
+#                     (not reported as missed). Optional.
 #     note:           free text
 #     Credits are calendar-based (Jan-Mar is Q1, Jan-Jun is H1) unless the
 #     issuer says otherwise; Amex credits are calendar-based.
@@ -171,3 +173,36 @@ cards:
     balances: []
     # balances:
     #   - {as_of: 2026-10-01, points: 123456}
+
+  # --- Amex Delta SkyMiles Gold ---
+  # Earn rates are the public Delta Gold rates; VERIFY against your Amex benefits page.
+  - account: amex-delta-1008
+    program: miles
+    currency: miles
+    cents_per_point: 1.0          # conservative; Delta award redemptions often land 1.1-1.3c
+    points_expire: "never (Delta SkyMiles do not expire)"
+    annual_fee: 150
+    anniversary: 2026-03-16       # "RENEWAL MEMBERSHIP FEE" $150 posted 2026-03-16
+    earn:
+      - name: "Delta purchases"
+        rate: 2
+        merchant: ["DELTA AIR", "DELTA.COM"]
+      - name: "Restaurants worldwide"
+        rate: 2
+        category: ["Restaurants & Bars", "Coffee Shops", "Fast Food"]
+      - name: "U.S. supermarkets"
+        rate: 2
+        category: ["Groceries"]
+      - name: "Everything else"
+        rate: 1
+    credits:
+      - name: "Rideshare"
+        amount: 10
+        period: monthly
+        merchant: ["UBER", "LYFT"]   # "select providers": narrow to the ones the terms name
+        posted: ["RIDESHARE CREDIT"] # VERIFY the exact wording of the first posted credit
+        enrolled: true               # enrolled per the Amex app, Nov 14 2026
+        start: 2026-11-01            # ASSUMED: enrolled Nov 2026; the terms' start date is cut off ("available starting 12...")
+        note: "$120/yr: up to $10 back each month on U.S. rideshare paid with this card."
+    signup_bonus: null
+    balances: []

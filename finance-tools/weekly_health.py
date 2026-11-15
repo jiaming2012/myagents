@@ -41,7 +41,9 @@ except ImportError:
 
 from coverage_report import fetch_monarch_balances, load_payments_yaml
 from registry_gaps import run_checks, format_gaps
+from sync_status import collect as collect_sync_status, warn_lines as sync_warn_lines, banner_html as sync_banner_html
 import account_register
+import debt_plan
 
 try:
     from xero_balances import fetch_xero_balances, xero_connection_status, fetch_xero_latest_activity
@@ -128,11 +130,13 @@ async def gather_all_data():
     and surfaced as a registry gap instead of aborting the report.
     """
     status = {}
-    monarch_balances, audit_result, budget_data, categories = await asyncio.gather(
+    monarch_balances, audit_result, budget_data, categories, sync = await asyncio.gather(
         _safe("monarch", fetch_monarch_balances(), {}, status),
         _safe("audit", run_transaction_audit(days=7), EMPTY_AUDIT, status),
         _safe("budget", fetch_budget_data(), None, status),
         _safe("categories", fetch_categories(), None, status),
+        # Connection health of both balance sources; shown as a banner above every number.
+        _safe("sync", collect_sync_status(), None, status),
     )
 
     # Xero (sync)
@@ -180,12 +184,24 @@ async def gather_all_data():
         source_status=reg_status,
     )
 
+    # Promotional-rate cards (debts.yaml promos): how much more spending to put on them.
+    promos = []
+    try:
+        debts_cfg = debt_plan.load_debts_yaml()
+        if debts_cfg.get("promos"):
+            debts, _ = debt_plan.build_debts(config, debts_cfg, monarch_balances or {}, {})
+            promos = debt_plan.promo_statuses(config, debts_cfg, monarch_balances or {}, {}, debts)
+    except Exception as e:
+        status["promos"] = f"{type(e).__name__}: {str(e)[:160]}"
+
     return {
         "audit": audit_result,
         "forecast": forecast,
+        "promos": promos,
         "budget": budget_analysis,
         "goals": goal_progress,
         "gaps": gaps,
+        "sync": sync,
         "register": register,
         "source_status": status,
         "run_at": datetime.now(),
@@ -239,6 +255,16 @@ def count_action_items(data):
         tag = "GAP" if g["severity"] == "error" else "gap"
         items.append(f"{tag}: {g['message']}")
 
+    # Account connections (Monarch credentials, Zoho bank feeds)
+    for f in (data.get("sync") or {}).get("findings", []):
+        tag = "SYNC" if f["severity"] == "error" else "sync"
+        items.append(f"{tag}: {f['source']} {f['subject']} — {f['message']}")
+    # Promotional-rate cards: use the cheap card, stop in time, autopay set up to carry
+    for p in data.get("promos", []):
+        line = debt_plan.promo_action_line(p)
+        if line:
+            items.append(line)
+
     # Account register: one line, not one per row — the detail is in section 6 / accounts:check
     register = data.get("register", [])
     if register:
@@ -263,6 +289,13 @@ def print_terminal_report(data):
     print(f"  {Color.BOLD}WEEKLY FINANCIAL HEALTH CHECK{Color.RESET}")
     print(f"  {run_at.strftime('%A, %B %d, %Y %I:%M %p')}")
     print(f"{'━' * 70}")
+
+    # --- Sync banner: which balance sources are stale, before any number ---
+    if data.get("sync"):
+        for line in sync_warn_lines(data["sync"], color=bool(Color.RESET)):
+            print(f"  {line}")
+    else:
+        print(f"  {Color.DIM}sync check unavailable ({data['source_status'].get('sync', 'not run')}){Color.RESET}")
 
     # --- Section 1: Transaction Audit ---
     audit = data["audit"]
@@ -564,6 +597,7 @@ def build_health_email_html(data):
 
 <h2 style="color: {header_color}; margin-bottom: 4px;">Weekly Financial Health — {status_emoji}</h2>
 <p style="color: #6b7280; margin-top: 0;">{run_at.strftime('%A, %B %d, %Y')}</p>
+{sync_banner_html(data["sync"]) if data.get("sync") else '<p style="color: #6b7280; font-size: 13px;">Account sync check unavailable.</p>'}
 
 <h3 style="color: #1f2937;">Transaction Audit</h3>
 <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">

@@ -15,7 +15,8 @@
 #   monarch_match:   name as it appears in Monarch Money (for balance lookup)
 #   xero_account_id:  Xero account name for balance lookup (business accounts)
 #   zoho_match: exact Zoho Books bank-account name (business accounts); account_register.py
-#                    requires it on every open business account and matches it one-to-one
+#                    requires it on every open business account and matches it one-to-one;
+#                    debt_plan.py reads business balances through it
 #   status:          closed  (same meaning as inactive: true; account_register.py accepts either)
 #   role:            income_hub | business | null
 #   nicknames:       list of human-readable aliases for account resolution from calendar notes
@@ -260,13 +261,13 @@ accounts:
 
   # --- Citi ---
   - id: citi-rewards-8281
-    name: "Rewards+"
+    name: "Strata"   # product-changed from Rewards+; the card app now says Citi Strata
     institution: "Citi"
     last4: "8281"
     type: credit
     category: personal
     monarch_match: "Citi Strata Card (...8281)"
-    nicknames: ["Citi", "Citi 8281", "Citi Rewards", "Rewards+"]
+    nicknames: ["Citi", "Citi 8281", "Citi Strata", "Citi Rewards", "Rewards+"]
 
   # --- Amex ---
   - id: amex-delta-1008
