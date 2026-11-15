@@ -12,7 +12,7 @@ tasks:
       - open "board/index.html?chart=REWARDS_CONTROL"
 
   check:
-    desc: "Syntax-check the board scripts"
+    desc: "Syntax-check the board scripts and the model's edge references"
     cmds:
       - node --check board/board.js
-      - node -e "global.window={};require('./board/model.js');const c=window.CHARTS;for(const k in c){const ids=new Set(c[k].nodes.map(n=>n.id));for(const e of c[k].edges){if(!ids.has(e.from)||!ids.has(e.to))throw new Error(k+': edge '+e.from+'->'+e.to)}};console.log('model ok:',Object.keys(c).join(', '))"
+      - node board/check.js
