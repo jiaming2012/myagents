@@ -101,8 +101,11 @@ the sheet. `accounts:sync` fetches the same live data, writes `Debit Balance` /
 criteria on `Account Last 4`, scope `ZohoSheet.dataAPI.UPDATE` already held), then
 re-reads the sheet and runs the check. If the tab has an `As of` column, today's date is
 written there too and every matched row is refreshed; without it only rows whose balance
-differs are touched. Membership errors are never auto-fixed: a missing or extra account
-is always a human decision, so sync refuses to write if any membership check fails.
+differs are touched. Membership (amended 2026-11-15): sync may **add** a row for an open
+registry account the sheet lacks (`worksheet.records.add`; Name, Company, last4, Type,
+Status and the live balance when it resolves), asking yes/no per account by default and
+adding all under `--add`. It never closes or removes a row: retiring an account is a hand
+edit on both sides. Every other membership error still blocks the balance writes.
 Sign convention: the sheet's `Credit Balance` is the amount owed, positive. Zoho Books
 already reports cards that way. Monarch is read through `displayBalance`, the number its
 app shows (owed positive, with the account's "invert balance" setting applied), because
