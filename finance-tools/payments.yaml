@@ -794,6 +794,29 @@ annual_payments:
     funding_account: null   # not stated in the sheet; marked personal there
     category: personal
 
+# Standing weekly transfers between the owner's own accounts, set up by the owner and
+# recorded 2026-11-14. Kept OUT of `payments:` for the same reason as annual_payments
+# (every loader treats `payments:` as monthly). Nothing reads this list yet; to have the
+# forecast draw them down, add `frequency: weekly` support to payment_forecast.py.
+recurring_transfers:
+  - name: "Cap1 Income -> Robinhood (weekly)"
+    amount: 150.00
+    frequency: weekly
+    day_of_week: null     # not stated; fill from the first posting on 8513
+    from_account: cap1-income-8513
+    to_account: null      # Robinhood brokerage, not in the accounts registry yet (last4 unknown)
+    category: personal
+    notes: "Investing contribution to Robinhood. Draws ~$650/month from Cap1 Income 8513 (min_balance 200)."
+
+  - name: "Mercury -> Discover Debit (weekly)"
+    amount: 300.00
+    frequency: weekly
+    day_of_week: null     # not stated; fill from the first posting on 6343
+    from_account: mercury-personal-6343   # assumed: owner said "Mercury"; 6343 is the personal hub
+    to_account: discover-debit-8206
+    category: personal
+    notes: "Spending money to the Discover Cashback Debit 8206. Draws ~$1,300/month from Mercury."
+
 # =============================================================
 # Transfer Rules
 # =============================================================
