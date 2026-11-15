@@ -725,7 +725,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
     returned items as refunds. Returns {zoho_id: (account cfg, plan)}."""
     accounts = cfg.get("zoho_feed_only_accounts") or sys.exit("merchants.yaml has no zoho_feed_only_accounts")
     closings = load_closings()
-    log("## Feed-only accounts (Bank of America)")
+    log("## Feed-only accounts (BoA, LFCU, Bluevine, Chase Ink, Wells Fargo)")
     log("| account | uncategorized | transfers | coded | unmatched | in state | feed balance | implied opening 2025-12-31 | statement opening |")
     log("|---|---|---|---|---|---|---|---|---|")
     plans = {}
@@ -1046,7 +1046,7 @@ def main():
     ap.add_argument("--reconcile", action="store_true", help="create monthly reconciliation records")
     ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml")
     ap.add_argument("--feed-only", action="store_true",
-                    help="Bank of America: classify/post the uncategorized feed lines of zoho_feed_only_accounts (no Mercury)")
+                    help="feed-only accounts (every non-Mercury bank): classify/post the uncategorized feed lines of zoho_feed_only_accounts")
     ap.add_argument("--undo-created-transfers", metavar="ZOHO_ACCOUNT_ID",
                     help="repair: re-match transfers this script created from that account's side")
     ap.add_argument("--report", default=str(HERE / "docs/zoho-books-recon-report.md"))

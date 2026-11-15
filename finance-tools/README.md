@@ -237,8 +237,8 @@ carries the same prompt as a `PROMO:` action item.
 
 ```bash
 task zoho:recon / zoho:recon:apply      # Mercury accounts (bank API + feed), Toast payouts
-task zoho:boa / zoho:boa:apply          # feed-only accounts: BoA, Lafayette FCU, Bluevine, Chase Ink, Wells Fargo
-task zoho:reconcile / zoho:boa:reconcile -- --apply   # month-end records
+task zoho:feed / zoho:feed:apply          # feed-only accounts: BoA, Lafayette FCU, Bluevine, Chase Ink, Wells Fargo
+task zoho:reconcile / zoho:feed:reconcile -- --apply   # month-end records
 ```
 
 `zoho_books_recon.py` with `merchants.yaml` (classification), `closing_balances.yaml`

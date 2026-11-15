@@ -335,3 +335,12 @@ def test_sources_and_category_narrowing():
     assert errors == []
     # a None side is skipped entirely (--offline / --no-sheet)
     assert run_checks(CONFIG, sheet_rows=None, monarch=None, books=None) == []
+
+
+def test_category_filter_drops_other_owner_and_untyped_row_errors():
+    rows = [row(2, "Coinbase", "Personal Debit"), row(3, "Heartland", ""),
+            row(4, "Mercury", "Business Debit")]
+    _, business = sheet_accounts(rows, category="business")
+    assert kinds(business) == ["sheet_row_no_last4"]
+    _, everything = sheet_accounts(rows)
+    assert sorted(kinds(everything)) == ["sheet_row_no_last4", "sheet_row_no_last4", "sheet_row_untyped"]

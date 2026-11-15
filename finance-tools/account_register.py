@@ -147,19 +147,23 @@ def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref=""
 # Normalisers: each side -> list of account dicts (pure)
 # ---------------------------------------------------------------------------
 
-def sheet_accounts(rows):
+def sheet_accounts(rows, category=None):
     """Chart of Accounts rows (Sheet Data API records: header-keyed dicts with
     row_index) -> (accounts, errors). Investment rows are skipped; rows with no
     Type, an unknown Type, or no last4 are errors, as is an open credit row whose
     AutoPay Type is not full or min. Closed = Status column says closed
     (case-insensitive); a 'Closed' note alone is an error so the operator adds
-    the column rather than relying on free text."""
+    the column rather than relying on free text. With `category`, rows of the
+    other owner are skipped, and so are rows whose Type gives no owner (those are
+    reported only by an unfiltered run)."""
     accounts, errors = [], []
     for row in rows:
         ref = f"sheet row {row.get('row_index', '?')}"
         name = str(row.get("Name") or "").strip()
         typ = str(row.get("Type") or "").strip()
         if typ in OUT_OF_SCOPE_SHEET_TYPES:
+            continue
+        if typ not in SHEET_TYPES and category:
             continue
         if not typ:
             errors.append(_err("sheet_row_untyped",
@@ -171,6 +175,8 @@ def sheet_accounts(rows):
                                f"{ref} '{name}': Type {typ!r} is not one of {sorted(SHEET_TYPES)}."))
             continue
         owner, kind = SHEET_TYPES[typ]
+        if category and owner != category:
+            continue
         status = str(row.get("Status") or "").strip().casefold()
         closed = status == "closed"
         notes = str(row.get("notes") or row.get("Notes") or "")
@@ -473,8 +479,7 @@ def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None,
     registry = [a for a in registry_accounts(config) if not category or a["owner"] == category]
     sheet = None
     if sheet_rows is not None:
-        sheet, sheet_errors = sheet_accounts(sheet_rows)
-        sheet = [a for a in sheet if not category or a["owner"] == category]
+        sheet, sheet_errors = sheet_accounts(sheet_rows, category)
         errors += sheet_errors
         errors += check_sheet_vs_registry(sheet, registry, category)
     else:

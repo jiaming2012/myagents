@@ -235,22 +235,22 @@ tasks:
       - task: sync-status:warn
       - python zoho_books_recon.py --reconcile {{.CLI_ARGS}}
 
-  zoho:boa:
+  zoho:feed:
     desc: "Dry-run the feed-only accounts (BoA, LFCU, Bluevine, Chase Ink, Wells Fargo): classify uncategorized lines (docs/zoho-books-handoff-boa.md)"
     cmds:
       - python zoho_books_recon.py --feed-only {{.CLI_ARGS}}
 
-  zoho:boa:apply:
+  zoho:feed:apply:
     desc: "Post the feed-only accounts' lines to Zoho (resumes from .zoho_recon_state.json)"
     cmds:
       - python zoho_books_recon.py --feed-only --apply {{.CLI_ARGS}}
 
-  zoho:boa:reconcile:
+  zoho:feed:reconcile:
     desc: "Month-end records for the feed-only accounts from closing_balances.yaml statement balances (dry run unless -- --apply)"
     cmds:
       - python zoho_books_recon.py --feed-only --reconcile {{.CLI_ARGS}}
 
-  zoho:boa:rules:
+  zoho:feed:rules:
     desc: "Bank rules on the live feed-only accounts for the boa_merchants patterns (dry run unless -- --apply)"
     cmds:
       - python zoho_books_recon.py --feed-only --rules {{.CLI_ARGS}}

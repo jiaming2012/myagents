@@ -14,8 +14,8 @@ LFCU checking 7011 = 6.84, LFCU savings 3617 = 455.67, Wells Fargo Signify 4637 
 used. Optional only: month-end records for 2119 / Chase (by statement period) and LFCU
 (needs the statements). Details per account follow.
 
-- `task zoho:boa` (dry run) / `task zoho:boa:apply` / `task zoho:boa:reconcile` /
-  `task zoho:boa:rules` exist (`--feed-only` in `zoho_books_recon.py`). Classification:
+- `task zoho:feed` (dry run) / `task zoho:feed:apply` / `task zoho:feed:reconcile` /
+  `task zoho:feed:rules` exist (`--feed-only` in `zoho_books_recon.py`). Classification:
   `boa_transfers:` → `boa_merchants:` → shared `merchants:` in merchants.yaml, on
   payee + description (the ACH `INDN:<holder>` segment is stripped first so the
   "Jamal Cole" owner pattern cannot claim vendor debits).
@@ -39,7 +39,7 @@ used. Optional only: month-end records for 2119 / Chase (by statement period) an
   Medium / DoorDash DashPass / Peacock / Uber = owner draws, Apple Cash sends = 6450
   wages. **All three feed accounts now read book = feed with 0 uncategorized**: 1778 =
   52.16, 2119 = 1,651.98 owed, Bluevine = 0.00. 34 BoA bank rules created
-  (`task zoho:boa:rules`): the BoA block plus the shared merchants seen on BoA, withdrawals
+  (`task zoho:feed:rules`): the BoA block plus the shared merchants seen on BoA, withdrawals
   only; "Jamal Cole" is deliberately excluded (ACH descriptors carry `INDN:JAMAL COLE`), and
   deposit patterns (2803 contributions, cash sales) stay script-driven.
 - **Lafayette FCU DONE 2026-10-17** (operator feed-linked both): `LFCU Business Checking
@@ -58,7 +58,7 @@ used. Optional only: month-end records for 2119 / Chase (by statement period) an
   feed-linked 2026-10-17): the feed refreshed cleanly and holds 0 lines / 0.00 because the
   card **has never been used** (operator 2026-10-17). Registered as `wells-signify-4637`
   in payments.yaml and as a feed-only credit_card account (`Wells: Signify Business
-  (4637)`), so the first charges will show up in `task zoho:boa` and go through the
+  (4637)`), so the first charges will show up in `task zoho:feed` and go through the
   shared merchant patterns and rules. Nothing to post.
 - **Still open**: (a) nothing to classify.
   (b) Chase Ink DONE 2026-10-17: closed card (cannot be feed-linked, operator still paying
@@ -68,7 +68,7 @@ used. Optional only: month-end records for 2119 / Chase (by statement period) an
   activity (13 autopays, 4 returned payments, 3 QuickBooks, 1 LastPass, 10 interest) were
   pushed in with `POST /bankstatements` (statement `1622286000000219028`; same convention
   as 0551: credit = money in, so a payment lands as a `debit` line like on 2119), then
-  `task zoho:boa:apply` matched the 17 payments/returns to the BoA-side transfer documents
+  `task zoho:feed:apply` matched the 17 payments/returns to the BoA-side transfer documents
   (match-first: the dates differ by a day) and coded the rest. Book = 5,708.07 owed = the
   Oct 14 statement. Keep the account active while it is being paid down; statements
   close on the 14th, so reconcile it by statement period or skip records. (c) Bluevine DONE 2026-10-17: the operator feed-linked it
