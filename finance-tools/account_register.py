@@ -12,7 +12,9 @@ ones. This module proves, on every run, that the three layers agree:
 "One-to-one" is checked on OPEN accounts, both directions, per owner:
 
   1. sheet rows well formed   - every row has a Type (Personal/Business x
-                                Debit/Credit), a last4, and no duplicate last4
+                                Debit/Credit), a last4, and no duplicate last4;
+                                every open credit row has AutoPay Type full or
+                                min (blank means no autopay, which is not allowed)
   2. sheet <-> registry        - same set of last4s per owner; a row or entry
                                 marked closed on one side must be closed on both
   3. registry <-> Monarch      - every personal entry's monarch_match resolves to
@@ -30,10 +32,14 @@ ones. This module proves, on every run, that the three layers agree:
 Every finding is an error (there is no warning tier for a register); `main()`
 prints them and exits 1 if any exist.
 
-`--sync` writes the live balances (and today's date into an `As of` column, if
-the sheet has one) into the matched rows before checking, so a clean register
-stays clean day to day. It refuses to write while any membership error (1-4)
-exists: adding or removing an account is always a human decision.
+`--sync` first offers to ADD a Chart of Accounts row for every open registry
+account the sheet lacks (one yes/no per account; `--add` says yes to all), with
+Name, Company, last4, Type, Status and, when the live source resolves, the
+balance. It never closes or removes a row: the register only grows by itself,
+and retiring an account stays a hand edit on both sides. It then writes the
+live balances (and today's date into an `As of` column, if the sheet has one)
+into the matched rows before checking, so a clean register stays clean day to
+day. Balance writes are refused while any membership error (1-4) remains.
 
 Scope (docs/account-register-plan.md, decisions of 2026-10-19): investments are
 excluded until the Investments tab is rebuilt. Loans are also excluded for now:
@@ -46,7 +52,8 @@ Usage:
     python account_register.py --offline          # sheet <-> registry only
     python account_register.py --no-sheet         # registry <-> live only
     python account_register.py --no-balances      # membership only
-    python account_register.py --sync [--dry-run] # write live balances into the sheet, then check
+    python account_register.py --sync [--dry-run] # offer to add missing rows, write live balances, then check
+    python account_register.py --sync --add       # add every missing row without asking
     python account_register.py --json
 """
 
@@ -69,6 +76,7 @@ SHEET_TYPES = {
     "Business Debit": ("business", "debit"),
     "Business Credit": ("business", "credit"),
 }
+SHEET_TYPE_OF = {v: k for k, v in SHEET_TYPES.items()}             # (owner, kind) -> sheet Type
 OUT_OF_SCOPE_SHEET_TYPES = {"Investment"}
 REGISTRY_TYPES = {"depository": "debit", "credit": "credit"}        # loan/investment skipped
 MONARCH_TYPES = {"depository": "debit", "credit": "credit"}         # brokerage/loan/other skipped
@@ -80,6 +88,9 @@ BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
 AS_OF_COLUMN = "As of"
 KEY_COLUMN = "Account Last 4"
 BALANCE_KINDS = {"balance_mismatch", "sheet_balance_missing"}   # the kinds --sync is allowed to fix
+AUTOPAY_COLUMN = "AutoPay Type"
+CREDIT_AUTOPAY_TYPES = {"full", "min"}
+NON_MEMBERSHIP_KINDS = BALANCE_KINDS | {"sheet_credit_autopay"}  # errors that do not block --sync
 
 
 def _num(v):
@@ -127,9 +138,9 @@ def _err(kind, message, fix=""):
     return {"severity": "error", "kind": kind, "message": message, "fix": fix}
 
 
-def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref=""):
+def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None):
     return {"key": key, "name": name, "owner": owner, "kind": kind, "closed": bool(closed),
-            "balance": balance, "match": match, "ref": ref}
+            "balance": balance, "match": match, "ref": ref, "institution": institution}
 
 
 # ---------------------------------------------------------------------------
@@ -139,11 +150,12 @@ def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref=""
 def sheet_accounts(rows, category=None):
     """Chart of Accounts rows (Sheet Data API records: header-keyed dicts with
     row_index) -> (accounts, errors). Investment rows are skipped; rows with no
-    Type, an unknown Type, or no last4 are errors. Closed = Status column says
-    closed (case-insensitive); a 'Closed' note alone is an error so the operator
-    adds the column rather than relying on free text. With `category`, rows of
-    the other owner are skipped, and so are rows whose Type gives no owner
-    (those are reported only by an unfiltered run)."""
+    Type, an unknown Type, or no last4 are errors, as is an open credit row whose
+    AutoPay Type is not full or min. Closed = Status column says closed
+    (case-insensitive); a 'Closed' note alone is an error so the operator adds
+    the column rather than relying on free text. With `category`, rows of the
+    other owner are skipped, and so are rows whose Type gives no owner (those are
+    reported only by an unfiltered run)."""
     accounts, errors = [], []
     for row in rows:
         ref = f"sheet row {row.get('row_index', '?')}"
@@ -172,6 +184,12 @@ def sheet_accounts(rows, category=None):
             errors.append(_err("sheet_row_closed_in_notes",
                                f"{ref} '{name}': notes say closed but there is no Status column / value.",
                                "Add a Status column to Chart of Accounts and set it to 'closed'."))
+        autopay = str(row.get(AUTOPAY_COLUMN) or "").strip()
+        if kind == "credit" and not closed and autopay.casefold() not in CREDIT_AUTOPAY_TYPES:
+            errors.append(_err("sheet_credit_autopay",
+                               f"{ref} '{name}' ({typ}): AutoPay Type is {repr(autopay) if autopay else 'blank'}; "
+                               f"credit cards must be one of {sorted(CREDIT_AUTOPAY_TYPES)}.",
+                               "Set up autopay at the issuer, then set AutoPay Type to full or min."))
         key = str(row.get("Account Last 4") or "").strip() or None
         if key is None and not closed:
             errors.append(_err("sheet_row_no_last4",
@@ -195,7 +213,8 @@ def registry_accounts(config):
             continue
         closed = str(a.get("status") or "").casefold() == "closed" or bool(a.get("inactive"))
         out.append(_acct(a.get("last4") or None, a.get("name", a.get("id")), owner, kind,
-                         closed=closed, match=a.get(MATCH_FIELD[owner]), ref=f"registry {a.get('id')}"))
+                         closed=closed, match=a.get(MATCH_FIELD[owner]), ref=f"registry {a.get('id')}",
+                         institution=a.get("institution")))
     return out
 
 
@@ -423,6 +442,35 @@ def plan_sync(sheet, registry, live, owner, as_of=None, has_as_of_column=False):
     return writes
 
 
+def _live_hit(ra, live):
+    """The single open live account `ra`'s match name resolves to, else None."""
+    if not live or not ra["match"]:
+        return None
+    want = norm_name(ra["match"])
+    hits = [a for a in live if norm_name(a["name"]) == want and not a["closed"]]
+    return hits[0] if len(hits) == 1 else None
+
+
+def plan_additions(sheet, registry, live_by_owner, category=None):
+    """Chart of Accounts rows to add: one per open registry account whose last4 is
+    on no sheet row at all, open or closed. Name, Company, last4, Type and Status
+    come from the registry; the balance from the live source when it resolves, so
+    the new row is right from the start. Never plans a removal or a close: the
+    register only grows by itself."""
+    present = {a["key"] for a in sheet if a["key"]}
+    rows = []
+    for ra in registry:
+        if ra["closed"] or not ra["key"] or ra["key"] in present or (category and ra["owner"] != category):
+            continue
+        data = {"Name": ra["name"], "Company": ra.get("institution") or "", KEY_COLUMN: ra["key"],
+                "Type": SHEET_TYPE_OF[(ra["owner"], ra["kind"])], "Status": "active"}
+        la = _live_hit(ra, (live_by_owner or {}).get(ra["owner"]))
+        if la and la["balance"] is not None:
+            data[BALANCE_COLUMN[ra["kind"]]] = round(la["balance"], 2)
+        rows.append({"data": data, "ref": ra["ref"], "name": ra["name"], "owner": ra["owner"], "key": ra["key"]})
+    return rows
+
+
 def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None, source_status=None,
                balances=True):
     """All checks over pre-fetched data. A side passed as None is skipped (its
@@ -447,7 +495,7 @@ def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None,
 
 
 def membership_errors(errors):
-    return [e for e in errors if e["kind"] not in BALANCE_KINDS]
+    return [e for e in errors if e["kind"] not in NON_MEMBERSHIP_KINDS]
 
 
 # ---------------------------------------------------------------------------
@@ -517,25 +565,69 @@ async def gather(category=None, offline=False, no_sheet=False, sheet_id=None):
                 category=category, source_status=status), sheet_id
 
 
+def _live_sides(inputs):
+    """{owner: normalised live accounts} for the sides that were gathered and are in scope."""
+    live = {}
+    for owner, raw, normalise in (("personal", inputs["monarch"], monarch_accounts),
+                                  ("business", inputs["books"], books_accounts)):
+        if raw is not None and inputs["category"] in (None, owner):
+            live[owner] = normalise(raw)
+    return live
+
+
+def _confirm(prompt):
+    """Default asker: a y/N question on the terminal; a non-terminal stdin counts as no."""
+    if not sys.stdin.isatty():
+        print(f"{prompt}  (no terminal to answer: skipped; pass --add to add without asking)")
+        return False
+    return input(prompt).strip().casefold() in ("y", "yes")
+
+
+def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print):
+    """Add a Chart of Accounts row for each open registry account the sheet lacks.
+    add="ask" puts one yes/no per account to `ask` (default: the terminal);
+    add="always" adds them all. Nothing is ever closed or removed here.
+    Returns the number of rows added (0 on dry run or when none were chosen)."""
+    rows = inputs["sheet_rows"]
+    if rows is None:
+        return 0
+    sheet, _ = sheet_accounts(rows)
+    additions = plan_additions(sheet, registry_accounts(inputs["config"]), _live_sides(inputs),
+                               inputs["category"])
+    chosen = []
+    for a in additions:
+        label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
+        if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
+            log(f"  skipped {label}.")
+            continue
+        chosen.append(a)
+        bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
+        log(f"  {'would add' if dry_run else 'add'} '{a['name']}' as {a['data']['Type']} {a['key']}"
+            + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
+    if dry_run or not chosen:
+        return 0
+    from zoho_sheet import add_records
+    n = add_records(sheet_id, SHEET_TAB, [a["data"] for a in chosen])
+    log(f"  sync: {n} row(s) added.")
+    return n
+
+
 def sync(inputs, sheet_id, dry_run=False, log=print):
     """Write live balances into the sheet. Refuses while membership errors exist.
     Returns the number of rows written (0 on refusal or dry run)."""
     from datetime import date
     errors = run_checks(balances=False, **inputs)
     if errors:
-        log(f"  sync refused: {len(errors)} membership error(s) must be fixed by hand first "
-            f"(run accounts:check).")
+        log(f"  balances not written: {len(errors)} membership error(s) remain "
+            f"(run accounts:check; a missing row is offered by --sync, the rest are hand edits).")
         return 0
     rows = inputs["sheet_rows"] or []
     has_as_of = bool(rows) and AS_OF_COLUMN in rows[0]
     sheet, _ = sheet_accounts(rows)
     registry = registry_accounts(inputs["config"])
     writes = []
-    for owner, raw, normalise in (("personal", inputs["monarch"], monarch_accounts),
-                                  ("business", inputs["books"], books_accounts)):
-        if raw is None or inputs["category"] not in (None, owner):
-            continue
-        writes += plan_sync(sheet, registry, normalise(raw), owner, as_of=date.today().isoformat(),
+    for owner, live in _live_sides(inputs).items():
+        writes += plan_sync(sheet, registry, live, owner, as_of=date.today().isoformat(),
                             has_as_of_column=has_as_of)
     if not writes:
         log("  sync: nothing to write.")
@@ -554,13 +646,18 @@ def sync(inputs, sheet_id, dry_run=False, log=print):
 
 
 async def run_all(category=None, offline=False, no_sheet=False, sheet_id=None, balances=True,
-                  do_sync=False, dry_run=False):
+                  do_sync=False, dry_run=False, add="ask"):
     inputs, sheet_id = await gather(category, offline, no_sheet, sheet_id)
     if do_sync:
-        if inputs["sheet_rows"] is None or (inputs["monarch"] is None and inputs["books"] is None):
-            print("  sync needs the sheet and at least one live source (no --offline / --no-sheet).")
-        elif sync(inputs, sheet_id, dry_run=dry_run) and not dry_run:
-            inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read what we wrote
+        if inputs["sheet_rows"] is None:
+            print("  sync needs the sheet (no --no-sheet).")
+        else:
+            if add_missing(inputs, sheet_id, dry_run=dry_run, add=add) and not dry_run:
+                inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read the new rows
+            if inputs["monarch"] is None and inputs["books"] is None:
+                print("  balances need at least one live source (no --offline).")
+            elif sync(inputs, sheet_id, dry_run=dry_run) and not dry_run:
+                inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read what we wrote
     return run_checks(balances=balances, **inputs)
 
 
@@ -591,12 +688,15 @@ def main():
     p.add_argument("--no-balances", action="store_true", help="membership checks only")
     p.add_argument("--sync", action="store_true",
                    help="write live balances into the sheet first (refused while membership errors exist)")
+    p.add_argument("--add", action="store_true",
+                   help="with --sync: add every registry account the sheet lacks without asking "
+                        "(default: one yes/no per account; nothing is ever closed or removed)")
     p.add_argument("--dry-run", action="store_true", help="with --sync: show the writes, change nothing")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     a = p.parse_args()
     errors = asyncio.run(run_all(category=a.category, offline=a.offline, no_sheet=a.no_sheet,
                                  sheet_id=a.sheet_id, balances=not a.no_balances,
-                                 do_sync=a.sync, dry_run=a.dry_run))
+                                 do_sync=a.sync, dry_run=a.dry_run, add="always" if a.add else "ask"))
     if a.json:
         print(json.dumps(errors, indent=2))
     else:

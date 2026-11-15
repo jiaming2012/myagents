@@ -15,7 +15,8 @@
 #   monarch_match:   name as it appears in Monarch Money (for balance lookup)
 #   xero_account_id:  Xero account name for balance lookup (business accounts)
 #   zoho_match: exact Zoho Books bank-account name (business accounts); account_register.py
-#                    requires it on every open business account and matches it one-to-one
+#                    requires it on every open business account and matches it one-to-one;
+#                    debt_plan.py reads business balances through it
 #   status:          closed  (same meaning as inactive: true; account_register.py accepts either)
 #   role:            income_hub | business | null
 #   nicknames:       list of human-readable aliases for account resolution from calendar notes
@@ -260,13 +261,13 @@ accounts:
 
   # --- Citi ---
   - id: citi-rewards-8281
-    name: "Rewards+"
+    name: "Strata"   # product-changed from Rewards+; the card app now says Citi Strata
     institution: "Citi"
     last4: "8281"
     type: credit
     category: personal
     monarch_match: "Citi Strata Card (...8281)"
-    nicknames: ["Citi", "Citi 8281", "Citi Rewards", "Rewards+"]
+    nicknames: ["Citi", "Citi 8281", "Citi Strata", "Citi Rewards", "Rewards+"]
 
   # --- Amex ---
   - id: amex-delta-1008
@@ -793,6 +794,29 @@ annual_payments:
     day_of_month: null
     funding_account: null   # not stated in the sheet; marked personal there
     category: personal
+
+# Standing weekly transfers between the owner's own accounts, set up by the owner and
+# recorded 2026-11-14. Kept OUT of `payments:` for the same reason as annual_payments
+# (every loader treats `payments:` as monthly). Nothing reads this list yet; to have the
+# forecast draw them down, add `frequency: weekly` support to payment_forecast.py.
+recurring_transfers:
+  - name: "Cap1 Income -> Robinhood (weekly)"
+    amount: 150.00
+    frequency: weekly
+    day_of_week: null     # not stated; fill from the first posting on 8513
+    from_account: cap1-income-8513
+    to_account: null      # Robinhood brokerage, not in the accounts registry yet (last4 unknown)
+    category: personal
+    notes: "Investing contribution to Robinhood. Draws ~$650/month from Cap1 Income 8513 (min_balance 200)."
+
+  - name: "Mercury -> Discover Debit (weekly)"
+    amount: 300.00
+    frequency: weekly
+    day_of_week: null     # not stated; fill from the first posting on 6343
+    from_account: mercury-personal-6343   # assumed: owner said "Mercury"; 6343 is the personal hub
+    to_account: discover-debit-8206
+    category: personal
+    notes: "Spending money to the Discover Cashback Debit 8206. Draws ~$1,300/month from Mercury."
 
 # =============================================================
 # Transfer Rules

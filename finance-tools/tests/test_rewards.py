@@ -158,6 +158,14 @@ def test_future_periods_not_reported():
     assert [p["status"] for p in uber["periods"]] == ["missed", "open"]
 
 
+def test_periods_before_credit_start_not_reported_as_missed():
+    card = {"credits": [{"name": "Rideshare", "amount": 10, "period": "monthly",
+                         "merchant": ["UBER"], "start": date(2026, 11, 1)}]}
+    [c] = credit_usage(card, [], 2026, date(2026, 11, 14))
+    assert [p["label"] for p in c["periods"]] == ["2026-11"]
+    assert c["year_available"] == 10.0
+
+
 # --- sign-up bonus, balances -------------------------------------------------
 
 def test_signup_progress():
