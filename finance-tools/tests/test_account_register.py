@@ -2,9 +2,12 @@
 import sys
 from pathlib import Path
 
+import pytest
+
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from account_register import (  # noqa: E402
+    add_missing,
     books_accounts,
     check_balances,
     check_registry_vs_live,
@@ -13,6 +16,7 @@ from account_register import (  # noqa: E402
     last4_of,
     membership_errors,
     monarch_accounts,
+    plan_additions,
     plan_sync,
     registry_accounts,
     run_checks,
@@ -35,7 +39,7 @@ def row(idx, name, typ, last4="", **extra):
 CONFIG = {"accounts": [
     {"id": "cap1-4354", "name": "Recurring ACH", "last4": "4354", "type": "depository",
      "category": "personal", "monarch_match": "Recurring ACH (...4354)"},
-    {"id": "boa-5153", "name": "Plat 1", "last4": "5153", "type": "credit",
+    {"id": "boa-5153", "name": "Plat 1", "last4": "5153", "type": "credit", "institution": "Bank of America",
      "category": "personal", "monarch_match": "BankAmericard Platinum Plus Mastercard (...5153)"},
     {"id": "chase-7667", "name": "Chase Ink", "last4": "7667", "type": "credit",
      "category": "business", "zoho_match": "Chase Ink ••7667"},
@@ -235,7 +239,7 @@ def test_sync_refuses_while_membership_errors_exist():
     inputs = dict(config=CONFIG, sheet_rows=SHEET + [row(9, "Extra", "Personal Credit", "9999")],
                   monarch=MONARCH, books=BOOKS, category=None, source_status={})
     assert sync(inputs, "sheet-id", dry_run=True, log=log.append) == 0
-    assert log and "refused" in log[0]
+    assert log and log[0].startswith("  balances not written: 2 membership error(s) remain")
 
 
 def test_sync_dry_run_plans_but_writes_nothing():
@@ -246,6 +250,77 @@ def test_sync_dry_run_plans_but_writes_nothing():
     assert sync(inputs, "sheet-id", dry_run=True, log=log.append) == 0
     assert [l for l in log if "would write" in l] == [
         "  would write sheet row 2 'Recurring ACH': 1.00 -> 100.00"]
+
+
+# --- adding missing rows -----------------------------------------------------
+
+def _live():
+    return {"personal": monarch_accounts(MONARCH), "business": books_accounts(BOOKS)}
+
+
+def test_plan_additions_is_one_row_per_open_registry_account_the_sheet_lacks():
+    sheet, _ = sheet_accounts(SHEET[:1] + SHEET[2:])          # Plat 1 (5153) is missing
+    registry = registry_accounts(CONFIG)
+    plan = plan_additions(sheet, registry, _live())
+    assert [(p["key"], p["owner"]) for p in plan] == [("5153", "personal")]
+    assert plan[0]["data"] == {"Name": "Plat 1", "Company": "Bank of America", "Account Last 4": "5153",
+                               "Type": "Personal Credit", "Status": "active", "Credit Balance": 5603}
+    # no live side: the row is still planned, just without a balance
+    assert "Credit Balance" not in plan_additions(sheet, registry, {})[0]["data"]
+    # category narrows it
+    assert plan_additions(sheet, registry, _live(), category="business") == []
+
+
+def test_plan_additions_never_closes_or_removes():
+    # a sheet row the registry lacks, and one closed on the sheet only, are left alone
+    extra = row(9, "Extra", "Personal Credit", "9999")
+    closed = row(3, "Plat 1", "Personal Credit", "5153", Status="closed")
+    sheet, _ = sheet_accounts([SHEET[0], closed, SHEET[2], extra])
+    assert plan_additions(sheet, registry_accounts(CONFIG), _live()) == []
+    # a registry account that is itself closed is not added back
+    cfg = {"accounts": CONFIG["accounts"] + [{"id": "old", "name": "Old", "last4": "0001", "type": "credit",
+                                             "category": "personal", "status": "closed"}]}
+    sheet, _ = sheet_accounts(SHEET)
+    assert plan_additions(sheet, registry_accounts(cfg), _live()) == []
+
+
+def test_add_missing_asks_by_default_and_a_no_adds_nothing(monkeypatch):
+    import zoho_sheet
+    monkeypatch.setattr(zoho_sheet, "add_records", lambda *a: pytest.fail("must not write on no"))
+    log, asked = [], []
+    inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[2:], monarch=MONARCH, books=BOOKS,
+                  category=None, source_status={})
+    n = add_missing(inputs, "sheet-id", ask=lambda q: asked.append(q) or False, log=log.append)
+    assert n == 0 and len(asked) == 1 and "Plat 1" in asked[0] and "[y/N]" in asked[0]
+    assert log == ["  skipped registry boa-5153 'Plat 1' (personal 5153)."]
+
+
+def test_add_missing_with_add_flag_writes_without_asking(monkeypatch):
+    import zoho_sheet
+    sent = []
+    monkeypatch.setattr(zoho_sheet, "add_records", lambda sid, tab, rows: sent.append((sid, tab, rows)) or len(rows))
+    log = []
+    inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[2:], monarch=MONARCH, books=BOOKS,
+                  category=None, source_status={})
+    # dry run plans but sends nothing
+    assert add_missing(inputs, "sheet-id", dry_run=True, add="always",
+                       ask=lambda q: pytest.fail("must not ask"), log=log.append) == 0
+    assert log == ["  would add 'Plat 1' as Personal Credit 5153, balance 5603.00"] and sent == []
+    # real run writes the row
+    assert add_missing(inputs, "sheet-id", add="always", ask=lambda q: pytest.fail("must not ask"),
+                       log=log.append) == 1
+    assert sent == [("sheet-id", "Chart of Accounts",
+                     [{"Name": "Plat 1", "Company": "Bank of America", "Account Last 4": "5153",
+                       "Type": "Personal Credit", "Status": "active", "Credit Balance": 5603}])]
+    assert log[-1] == "  sync: 1 row(s) added."
+
+
+def test_add_missing_with_nothing_missing_is_silent(monkeypatch):
+    import zoho_sheet
+    monkeypatch.setattr(zoho_sheet, "add_records", lambda *a: pytest.fail("must not write"))
+    log = []
+    inputs = dict(config=CONFIG, sheet_rows=SHEET, monarch=MONARCH, books=BOOKS, category=None, source_status={})
+    assert add_missing(inputs, "sheet-id", add="always", log=log.append) == 0 and log == []
 
 
 def test_membership_errors_excludes_balance_kinds():

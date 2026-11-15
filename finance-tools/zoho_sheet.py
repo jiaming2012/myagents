@@ -183,6 +183,20 @@ def update_records(resource_id, worksheet_name, criteria, data, first_match_only
     return _json(r).get("no_of_affected_rows", 0)
 
 
+def add_records(resource_id, worksheet_name, rows):
+    """Append header-keyed `rows` (list of dicts) below the tab's last used row
+    (worksheet.records.add). Returns the number of rows sent; _json exits on a
+    Zoho failure, so a normal return means they were written."""
+    if not rows:
+        return 0
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.records.add", "worksheet_name": worksheet_name,
+                            "json_data": json.dumps(rows)},
+                      headers=_headers(), timeout=60)
+    _json(r)
+    return len(rows)
+
+
 def fetch_records(resource_id, worksheet_name, as_json=False):
     rows = records(resource_id, worksheet_name)
     if as_json:
