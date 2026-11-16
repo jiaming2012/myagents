@@ -18,6 +18,9 @@
 #                    requires it on every open business account and matches it one-to-one;
 #                    debt_plan.py reads business balances through it
 #   status:          closed  (same meaning as inactive: true; account_register.py accepts either)
+#   closed_on:       YYYY-MM-DD the account closed; the Bills sheet keeps the row for 35 days after
+#   feed:            manual  -> no live source (no monarch_match / zoho_match expected); the sheet's
+#                    balance is operator-typed and account_register.py leaves it alone
 #   role:            income_hub | business | null
 #   nicknames:       list of human-readable aliases for account resolution from calendar notes
 
@@ -352,12 +355,14 @@ accounts:
   - id: navyfed-visa
     name: "Visa Platinum"
     institution: "Navy Federal"
-    last4: null
+    last4: "3274"    # from the Bills sheet row, 2026-11-16
     type: credit
     category: personal
     monarch_match: "Visa Platinum"
-    inactive: true   # $0 balance and no payment activity Jun-Oct 2026 (added 2026-10-17 so the gap check stops flagging it); drop inactive when the card is used
-    nicknames: ["NavyFed Visa", "Navy Federal Visa"]
+    # inactive: true was set 2026-10-17 (no payment activity) but Monarch shows the card open and
+    # the sheet carried a 189.96 balance with autopay min, so it is open (2026-11-16). The gap
+    # check will ask for its payment entry; that is a real gap.
+    nicknames: ["NavyFed Visa", "Navy Federal Visa", "Navy Federal 3274"]
 
   # --- Lafayette Federal ---
   - id: lafayette-checking-0621
@@ -461,6 +466,76 @@ accounts:
     category: personal
     monarch_match: "Investor Checking ...585 (....585)"
     nicknames: ["Schwab Checking", "Schwab Investor Checking", "Schwab 585", "Charles Schwab"]
+
+  # --- No live feed (feed: manual): registered 2026-11-16 from Bills sheet rows so the sheet
+  # --- can be rendered from here. Balances are whatever the sheet says; nothing checks them.
+  - id: coinbase-cash
+    name: "Coinbase"
+    institution: "Coinbase"
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: null
+    feed: manual
+    nicknames: ["Coinbase"]
+
+  - id: wex-health-hsa
+    name: "Wex Health"
+    institution: "Wex Health"
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: null
+    feed: manual
+    nicknames: ["Wex Health", "Wex HSA"]
+    # Sheet balance 5,954.43 on 2026-11-16; an HSA administrator, no Monarch connection.
+
+  - id: bilt-obsidian
+    name: "Bilt Obsidian"
+    institution: "Wells Fargo"
+    last4: null
+    type: credit
+    category: personal
+    monarch_match: null
+    feed: manual
+    nicknames: ["Bilt Obsidian", "Obsidian"]
+    # Sheet: limit 1,750, balance 0 (2026-11-16). Add monarch_match when the card is linked.
+
+  - id: mercury-purecraft
+    name: "Mercury (Pure Craft)"
+    institution: "Mercury"
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: null
+    feed: manual
+    nicknames: ["Pure Craft Mercury", "Mercury Pure Craft"]
+    # Sheet row "Mercury / Pure Craft", 48.39 (2026-11-16). Not in Monarch; fill last4 and a
+    # feed when known, or close it.
+
+  - id: mercury-biz-8478
+    name: "Mercury Business 8478"
+    institution: "Mercury"
+    last4: "8478"
+    type: depository
+    category: business
+    monarch_match: null
+    zoho_match: null
+    feed: manual
+    nicknames: ["Mercury 8478"]
+    # Sheet row only (73.00, 2026-11-16); not a Zoho Books bank account. Close or map it.
+
+  - id: bluevine-checking-2189
+    name: "Bluevine Checking"
+    institution: "Bluevine"
+    last4: "2189"
+    type: depository
+    category: business
+    monarch_match: null
+    zoho_match: "Bluevine Checking ••2189 (closed)"
+    status: closed
+    closed_on: 2026-10-17   # Books shows it closed; registered closed 2026-11-16 so the sheet row renders as closed
+    nicknames: ["Bluevine", "Bluevine Checking"]
 
   # --- Loans ---
   - id: truist-auto-1001

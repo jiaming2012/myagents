@@ -334,7 +334,7 @@ def test_render_writes_differing_cells_by_row_and_deletes_retired_rows(monkeypat
     n = render(inputs, "sheet-id", log=log.append, today=TODAY)
     assert n == 2 and [r for r, _ in written] == [2] and written[0][1] == {"Debit Balance": 100.0, "As of": "2026-11-16"}
     assert deleted == [(4, 5)]
-    assert log[-1] == "  render: 2 row(s), 2 cell(s) written, 2 row(s) deleted."
+    assert log[-1] == "  render: 2 row(s), 2 cell(s) written, 0 row(s) blanked, 2 row(s) deleted."
 
 
 def test_render_refuses_on_unregistered_row_and_on_no_fit(monkeypatch):
@@ -350,7 +350,64 @@ def test_render_refuses_on_unregistered_row_and_on_no_fit(monkeypatch):
     inputs = dict(inputs, config=cfg, sheet_rows=SHEET)
     log.clear()
     assert render(inputs, "sheet-id", log=log.append, today=TODAY) == 0
-    assert log[0].startswith("  render refused: 1 new row(s) but only 0 blank row(s) above row 6")
+    assert log[0].startswith("  render refused: the block needs 1 more row(s) above row 6")
+
+
+# --- the totals row, pass-through rows, manual feeds -------------------------------
+
+def totals(idx):
+    r = {h: "" for h in HEADERS}
+    r.update({"row_index": idx, "Debit Balance": 21699.69, "Credit Balance": 21959.45, "Credit Limit": 54595})
+    return r
+
+
+def test_RND_FIT_a_totals_row_inside_the_block_is_never_written_and_bounds_the_render():
+    # rows: 2 Recurring, 3 Plat 1, 4 TOTALS, 5 Chase Ink, 6 Operations old  (accounts below the totals)
+    rows = [SHEET[0], SHEET[1], totals(4), dict(SHEET[2], row_index=5), dict(SHEET[3], row_index=6)]
+    plan = plan_render(CONFIG, DEBTS, live(), rows, today=TODAY)
+    assert plan["errors"] == [] and plan["totals_row"] == 4
+    assert plan["fit_ok"] is False and plan["extra_rows_needed"] == 2      # 4 accounts need rows 2-5
+    assert all(c["row"] != 4 for c in plan["changes"])
+    # drop the two business accounts: the block fits in rows 2-3, rows 5-6 are deleted, row 4 untouched
+    cfg = {**CONFIG, "accounts": CONFIG["accounts"][:2] + CONFIG["accounts"][4:]}
+    plan = plan_render(cfg, DEBTS, live(), rows, today=TODAY)
+    assert plan["fit_ok"] and [(r["row"], r["action"]) for r in plan["retired"]] == [(5, "delete"), (6, "delete")]
+    # with a spare row above the totals, a retired row above it is blanked, not deleted
+    rows2 = [SHEET[0], SHEET[1], dict(SHEET[2], row_index=4), totals(5)]
+    plan = plan_render(cfg, DEBTS, live(), rows2, today=TODAY)
+    assert [(r["row"], r["action"]) for r in plan["retired"]] == [(4, "blank")]
+
+
+def test_RND_SCOPE_investment_and_loan_rows_pass_through_after_the_accounts():
+    rows = [SHEET[0], row(3, "ECSI - Heartland", "Loan", notes="student loan"), dict(SHEET[1], row_index=4),
+            dict(SHEET[2], row_index=5), dict(SHEET[3], row_index=6), row(7, "Bera 401k", "Investment", Company="Principal")]
+    plan = plan_render(CONFIG, DEBTS, live(), rows, today=TODAY)
+    assert plan["errors"] == []
+    assert [(r["row"], r["name"]) for r in plan["rows"]] == [
+        (2, "Recurring ACH"), (3, "Plat 1"), (4, "Chase Ink"), (5, "Operations old"),
+        (6, "ECSI - Heartland"), (7, "Bera 401k")]
+    moved = {(c["row"], c["column"]): c["new"] for c in plan["changes"] if c["moved"]}
+    assert moved[(6, "notes")] == "student loan" and moved[(6, "Type")] == "Loan"
+
+
+def test_manual_feed_accounts_need_no_match_and_keep_the_sheet_balance():
+    cfg = {**CONFIG, "accounts": CONFIG["accounts"] + [
+        {"id": "wex-hsa", "name": "Wex Health", "type": "depository", "category": "personal", "feed": "manual"}]}
+    registry = registry_accounts(cfg)
+    assert registry[-1]["manual"] and kinds(check_registry_vs_live(registry, monarch_accounts(MONARCH), "personal")) == []
+    rows = SHEET + [row(6, "Wex Health", "Personal Debit", "", "wex-hsa", Company="Wex Health",
+                        **{"Debit Balance": 5954.43})]
+    plan = plan_render(cfg, DEBTS, live(), rows, today=TODAY)
+    wex = [r for r in plan["rows"] if r["id"] == "wex-hsa"][0]
+    assert wex["row"] == 5 and wex["cells"]["Debit Balance"] == 5954.43      # open accounts first, balance kept
+
+
+def test_plan_migration_never_falls_back_to_name_when_the_row_has_a_last4():
+    rows = [row(2, "Chase Ink", "Business Credit", "0474"),       # Cap One, same name as nothing; stays unmapped
+            row(3, "Chase Ink", "Business Credit", "")]           # no last4: name is allowed
+    mapped, unmapped = plan_migration(CONFIG, rows)
+    assert [(m["row"], m["id"]) for m in mapped] == [(3, "chase-7667")]
+    assert [u["row"] for u in unmapped] == [2]
 
 
 # --- migration ----------------------------------------------------------------------
@@ -362,5 +419,7 @@ def test_plan_migration_maps_by_last4_then_name_and_lists_the_rest():
             row(5, "Mercury", "Personal Debit", ""),                   # nothing
             row(6, "Recurring ACH", "Personal Debit", "4354")]         # duplicate of row 2
     mapped, unmapped = plan_migration(CONFIG, rows)
-    assert [(m["row"], m["id"]) for m in mapped] == [(2, "cap1-4354"), (3, "boa-5153")]
-    assert [(u["row"], u["reason"][:12]) for u in unmapped] == [(5, "no registry "), (6, "already mapp")]
+    assert [(m["row"], m["id"]) for m in mapped] == [(2, "cap1-4354")]
+    # row 3 has a last4 that matches nothing, so its name is NOT used; row 6 duplicates row 2's account
+    assert [(u["row"], u["reason"][:12]) for u in unmapped] == [(3, "no registry "), (5, "no registry "),
+                                                               (6, "already mapp")]
