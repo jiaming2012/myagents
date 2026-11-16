@@ -3,6 +3,12 @@
 Ordered. Each task is one commit with the trailer `OpenSpec-Change: registry-renders-sheet`.
 Nothing writes to the live sheet before task 7.
 
+Status 2026-11-16: tasks 1 to 6 done on branch `worktree-registry-renders-sheet-impl`
+(tasks 3 to 6 in one commit; `render_block` became `render()` in account_register.py over
+the existing `write_cells` / `delete_rows` / `blank_rows_below` primitives, all proven on the
+sandbox and the live gap row). `--migrate --dry-run` run against the live sheet: 35 rows map,
+19 do not (listed by the run) and must be registered or deleted before task 7.
+
 1. **Operator sign-off on D1 to D5** in `proposal.md`. Record the answers at the top of
    `design.md`.
 2. **Registry fields.** Add optional `credit_limit` and `due_day` to ordinary `debts.yaml`
