@@ -312,7 +312,32 @@ def test_add_missing_with_add_flag_writes_without_asking(monkeypatch):
     assert sent == [("sheet-id", "Chart of Accounts",
                      [{"Name": "Plat 1", "Company": "Bank of America", "Account Last 4": "5153",
                        "Type": "Personal Credit", "Status": "active", "Credit Balance": 5603}])]
-    assert log[-1] == "  sync: 1 row(s) added."
+    assert log[-2:] == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00", "  sync: 1 row(s) added."]
+
+
+def test_add_missing_writes_each_yes_before_the_next_question(monkeypatch):
+    """A yes must reach the sheet before the next prompt: an interrupt (or a Zoho
+    failure) at question two keeps row one."""
+    import zoho_sheet
+    sent = []
+    monkeypatch.setattr(zoho_sheet, "add_records", lambda sid, tab, rows: sent.append(rows) or len(rows))
+    log, asked = [], []
+    inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[3:], monarch=MONARCH, books=BOOKS,
+                  category=None, source_status={})      # Plat 1 and Chase Ink both missing
+
+    def answer(q):
+        asked.append(q)
+        if len(asked) == 1:
+            assert sent == [], "nothing may be written before the first yes"
+            return True
+        assert len(sent) == 1, "the first yes must be on the sheet before question two"
+        raise KeyboardInterrupt
+
+    with pytest.raises(KeyboardInterrupt):
+        add_missing(inputs, "sheet-id", ask=answer, log=log.append)
+    assert [r[0]["Account Last 4"] for r in sent] == ["5153"]
+    assert log == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00",
+                   "  sync: interrupted; 1 row(s) added before the interrupt."]
 
 
 def test_add_missing_with_nothing_missing_is_silent(monkeypatch):

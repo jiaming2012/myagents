@@ -35,7 +35,9 @@ prints them and exits 1 if any exist.
 `--sync` first offers to ADD a Chart of Accounts row for every open registry
 account the sheet lacks (one yes/no per account; `--add` says yes to all), with
 Name, Company, last4, Type, Status and, when the live source resolves, the
-balance. It never closes or removes a row: the register only grows by itself,
+balance. Each yes is written before the next question is asked, so a run that
+is interrupted or fails part-way keeps the rows already confirmed. It never
+closes or removes a row: the register only grows by itself,
 and retiring an account stays a hand edit on both sides. It then writes the
 live balances (and today's date into an `As of` column, if the sheet has one)
 into the matched rows before checking, so a clean register stays clean day to
@@ -586,7 +588,9 @@ def _confirm(prompt):
 def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print):
     """Add a Chart of Accounts row for each open registry account the sheet lacks.
     add="ask" puts one yes/no per account to `ask` (default: the terminal);
-    add="always" adds them all. Nothing is ever closed or removed here.
+    add="always" adds them all. Every yes is written to the sheet at once, before
+    the next question, so an interrupted or failed run keeps the rows already
+    confirmed. Nothing is ever closed or removed here.
     Returns the number of rows added (0 on dry run or when none were chosen)."""
     rows = inputs["sheet_rows"]
     if rows is None:
@@ -594,21 +598,30 @@ def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print)
     sheet, _ = sheet_accounts(rows)
     additions = plan_additions(sheet, registry_accounts(inputs["config"]), _live_sides(inputs),
                                inputs["category"])
-    chosen = []
-    for a in additions:
-        label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
-        if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
-            log(f"  skipped {label}.")
-            continue
-        chosen.append(a)
-        bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
-        log(f"  {'would add' if dry_run else 'add'} '{a['name']}' as {a['data']['Type']} {a['key']}"
-            + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
-    if dry_run or not chosen:
+    if not additions:
         return 0
-    from zoho_sheet import add_records
-    n = add_records(sheet_id, SHEET_TAB, [a["data"] for a in chosen])
-    log(f"  sync: {n} row(s) added.")
+    if not dry_run:
+        from zoho_sheet import add_records
+    n = 0
+    try:
+        for a in additions:
+            label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
+            if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
+                log(f"  skipped {label}.")
+                continue
+            bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
+            detail = (f"'{a['name']}' as {a['data']['Type']} {a['key']}"
+                      + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
+            if dry_run:
+                log(f"  would add {detail}")
+                continue
+            n += add_records(sheet_id, SHEET_TAB, [a["data"]])
+            log(f"  added {detail}")
+    except KeyboardInterrupt:
+        log(f"  sync: interrupted; {n} row(s) added before the interrupt.")
+        raise
+    if n:
+        log(f"  sync: {n} row(s) added.")
     return n
 
 
