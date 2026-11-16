@@ -13,6 +13,9 @@
 #   funding_account: registry id the payment leaves from. Omit -> from the registry payment.
 #   carried:         true to put a paid-in-full card into the paydown anyway (it revolves),
 #                    false to leave a debt out of the plan.
+#   credit_limit:    the card's limit (optional; rendered into the Bills sheet's Credit Limit
+#                    column by account_register.py, and used by the promo spending cap below).
+#   due_day:         statement due day of month (optional; rendered into the sheet's Due Date).
 #   notes:           anything the plan should print.
 #
 # plan:

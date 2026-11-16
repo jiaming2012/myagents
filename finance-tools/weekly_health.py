@@ -274,7 +274,7 @@ def count_action_items(data):
         if n_member:
             parts.append(f"{n_member} membership error(s)")
         if n_bal:
-            parts.append(f"{n_bal} balance mismatch(es)")
+            parts.append(f"{n_bal} row(s) to re-render")
         items.append(f"REGISTER: {', '.join(parts)} → task accounts:check"
                      + ("" if n_member else " / task accounts:sync"))
 
@@ -557,7 +557,7 @@ def build_health_email_html(data):
     if reg_rows:
         register_html = f"""
 <h3 style="color: #1f2937;">Account Register ({len(data.get("register", []))})</h3>
-<p style="color: #6b7280; font-size: 13px;">Bills sheet ↔ payments.yaml ↔ Monarch / Zoho Books. <code>task accounts:check</code> for the live list; <code>task accounts:sync</code> writes balances once membership is clean.</p>
+<p style="color: #6b7280; font-size: 13px;">payments.yaml ↔ Monarch / Zoho Books; the Bills sheet is rendered from payments.yaml. <code>task accounts:check</code> for the live list; <code>task accounts:sync</code> re-renders the sheet.</p>
 <table style="width: 100%; border-collapse: collapse; margin-bottom: 16px;">
 <tr style="background: #f3f4f6;">
 <th style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: left;">Kind</th>

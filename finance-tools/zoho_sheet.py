@@ -277,20 +277,47 @@ def write_cells(resource_id, worksheet_name, row, data, columns=None):
     than update_records for anything keyed on a digit string such as a last4:
     a records criteria "Account Last 4"="0732" matches nothing (2026-11-16 probe),
     so a criteria update silently affects 0 rows. `columns` is header_columns()
-    output; pass it in when writing many rows. Returns the number of cells set."""
+    output; pass it in when writing many rows. An empty value clears the cell:
+    it is sent as the CSV quoted-empty field `""` (sandbox probe 2026-11-16: an
+    empty `data` is rejected, `""` clears). Returns the number of cells set."""
     columns = columns or header_columns(resource_id, worksheet_name)
     unknown = sorted(set(data) - set(columns))
     if unknown:
         sys.exit(f"{worksheet_name}: header row has no column {unknown}")
     n = 0
     for header, value in data.items():
+        text = "" if value is None else str(value)
         r = requests.post(f"{SHEET_BASE}/{resource_id}",
                           data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
-                                "row": row, "column": columns[header], "data": "" if value is None else str(value)},
+                                "row": row, "column": columns[header], "data": text if text != "" else '""'},
                           headers=_headers(), timeout=60)
         _json(r)
         n += 1
     return n
+
+
+def blank_rows_below(resource_id, worksheet_name, row):
+    """Number of blank rows from 1-based `row` down to the first row with any
+    content (on Bills: the gap between the records block and the totals row).
+    None when nothing below `row` has content, i.e. the gap is unbounded."""
+    filled = [i for i, cells in _content(resource_id, worksheet_name, row)
+              if i >= row and any(c.get("content") not in ("", None) for c in cells)]
+    return (min(filled) - row) if filled else None
+
+
+def add_column(resource_id, worksheet_name, header):
+    """Append `header` to the header row (row 1), in the first column after the
+    last existing header. Returns the new 1-based column index."""
+    columns = header_columns(resource_id, worksheet_name)
+    if header in columns:
+        return columns[header]
+    col = (max(columns.values()) if columns else 0) + 1
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                            "row": 1, "column": col, "data": header},
+                      headers=_headers(), timeout=60)
+    _json(r)
+    return col
 
 
 def delete_rows(resource_id, worksheet_name, start_row, end_row):

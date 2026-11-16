@@ -1,64 +1,63 @@
 #!/usr/bin/env python3
 """
-Account register check: is the Bills sheet one-to-one with reality?
+Account register: payments.yaml is the register; the Bills sheet is rendered from it.
 
-The native Zoho Sheet "Bills" (tab `Chart of Accounts`) is the register the
-operator looks at. payments.yaml `accounts:` is the machine registry every other
-script uses. Monarch Money holds the personal accounts, Zoho Books the business
-ones. This module proves, on every run, that the three layers agree:
+payments.yaml `accounts:` is the only place an account's identity is entered (id,
+name, institution, last4, type, category, status). debts.yaml adds a card's terms
+(APR, credit limit, due day) and the `payments:` section its autopay. Monarch
+Money holds the live personal balances, Zoho Books the business ones. The native
+Zoho Sheet "Bills" (tab `Chart of Accounts`) is what the operator looks at: this
+module RENDERS the registry into it and never reads identity back out of it.
 
-    Chart of Accounts rows  <->  payments.yaml accounts  <->  Monarch / Zoho Books
+    payments.yaml + debts.yaml  --render-->  Chart of Accounts
+    payments.yaml  <--one-to-one-->  Monarch (personal) / Zoho Books (business)
 
-"One-to-one" is checked on OPEN accounts, both directions, per owner:
+Checks (every finding is an error; `main()` prints them and exits 1 if any):
 
-  1. sheet rows well formed   - every row has a Type (Personal/Business x
-                                Debit/Credit), a last4, and no duplicate last4;
-                                every open credit row has AutoPay Type full or
-                                min (blank means no autopay, which is not allowed)
-  2. sheet <-> registry        - same set of last4s per owner; a row or entry
-                                marked closed on one side must be closed on both
-  3. registry <-> Monarch      - every personal entry's monarch_match resolves to
-                                exactly one active Monarch account, and every
-                                active Monarch depository/credit account is
-                                claimed by exactly one entry
-  4. registry <-> Zoho Books   - the same for business entries via
-                                zoho_match and Books' bank/credit_card
-                                accounts
+  1. registry well formed      - ids unique (RND-KEY)
+  2. registry <-> Monarch      - every open personal entry's monarch_match resolves
+                                 to exactly one active Monarch account and every
+                                 active Monarch depository/credit account is
+                                 claimed by exactly one entry
+  3. registry <-> Zoho Books   - the same for business entries via zoho_match
+  4. sheet == render           - every tool-owned cell of the Chart of Accounts
+                                 equals what the registry renders (sheet_drift,
+                                 balance_mismatch); every row in the block carries
+                                 a Registry Id (sheet_unregistered_row)
 
-  5. balances                 - for every row matched through 1-4, the sheet's
-                                Debit/Credit Balance equals the live balance to
-                                the cent (credit = amount owed, positive)
+Rules, each named so it can be found in the spec
+(docs/proposals/registry-renders-sheet/), here, and in a test name:
 
-Every finding is an error (there is no warning tier for a register); `main()`
-prints them and exits 1 if any exist.
+  RND-SCOPE  depository and credit accounts only (loans and investments are out)
+  RND-ORDER  registry order; closed accounts last
+  RND-CLOSED closed = status: closed or inactive: true; rendered as Status
+             `closed`, dropped from the render RETIRE_CLOSED_AFTER_DAYS after
+             `closed_on` (kept forever while closed_on is unset)
+  RND-TYPE   Type = owner x kind: Personal/Business Debit/Credit
+  RND-KEY    rows join to accounts by the Registry Id column, never by last4 or name
+  RND-OWN    the tool writes only the columns it owns (OWNED_COLUMNS); operator
+             columns are copied along when a row moves and never generated
+  RND-DIFF   only cells whose content differs are written, each one logged
+  RND-FIT    the render refuses, writing nothing, if the block would reach the
+             first non-blank row below it (the totals row)
+  RND-BAL    balance = Monarch display balance (personal) or Books book balance
+             (business); left as it is when the live source is unavailable
+  RND-TERMS  AutoPay Type/Date from the payments entry that pays the card;
+             Credit Limit, APR, Due Date from debts.yaml (promo overrides)
 
-`--sync` first offers to ADD a Chart of Accounts row for every open registry
-account the sheet lacks (one yes/no per account; `--add` says yes to all), with
-Name, Company, last4, Type, Status and, when the live source resolves, the
-balance. Each yes is written before the next question is asked, so a run that
-is interrupted or fails part-way keeps the rows already confirmed. A row goes
-into the first blank row under the last record (the sheet keeps a blank gap and
-a totals row below the data; when the gap is used up the run stops and asks you
-to insert blank rows above the totals). It never
-closes or removes a row: the register only grows by itself,
-and retiring an account stays a hand edit on both sides. It then writes the
-live balances (and today's date into an `As of` column, if the sheet has one)
-into the matched rows before checking, so a clean register stays clean day to
-day. Balance writes are refused while any membership error (1-4) remains.
-
-Scope (docs/account-register-plan.md, decisions of 2026-10-19): investments are
-excluded until the Investments tab is rebuilt. Loans are also excluded for now:
-the sheet keeps them on a separate `Loans` tab with its own shape. Only
-depository/credit (sheet: Personal/Business Debit/Credit) accounts are checked.
+`--sync` renders: it writes the differing cells by sheet row and column
+(zoho_sheet.write_cells) and deletes rows the registry no longer renders, so the
+block worksheet.records.fetch reads stays contiguous. `--migrate` is the one-time
+step that adds the Registry Id column and fills it for existing rows.
 
 Usage:
-    python account_register.py                    # all four checks
+    python account_register.py                    # all checks
     python account_register.py --category business
-    python account_register.py --offline          # sheet <-> registry only
+    python account_register.py --offline          # registry + sheet only (no live balances)
     python account_register.py --no-sheet         # registry <-> live only
-    python account_register.py --no-balances      # membership only
-    python account_register.py --sync [--dry-run] # offer to add missing rows, write live balances, then check
-    python account_register.py --sync --add       # add every missing row without asking
+    python account_register.py --no-balances      # skip balance_mismatch
+    python account_register.py --sync [--dry-run] # render the registry into the sheet, then check
+    python account_register.py --migrate [--dry-run]
     python account_register.py --json
 """
 
@@ -68,13 +67,14 @@ import json
 import os
 import re
 import sys
+from datetime import date
 
 CATEGORIES = ("personal", "business")
 SHEET_TAB = "Chart of Accounts"
 DEFAULT_SHEET_ID = "efajyb8b15e86a20a48e0b3edab6cf4fb18c5"   # Bills, WorkDrive folder "finance"
 SHEET_ID_ENV = "ZOHO_BILLS_SHEET_ID"
 
-# sheet Type -> (owner, kind). Anything else is out of scope (Investment) or an error (blank).
+# sheet Type -> (owner, kind). Anything else is out of scope (Investment) or unknown.
 SHEET_TYPES = {
     "Personal Debit": ("personal", "debit"),
     "Personal Credit": ("personal", "credit"),
@@ -89,13 +89,20 @@ BOOKS_TYPES = {"bank": "debit", "credit_card": "credit"}            # cash (Pett
 
 MATCH_FIELD = {"personal": "monarch_match", "business": "zoho_match"}
 SOURCE_NAME = {"personal": "Monarch", "business": "Zoho Books"}
-BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
-AS_OF_COLUMN = "As of"
+
+ID_COLUMN = "Registry Id"
 KEY_COLUMN = "Account Last 4"
-BALANCE_KINDS = {"balance_mismatch", "sheet_balance_missing"}   # the kinds --sync is allowed to fix
-AUTOPAY_COLUMN = "AutoPay Type"
-CREDIT_AUTOPAY_TYPES = {"full", "min"}
-NON_MEMBERSHIP_KINDS = BALANCE_KINDS | {"sheet_credit_autopay"}  # errors that do not block --sync
+AS_OF_COLUMN = "As of"
+BALANCE_COLUMN = {"debit": "Debit Balance", "credit": "Credit Balance"}
+IDENTITY_COLUMNS = (ID_COLUMN, "Name", "Company", KEY_COLUMN, "Type", "Status")
+TERM_COLUMNS = ("AutoPay Type", "AutoPay Date", "Credit Limit", "APR", "Due Date")
+BALANCE_COLUMNS = ("Debit Balance", "Credit Balance", AS_OF_COLUMN)
+OWNED_COLUMNS = IDENTITY_COLUMNS + TERM_COLUMNS + BALANCE_COLUMNS          # RND-OWN
+OPTIONAL_COLUMNS = {AS_OF_COLUMN}          # rendered only when the sheet has the column
+RETIRE_CLOSED_AFTER_DAYS = 35              # RND-CLOSED: one statement cycle
+
+RENDER_KINDS = {"balance_mismatch", "sheet_drift"}   # fixed by --sync
+NON_MEMBERSHIP_KINDS = RENDER_KINDS
 
 
 def _num(v):
@@ -143,12 +150,14 @@ def _err(kind, message, fix=""):
     return {"severity": "error", "kind": kind, "message": message, "fix": fix}
 
 
-def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None, row=None):
-    """`row` is the 1-based sheet row (sheet accounts only): balance writes address
-    the cell by row and column, because a records.update criteria on the last4
-    column never matches (Zoho compares the digit string numerically)."""
+def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None,
+          row=None, id=None, closed_on=None, cells=None):
+    """One account as seen by one side. `row` is the 1-based sheet row and `cells`
+    the raw sheet record (sheet side only); `id` the registry id (registry and
+    sheet sides)."""
     return {"key": key, "name": name, "owner": owner, "kind": kind, "closed": bool(closed),
-            "balance": balance, "match": match, "ref": ref, "institution": institution, "row": row}
+            "balance": balance, "match": match, "ref": ref, "institution": institution,
+            "row": row, "id": id, "closed_on": closed_on, "cells": cells}
 
 
 # ---------------------------------------------------------------------------
@@ -157,62 +166,43 @@ def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref=""
 
 def sheet_accounts(rows, category=None):
     """Chart of Accounts rows (Sheet Data API records: header-keyed dicts with
-    row_index) -> (accounts, errors). Investment rows are skipped; rows with no
-    Type, an unknown Type, or no last4 are errors, as is an open credit row whose
-    AutoPay Type is not full or min. Closed = Status column says closed
-    (case-insensitive); a 'Closed' note alone is an error so the operator adds
-    the column rather than relying on free text. With `category`, rows of the
-    other owner are skipped, and so are rows whose Type gives no owner (those are
-    reported only by an unfiltered run)."""
-    accounts, errors = [], []
+    row_index) -> (accounts, errors). Rows join to the registry by Registry Id
+    (RND-KEY); a row in the block without one is `sheet_unregistered_row`, two
+    rows with the same id `sheet_duplicate_id`. Investment rows are skipped.
+    `category` is accepted for symmetry with the other normalisers but the sheet
+    does not know owners reliably, so it is ignored here and applied by the
+    planner."""
+    accounts, errors, seen = [], [], {}
     for row in rows:
         ref = f"sheet row {row.get('row_index', '?')}"
         name = str(row.get("Name") or "").strip()
         typ = str(row.get("Type") or "").strip()
         if typ in OUT_OF_SCOPE_SHEET_TYPES:
             continue
-        if typ not in SHEET_TYPES and category:
+        acct_id = str(row.get(ID_COLUMN) or "").strip()
+        if not acct_id:
+            errors.append(_err("sheet_unregistered_row",
+                               f"{ref} '{name}' has no {ID_COLUMN}.",
+                               "Add the account to payments.yaml and run --migrate, or delete the row."))
             continue
-        if not typ:
-            errors.append(_err("sheet_row_untyped",
-                               f"{ref} '{name}': no Type.",
-                               "Set Type to Personal/Business Debit/Credit, Investment, or delete the row."))
+        if acct_id in seen:
+            errors.append(_err("sheet_duplicate_id",
+                               f"{ref} '{name}' and {seen[acct_id]} both carry {ID_COLUMN} {acct_id}.",
+                               "Delete one of the rows; the render keeps one row per account."))
             continue
-        if typ not in SHEET_TYPES:
-            errors.append(_err("sheet_row_type_unknown",
-                               f"{ref} '{name}': Type {typ!r} is not one of {sorted(SHEET_TYPES)}."))
-            continue
-        owner, kind = SHEET_TYPES[typ]
-        if category and owner != category:
-            continue
-        status = str(row.get("Status") or "").strip().casefold()
-        closed = status == "closed"
-        notes = str(row.get("notes") or row.get("Notes") or "")
-        if not closed and "closed" in notes.casefold():
-            errors.append(_err("sheet_row_closed_in_notes",
-                               f"{ref} '{name}': notes say closed but there is no Status column / value.",
-                               "Add a Status column to Chart of Accounts and set it to 'closed'."))
-        autopay = str(row.get(AUTOPAY_COLUMN) or "").strip()
-        if kind == "credit" and not closed and autopay.casefold() not in CREDIT_AUTOPAY_TYPES:
-            errors.append(_err("sheet_credit_autopay",
-                               f"{ref} '{name}' ({typ}): AutoPay Type is {repr(autopay) if autopay else 'blank'}; "
-                               f"credit cards must be one of {sorted(CREDIT_AUTOPAY_TYPES)}.",
-                               "Set up autopay at the issuer, then set AutoPay Type to full or min."))
-        key = str(row.get("Account Last 4") or "").strip() or None
-        if key is None and not closed:
-            errors.append(_err("sheet_row_no_last4",
-                               f"{ref} '{name}' ({typ}): no Account Last 4.",
-                               "Fill Account Last 4; it is the join key to the registry."))
-            continue
-        accounts.append(_acct(key, name, owner, kind, closed=closed, row=row.get("row_index"),
-                              balance=_num(row.get(BALANCE_COLUMN[kind])), ref=ref))
-    errors += _duplicate_keys(accounts, "sheet_duplicate_last4", "Chart of Accounts")
+        seen[acct_id] = ref
+        owner, kind = SHEET_TYPES.get(typ, (None, None))
+        closed = str(row.get("Status") or "").strip().casefold() == "closed"
+        balance = _num(row.get(BALANCE_COLUMN[kind])) if kind else None
+        accounts.append(_acct(str(row.get(KEY_COLUMN) or "").strip() or None, name, owner, kind, closed=closed,
+                              balance=balance, ref=ref, row=row.get("row_index"), id=acct_id, cells=row))
     return accounts, errors
 
 
 def registry_accounts(config):
-    """payments.yaml accounts -> account dicts (depository/credit only; loans and
-    investments are out of scope). Closed = `status: closed` or `inactive: true`."""
+    """payments.yaml accounts -> account dicts in file order (RND-ORDER); depository
+    and credit only (RND-SCOPE). Closed = `status: closed` or `inactive: true`
+    (RND-CLOSED); `closed_on` (YYYY-MM-DD) starts the retirement clock."""
     out = []
     for a in config.get("accounts", []):
         kind = REGISTRY_TYPES.get(a.get("type"))
@@ -220,9 +210,15 @@ def registry_accounts(config):
         if kind is None or owner not in CATEGORIES:
             continue
         closed = str(a.get("status") or "").casefold() == "closed" or bool(a.get("inactive"))
+        closed_on = a.get("closed_on")
+        if closed_on is not None and not isinstance(closed_on, date):
+            try:
+                closed_on = date.fromisoformat(str(closed_on))
+            except ValueError:
+                closed_on = None
         out.append(_acct(a.get("last4") or None, a.get("name", a.get("id")), owner, kind,
                          closed=closed, match=a.get(MATCH_FIELD[owner]), ref=f"registry {a.get('id')}",
-                         institution=a.get("institution")))
+                         institution=a.get("institution"), id=a.get("id"), closed_on=closed_on))
     return out
 
 
@@ -270,51 +266,19 @@ def books_accounts(bankaccounts):
 # Checks (pure)
 # ---------------------------------------------------------------------------
 
-def _duplicate_keys(accounts, kind, where):
+def check_registry_ids(registry):
+    """RND-KEY: every account has an id and no two share one."""
     seen, errors = {}, []
-    for a in accounts:
-        if a["closed"] or not a["key"]:
+    for a in registry:
+        if not a["id"]:
+            errors.append(_err("registry_no_id", f"{a['ref']} '{a['name']}' has no id.", "Give every account an id."))
             continue
-        k = (a["owner"], a["key"])
-        if k in seen:
-            errors.append(_err(kind, f"{where}: last4 {a['key']} ({a['owner']}) appears twice: "
-                                     f"'{seen[k]['name']}' and '{a['name']}'.",
-                               "last4 must be unique per owner; fix one of them."))
+        if a["id"] in seen:
+            errors.append(_err("registry_duplicate_id",
+                               f"payments.yaml: id {a['id']} appears twice: '{seen[a['id']]}' and '{a['name']}'.",
+                               "ids must be unique; rename one."))
         else:
-            seen[k] = a
-    return errors
-
-
-def check_sheet_vs_registry(sheet, registry, category=None):
-    """Open sheet rows and open registry entries must be the same set of last4s
-    per owner. Closed on one side only is also an error."""
-    errors = []
-    for owner in CATEGORIES:
-        if category and owner != category:
-            continue
-        s = {a["key"]: a for a in sheet if a["owner"] == owner and a["key"]}
-        r = {a["key"]: a for a in registry if a["owner"] == owner and a["key"]}
-        for key in sorted(set(s) | set(r)):
-            sa, ra = s.get(key), r.get(key)
-            if sa and not ra:
-                if not sa["closed"]:
-                    errors.append(_err("sheet_not_in_registry",
-                                       f"{sa['ref']} '{sa['name']}' ({owner} {key}) is not in payments.yaml.",
-                                       "Add the account to payments.yaml accounts:, or mark the row closed."))
-            elif ra and not sa:
-                if not ra["closed"]:
-                    errors.append(_err("registry_not_in_sheet",
-                                       f"{ra['ref']} '{ra['name']}' ({owner} {key}) is not in the Chart of Accounts.",
-                                       "Add a row to the sheet, or set status: closed in payments.yaml."))
-            elif sa["closed"] != ra["closed"]:
-                side = "sheet" if sa["closed"] else "registry"
-                errors.append(_err("closed_mismatch",
-                                   f"{owner} {key} '{ra['name']}': closed in the {side} only.",
-                                   "Close it on both sides or neither."))
-            elif sa["kind"] != ra["kind"]:
-                errors.append(_err("kind_mismatch",
-                                   f"{owner} {key} '{ra['name']}': sheet says {sa['kind']}, registry says {ra['kind']}."))
-    errors += _duplicate_keys(registry, "registry_duplicate_last4", "payments.yaml")
+            seen[a["id"]] = a["name"]
     return errors
 
 
@@ -350,7 +314,7 @@ def check_registry_vs_live(registry, live, owner):
         if la["closed"] and not ra["closed"]:
             errors.append(_err("live_closed",
                                f"{ra['ref']} '{ra['name']}': {source} shows '{la['name']}' closed.",
-                               "Set status: closed in payments.yaml and in the sheet."))
+                               "Set status: closed in payments.yaml."))
         elif ra["closed"] and not la["closed"]:
             errors.append(_err("registry_closed_live_open",
                                f"{ra['ref']} '{ra['name']}' is closed in payments.yaml but open in {source}."))
@@ -358,7 +322,7 @@ def check_registry_vs_live(registry, live, owner):
             errors.append(_err("last4_mismatch",
                                f"{ra['ref']} '{ra['name']}': registry last4 {ra['key']} but {source} "
                                f"'{la['name']}' shows {la['key']}.",
-                               "Correct last4 in payments.yaml (and the sheet row)."))
+                               "Correct last4 in payments.yaml."))
         if la["kind"] != ra["kind"]:
             errors.append(_err("kind_mismatch",
                                f"{ra['ref']} '{ra['name']}': registry type {ra['kind']}, {source} {la['kind']}."))
@@ -371,7 +335,7 @@ def check_registry_vs_live(registry, live, owner):
             errors.append(_err("live_not_in_registry",
                                f"{source} account '{la['name']}' ({la['kind']}"
                                f"{', last4 ' + la['key'] if la['key'] else ''}) is not in payments.yaml.",
-                               f"Add it to payments.yaml accounts: with {field}: {la['name']!r}, and a sheet row."))
+                               f"Add it to payments.yaml accounts: with {field}: {la['name']!r}."))
         elif n > 1:
             errors.append(_err("live_claimed_twice",
                                f"{source} account '{la['name']}' is matched by "
@@ -389,67 +353,9 @@ def check_sources(source_status):
     return errors
 
 
-def matched_triples(sheet, registry, live, owner):
-    """(sheet row, registry entry, live account) for every open account of `owner`
-    that links cleanly through last4 (sheet <-> registry) and the match name
-    (registry <-> live). Anything that does not link is a membership error
-    reported elsewhere, so it is simply absent here."""
-    s = {a["key"]: a for a in sheet if a["owner"] == owner and a["key"] and not a["closed"]}
-    live_by_name = {}
-    for a in live:
-        live_by_name.setdefault(norm_name(a["name"]), []).append(a)
-    out = []
-    for ra in registry:
-        if ra["owner"] != owner or ra["closed"] or not ra["key"] or not ra["match"]:
-            continue
-        sa = s.get(ra["key"])
-        hits = live_by_name.get(norm_name(ra["match"]), [])
-        if sa and len(hits) == 1 and not hits[0]["closed"]:
-            out.append((sa, ra, hits[0]))
-    return out
-
-
-def check_balances(sheet, registry, live, owner):
-    """Sheet balance == live balance, to the cent, for every matched account."""
-    errors = []
-    source = SOURCE_NAME[owner]
-    for sa, ra, la in matched_triples(sheet, registry, live, owner):
-        col = BALANCE_COLUMN[ra["kind"]]
-        if la["balance"] is None:
-            continue
-        if sa["balance"] is None:
-            errors.append(_err("sheet_balance_missing",
-                               f"{sa['ref']} '{sa['name']}' ({owner} {ra['key']}): {col} is empty; "
-                               f"{source} says {la['balance']:.2f}.",
-                               "Run accounts:sync, or type the balance."))
-        elif round(sa["balance"], 2) != round(la["balance"], 2):
-            errors.append(_err("balance_mismatch",
-                               f"{sa['ref']} '{sa['name']}' ({owner} {ra['key']}): {col} {sa['balance']:.2f} "
-                               f"but {source} says {la['balance']:.2f}.",
-                               "Run accounts:sync to write the live balance into the sheet."))
-    return errors
-
-
-def plan_sync(sheet, registry, live, owner, as_of=None, has_as_of_column=False):
-    """Writes needed to make the sheet's balances equal the live ones:
-    [{row, data, ref, name, old, new}], `row` being the sheet row to write and
-    `data` the header-keyed cells. Rows already equal are skipped unless an
-    As of column exists (then the date is refreshed too)."""
-    writes = []
-    for sa, ra, la in matched_triples(sheet, registry, live, owner):
-        if la["balance"] is None:
-            continue
-        new = round(la["balance"], 2)
-        same = sa["balance"] is not None and round(sa["balance"], 2) == new
-        if same and not has_as_of_column:
-            continue
-        data = {BALANCE_COLUMN[ra["kind"]]: new}
-        if has_as_of_column and as_of:
-            data[AS_OF_COLUMN] = as_of
-        writes.append({"row": sa["row"], "data": data, "ref": sa["ref"],
-                       "name": sa["name"], "old": sa["balance"], "new": new})
-    return writes
-
+# ---------------------------------------------------------------------------
+# The render (pure planning)
+# ---------------------------------------------------------------------------
 
 def _live_hit(ra, live):
     """The single open live account `ra`'s match name resolves to, else None."""
@@ -460,46 +366,173 @@ def _live_hit(ra, live):
     return hits[0] if len(hits) == 1 else None
 
 
-def plan_additions(sheet, registry, live_by_owner, category=None):
-    """Chart of Accounts rows to add: one per open registry account whose last4 is
-    on no sheet row at all, open or closed. Name, Company, last4, Type and Status
-    come from the registry; the balance from the live source when it resolves, so
-    the new row is right from the start. Never plans a removal or a close: the
-    register only grows by itself."""
-    present = {a["key"] for a in sheet if a["key"]}
-    rows = []
+def card_terms(config, debts, account_id, kind):
+    """RND-TERMS: the term columns for one account. Debit rows render blank. For a
+    card: AutoPay Type/Date from the `payments:` entry whose pays_account is the
+    card (`none` when no entry pays it); Credit Limit, APR, Due Date from the
+    debts.yaml entry (a promo entry overrides apr and credit_limit while present)."""
+    terms = {c: "" for c in TERM_COLUMNS}
+    if kind != "credit":
+        return terms
+    terms["AutoPay Type"] = "none"
+    for p in (config or {}).get("payments", []) or []:
+        if p.get("pays_account") == account_id and p.get("autopay"):
+            terms["AutoPay Type"] = str(p.get("autopay_type") or "").strip() or "none"
+            terms["AutoPay Date"] = p.get("day_of_month") if p.get("day_of_month") is not None else ""
+            break
+    found = {}
+    for d in (debts or {}).get("debts", []) or []:
+        if d.get("account") == account_id:
+            found.update({k: v for k, v in d.items() if v is not None})
+    for d in (debts or {}).get("promos", []) or []:
+        if d.get("account") == account_id:
+            found.update({k: v for k, v in d.items() if v is not None and k in ("apr", "credit_limit")})
+    terms["Credit Limit"] = found.get("credit_limit", "")
+    terms["APR"] = found.get("apr", "")
+    terms["Due Date"] = found.get("due_day", "")
+    return terms
+
+
+def _cell_text(v):
+    """Canonical text of a cell for COMPARISON only: numbers to 2 places (so 5,
+    5.0, '$5.00' and '0621' vs 621 compare equal), everything else stripped text,
+    None -> ''. Writes send the raw value, never this."""
+    if v is None:
+        return ""
+    s = str(v).strip()
+    if s == "":
+        return ""
+    n = _num(v)
+    return f"{n:.2f}" if n is not None else s
+
+
+def rendered_accounts(registry, today, category=None):
+    """RND-SCOPE, RND-ORDER, RND-CLOSED: the accounts to render, in order."""
+    today = today or date.today()
+    opened, closed = [], []
     for ra in registry:
-        if ra["closed"] or not ra["key"] or ra["key"] in present or (category and ra["owner"] != category):
+        if category and ra["owner"] != category:
             continue
-        data = {"Name": ra["name"], "Company": ra.get("institution") or "", KEY_COLUMN: ra["key"],
-                "Type": SHEET_TYPE_OF[(ra["owner"], ra["kind"])], "Status": "active"}
+        if not ra["closed"]:
+            opened.append(ra)
+        elif ra["closed_on"] is None or (today - ra["closed_on"]).days <= RETIRE_CLOSED_AFTER_DAYS:
+            closed.append(ra)
+    return opened + closed
+
+
+def plan_render(config, debts, live_by_owner, sheet_rows, today=None, category=None, gap_rows=None):
+    """What `--sync` would do, with no I/O. Returns
+      rows:     [{row, id, name, cells}]       the target block, one per rendered account
+      changes:  [{row, id, name, column, old, new}]   cells that differ (RND-DIFF)
+      retired:  [{row, id, name}]              block rows past the new end, to delete
+      extra_rows_needed, fit_ok               RND-FIT against `gap_rows` (None = unknown)
+      errors:   sheet_unregistered_row / sheet_duplicate_id / sheet_missing_column,
+                any of which blocks the render.
+    A category other than None only narrows the check; the render itself always
+    covers every account, because row order is global."""
+    today = today or date.today()
+    registry = registry_accounts(config)
+    sheet, errors = sheet_accounts(sheet_rows or [])
+    headers = []
+    for row in sheet_rows or []:
+        for k in row:
+            if k != "row_index" and k not in headers:
+                headers.append(k)
+    missing = [c for c in OWNED_COLUMNS if c not in headers and c not in OPTIONAL_COLUMNS]
+    if missing and sheet_rows:
+        errors.append(_err("sheet_missing_column", f"Chart of Accounts has no column {missing}.",
+                           "Run --migrate (adds Registry Id) or add the column in the sheet."))
+    existing = {a["id"]: a for a in sheet}
+    current = {row["row_index"]: row for row in (sheet_rows or []) if "row_index" in row}
+    rows, changes = [], []
+    for pos, ra in enumerate(rendered_accounts(registry, today, category), start=2):
+        prev = existing.get(ra["id"])
+        cells = dict(prev["cells"]) if prev else {}
+        cells.pop("row_index", None)
+        cells.update({
+            ID_COLUMN: ra["id"], "Name": ra["name"], "Company": ra["institution"] or "",
+            KEY_COLUMN: ra["key"] or "", "Type": SHEET_TYPE_OF[(ra["owner"], ra["kind"])],
+            "Status": "closed" if ra["closed"] else "active",
+        })
+        cells.update(card_terms(config, debts, ra["id"], ra["kind"]))
+        cur = current.get(pos, {})
         la = _live_hit(ra, (live_by_owner or {}).get(ra["owner"]))
-        if la and la["balance"] is not None:
-            data[BALANCE_COLUMN[ra["kind"]]] = round(la["balance"], 2)
-        rows.append({"data": data, "ref": ra["ref"], "name": ra["name"], "owner": ra["owner"], "key": ra["key"]})
-    return rows
+        if la and la["balance"] is not None:                                   # RND-BAL
+            col = BALANCE_COLUMN[ra["kind"]]
+            cells[col] = round(la["balance"], 2)
+            cells[BALANCE_COLUMN["credit" if ra["kind"] == "debit" else "debit"]] = ""
+            # As of is the date the balance was last written, so it moves only with the balance
+            if AS_OF_COLUMN in headers and (_cell_text(cur.get(col)) != _cell_text(cells[col])
+                                            or not _cell_text(cells.get(AS_OF_COLUMN))):
+                cells[AS_OF_COLUMN] = today.isoformat()
+        rows.append({"row": pos, "id": ra["id"], "name": ra["name"], "cells": cells})
+        for col in headers:
+            old, new = _cell_text(cur.get(col)), _cell_text(cells.get(col))
+            if old != new:
+                changes.append({"row": pos, "id": ra["id"], "name": ra["name"], "column": col,
+                                "old": old, "new": new, "value": cells.get(col, ""),
+                                "moved": col not in OWNED_COLUMNS})
+    new_end = 1 + len(rows)
+    old_end = max(current) if current else 1
+    retired = [{"row": i, "id": str(current[i].get(ID_COLUMN) or ""), "name": current[i].get("Name", "")}
+               for i in range(new_end + 1, old_end + 1) if i in current]
+    extra = max(0, new_end - old_end)
+    fit_ok = gap_rows is None or extra <= gap_rows
+    return {"rows": rows, "changes": changes, "retired": retired, "extra_rows_needed": extra,
+            "fit_ok": fit_ok, "errors": errors, "totals_row": (old_end + 1 + gap_rows) if gap_rows is not None else None}
+
+
+def check_sheet_vs_render(plan, balances=True):
+    """RND-DIFF as a check: one `sheet_drift` per row whose identity, term or
+    operator cells differ from the render (or that is missing / no longer
+    rendered), one `balance_mismatch` per row whose only differences are balance
+    cells. Both are fixed by --sync."""
+    errors = list(plan["errors"])
+    if any(e["kind"] == "sheet_missing_column" for e in errors):
+        return errors            # not migrated yet: per-row drift would be noise
+    by_row = {}
+    for c in plan["changes"]:
+        by_row.setdefault((c["row"], c["name"]), []).append(c)
+    for (row, name), cs in sorted(by_row.items()):
+        cols = [c["column"] for c in cs]
+        if all(c in BALANCE_COLUMNS for c in cols):
+            if balances:
+                detail = "; ".join(f"{c['column']} {c['old'] or 'empty'} -> {c['new'] or 'empty'}" for c in cs
+                                   if c["column"] != AS_OF_COLUMN) or "As of"
+                errors.append(_err("balance_mismatch", f"sheet row {row} '{name}': {detail}.",
+                                   "Run accounts:sync to write the live balance."))
+        else:
+            errors.append(_err("sheet_drift",
+                               f"sheet row {row} '{name}': {', '.join(cols)} differ from the registry render.",
+                               "Run accounts:sync; identity and terms are edited in payments.yaml / debts.yaml."))
+    for r in plan["retired"]:
+        errors.append(_err("sheet_drift", f"sheet row {r['row']} '{r['name']}' is no longer rendered.",
+                           "Run accounts:sync to remove it."))
+    return errors
 
 
 def run_checks(config, sheet_rows=None, monarch=None, books=None, category=None, source_status=None,
-               balances=True):
+               balances=True, debts=None, today=None):
     """All checks over pre-fetched data. A side passed as None is skipped (its
     checks are not run), which is how --offline and --no-sheet work."""
     errors = check_sources(source_status)
     registry = [a for a in registry_accounts(config) if not category or a["owner"] == category]
-    sheet = None
-    if sheet_rows is not None:
-        sheet, sheet_errors = sheet_accounts(sheet_rows, category)
-        errors += sheet_errors
-        errors += check_sheet_vs_registry(sheet, registry, category)
-    else:
-        errors += _duplicate_keys(registry, "registry_duplicate_last4", "payments.yaml")
+    errors += check_registry_ids(registry)
+    live_by_owner = {}
     for owner, raw, normalise in (("personal", monarch, monarch_accounts), ("business", books, books_accounts)):
         if raw is None or category not in (None, owner):
             continue
-        live = normalise(raw)
-        errors += check_registry_vs_live(registry, live, owner)
-        if balances and sheet is not None:
-            errors += check_balances(sheet, registry, live, owner)
+        live_by_owner[owner] = normalise(raw)
+        errors += check_registry_vs_live(registry, live_by_owner[owner], owner)
+    if sheet_rows is not None:
+        # The render is always global (row order is), so plan it whole and narrow the
+        # findings to the category afterwards.
+        plan = plan_render(config, debts, live_by_owner, sheet_rows, today=today)
+        if category:
+            owner_of = {a["id"]: a["owner"] for a in registry_accounts(config)}
+            plan = {**plan, "changes": [c for c in plan["changes"] if owner_of.get(c["id"]) == category],
+                    "retired": [r for r in plan["retired"] if owner_of.get(r["id"]) == category]}
+        errors += check_sheet_vs_render(plan, balances=balances)
     return errors
 
 
@@ -522,6 +555,17 @@ def _gather_sheet(source_status, sheet_id):
     except Exception as e:
         source_status["sheet"] = f"{type(e).__name__}: {e}"[:160]
     return None
+
+
+def _gather_gap(sheet_rows, sheet_id):
+    """Blank rows between the block and the next non-blank row (the totals), or
+    None when that cannot be read."""
+    try:
+        from zoho_sheet import blank_rows_below
+        last = max(r.get("row_index", 1) for r in sheet_rows) if sheet_rows else 1
+        return blank_rows_below(sheet_id, SHEET_TAB, last + 1)
+    except Exception:
+        return None
 
 
 async def _gather_monarch(source_status):
@@ -558,6 +602,14 @@ def _gather_books(source_status):
     return None
 
 
+def _gather_debts():
+    try:
+        from debt_plan import load_debts_yaml
+        return load_debts_yaml()
+    except Exception:
+        return {"debts": [], "promos": [], "plan": {}}
+
+
 async def gather(category=None, offline=False, no_sheet=False, sheet_id=None):
     from coverage_report import load_payments_yaml
     config = load_payments_yaml()
@@ -571,7 +623,7 @@ async def gather(category=None, offline=False, no_sheet=False, sheet_id=None):
         if category in (None, "business"):
             books = _gather_books(status)
     return dict(config=config, sheet_rows=sheet_rows, monarch=monarch, books=books,
-                category=category, source_status=status), sheet_id
+                category=category, source_status=status, debts=_gather_debts()), sheet_id
 
 
 def _live_sides(inputs):
@@ -584,109 +636,151 @@ def _live_sides(inputs):
     return live
 
 
-def _confirm(prompt):
-    """Default asker: a y/N question on the terminal; a non-terminal stdin counts as no."""
-    if not sys.stdin.isatty():
-        print(f"{prompt}  (no terminal to answer: skipped; pass --add to add without asking)")
-        return False
-    return input(prompt).strip().casefold() in ("y", "yes")
+# ---------------------------------------------------------------------------
+# The render and the migration (I/O)
+# ---------------------------------------------------------------------------
 
-
-def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print):
-    """Add a Chart of Accounts row for each open registry account the sheet lacks.
-    add="ask" puts one yes/no per account to `ask` (default: the terminal);
-    add="always" adds them all. Every yes is written to the sheet at once, before
-    the next question, so an interrupted or failed run keeps the rows already
-    confirmed. Nothing is ever closed or removed here.
-    Returns the number of rows added (0 on dry run or when none were chosen)."""
+def render(inputs, sheet_id, dry_run=False, log=print, today=None):
+    """Write the registry into the Chart of Accounts: differing cells by row and
+    column (RND-DIFF), then delete rows past the new end so the block stays
+    contiguous. Refuses, writing nothing, on any planning error or when the block
+    would not fit (RND-FIT). Returns the number of cells written."""
     rows = inputs["sheet_rows"]
     if rows is None:
+        log("  render needs the sheet (no --no-sheet).")
         return 0
-    sheet, _ = sheet_accounts(rows)
-    additions = plan_additions(sheet, registry_accounts(inputs["config"]), _live_sides(inputs),
-                               inputs["category"])
-    if not additions:
+    if inputs["category"]:
+        log("  render covers every account; --category only narrows the check. Nothing written.")
         return 0
-    if not dry_run:
-        # insert_record, not add_records: the Chart of Accounts has a totals row under
-        # a blank gap, and records.add appends below the totals where records.fetch
-        # (and so every check here) never looks.
-        from zoho_sheet import insert_record
-    n = 0
-    try:
-        for a in additions:
-            label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
-            if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
-                log(f"  skipped {label}.")
-                continue
-            bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
-            detail = (f"'{a['name']}' as {a['data']['Type']} {a['key']}"
-                      + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
-            if dry_run:
-                log(f"  would add {detail}")
-                continue
-            row = insert_record(sheet_id, SHEET_TAB, a["data"])
-            n += 1
-            log(f"  added {detail} (sheet row {row})")
-    except KeyboardInterrupt:
-        log(f"  sync: interrupted; {n} row(s) added before the interrupt.")
-        raise
-    if n:
-        log(f"  sync: {n} row(s) added.")
-    return n
-
-
-def sync(inputs, sheet_id, dry_run=False, log=print):
-    """Write live balances into the sheet. Refuses while membership errors exist.
-    Returns the number of rows written (0 on refusal or dry run)."""
-    from datetime import date
-    errors = run_checks(balances=False, **inputs)
-    if errors:
-        log(f"  balances not written: {len(errors)} membership error(s) remain "
-            f"(run accounts:check; a missing row is offered by --sync, the rest are hand edits).")
+    gap = _gather_gap(rows, sheet_id)
+    plan = plan_render(inputs["config"], inputs.get("debts"), _live_sides(inputs), rows, today=today, gap_rows=gap)
+    if plan["errors"]:
+        log(f"  render blocked by {len(plan['errors'])} sheet problem(s):")
+        for e in plan["errors"]:
+            log(f"    {e['message']}")
         return 0
-    rows = inputs["sheet_rows"] or []
-    has_as_of = bool(rows) and AS_OF_COLUMN in rows[0]
-    sheet, _ = sheet_accounts(rows)
-    registry = registry_accounts(inputs["config"])
-    writes = []
-    for owner, live in _live_sides(inputs).items():
-        writes += plan_sync(sheet, registry, live, owner, as_of=date.today().isoformat(),
-                            has_as_of_column=has_as_of)
-    if not writes:
-        log("  sync: nothing to write.")
+    if not plan["fit_ok"]:
+        log(f"  render refused: {plan['extra_rows_needed']} new row(s) but only {gap} blank row(s) above "
+            f"row {plan['totals_row']} (the totals). Insert {plan['extra_rows_needed'] - gap} blank row(s) "
+            f"above it in the sheet, then re-run. Nothing written.")
         return 0
-    for w in writes:
-        old = "empty" if w["old"] is None else f"{w['old']:.2f}"
-        log(f"  {'would write' if dry_run else 'write'} {w['ref']} '{w['name']}': {old} -> {w['new']:.2f}")
+    verb = "would write" if dry_run else "write"
+    for c in plan["changes"]:
+        log(f"  {verb} row {c['row']} '{c['name']}' {c['column']}: {c['old'] or 'empty'} -> {c['new'] or 'empty'}"
+            + (" (moved)" if c["moved"] else ""))
+    for r in plan["retired"]:
+        log(f"  {'would delete' if dry_run else 'delete'} row {r['row']} '{r['name']}' (no longer rendered)")
+    n_rows = len(plan["rows"])
+    if not plan["changes"] and not plan["retired"]:
+        log(f"  render: {n_rows} row(s), nothing to change.")
+        return 0
     if dry_run:
+        log(f"  render (dry run): {n_rows} row(s), {len(plan['changes'])} cell(s) differ, "
+            f"{len(plan['retired'])} row(s) to delete.")
         return 0
-    # write_cells by row and column, not update_records by criteria: a criteria on
-    # the last4 column never matches a row (2026-11-16, live probe: "Account Last 4"
-    # ="0732" finds nothing, and the old update silently affected 0 rows).
-    from zoho_sheet import header_columns, write_cells
+    from zoho_sheet import delete_rows, header_columns, write_cells
     columns = header_columns(sheet_id, SHEET_TAB)
     n = 0
-    for w in writes:
-        write_cells(sheet_id, SHEET_TAB, w["row"], w["data"], columns)
-        n += 1
-    log(f"  sync: {n} row(s) written.")
+    by_row = {}
+    for c in plan["changes"]:
+        by_row.setdefault(c["row"], {})[c["column"]] = c["value"]
+    for row_idx in sorted(by_row):
+        n += write_cells(sheet_id, SHEET_TAB, row_idx, by_row[row_idx], columns)
+    if plan["retired"]:
+        first, last = plan["retired"][0]["row"], plan["retired"][-1]["row"]
+        delete_rows(sheet_id, SHEET_TAB, first, last)
+    log(f"  render: {n_rows} row(s), {n} cell(s) written, {len(plan['retired'])} row(s) deleted.")
     return n
+
+
+def plan_migration(config, sheet_rows):
+    """One-time mapping of existing rows (no Registry Id) to registry accounts: by
+    owner + last4, else by normalised name + institution. Returns (mapped, unmapped)
+    as [{row, name, id}] / [{row, name, reason}]. Pure."""
+    registry = registry_accounts(config)
+    by_key = {(a["owner"], a["key"]): a for a in registry if a["key"]}
+    by_name = {}
+    for a in registry:
+        by_name.setdefault(norm_name(a["name"]), []).append(a)
+    mapped, unmapped = [], []
+    taken = {str(r.get(ID_COLUMN) or "").strip() for r in sheet_rows if r.get(ID_COLUMN)}
+    for row in sheet_rows:
+        if str(row.get(ID_COLUMN) or "").strip():
+            continue
+        name, typ = str(row.get("Name") or "").strip(), str(row.get("Type") or "").strip()
+        if typ in OUT_OF_SCOPE_SHEET_TYPES:
+            continue
+        owner, _ = SHEET_TYPES.get(typ, (None, None))
+        key = str(row.get(KEY_COLUMN) or "").strip() or None
+        hit = by_key.get((owner, key)) if owner and key else None
+        if hit is None:
+            cands = [a for a in by_name.get(norm_name(name), []) if not owner or a["owner"] == owner]
+            hit = cands[0] if len(cands) == 1 else None
+        if hit is None or hit["id"] in taken:
+            reason = "already mapped to another row" if hit else "no registry account with this last4 or name"
+            unmapped.append({"row": row.get("row_index"), "name": name, "reason": reason})
+            continue
+        taken.add(hit["id"])
+        mapped.append({"row": row.get("row_index"), "name": name, "id": hit["id"]})
+    return mapped, unmapped
+
+
+def migrate(inputs, sheet_id, dry_run=False, log=print):
+    """Add the Registry Id (and As of) columns if missing and fill Registry Id on
+    rows it can map; list the rest. Also prints debts.yaml lines suggested by the
+    sheet's Credit Limit / Due Date cells, the one time the tool reads operator
+    columns. Returns the number of rows mapped."""
+    rows = inputs["sheet_rows"] or []
+    if not rows:
+        log("  migrate: no sheet rows.")
+        return 0
+    headers = [k for k in rows[0] if k != "row_index"]
+    from zoho_sheet import add_column, header_columns, write_cells
+    for col in (ID_COLUMN, AS_OF_COLUMN):
+        if col not in headers:
+            log(f"  {'would add' if dry_run else 'add'} column {col!r}")
+            if not dry_run:
+                add_column(sheet_id, SHEET_TAB, col)
+    mapped, unmapped = plan_migration(inputs["config"], rows)
+    for m in mapped:
+        log(f"  {'would set' if dry_run else 'set'} row {m['row']} '{m['name']}' {ID_COLUMN} = {m['id']}")
+    for u in unmapped:
+        log(f"  UNMAPPED row {u['row']} '{u['name']}': {u['reason']} -> register it or delete the row")
+    debts = inputs.get("debts") or {}
+    known = {d.get("account") for d in debts.get("debts", []) if d.get("credit_limit") or d.get("due_day")}
+    by_row = {r.get("row_index"): r for r in rows}
+    seeds = []
+    for m in mapped:
+        r = by_row.get(m["row"], {})
+        if m["id"] in known:
+            continue
+        limit = _num(r.get("Credit Limit"))
+        due = re.sub(r"\D", "", str(r.get("Due Date") or ""))        # the sheet says "12th"; the registry wants 12
+        if limit or due:
+            seeds.append(f"  - account: {m['id']}" + (f"\n    credit_limit: {limit:.0f}" if limit else "")
+                         + (f"\n    due_day: {int(due)}" if due else ""))
+    if seeds:
+        log("  debts.yaml lines suggested from the sheet (paste under debts:, then delete nothing):")
+        for s in seeds:
+            log(s)
+    if dry_run or not mapped:
+        return 0
+    columns = header_columns(sheet_id, SHEET_TAB)
+    for m in mapped:
+        write_cells(sheet_id, SHEET_TAB, m["row"], {ID_COLUMN: m["id"]}, columns)
+    log(f"  migrate: {len(mapped)} row(s) mapped, {len(unmapped)} unmapped.")
+    return len(mapped)
 
 
 async def run_all(category=None, offline=False, no_sheet=False, sheet_id=None, balances=True,
-                  do_sync=False, dry_run=False, add="ask"):
+                  do_sync=False, do_migrate=False, dry_run=False):
     inputs, sheet_id = await gather(category, offline, no_sheet, sheet_id)
+    if do_migrate:
+        if migrate(inputs, sheet_id, dry_run=dry_run) and not dry_run:
+            inputs, _ = await gather(category, offline, no_sheet, sheet_id)
     if do_sync:
-        if inputs["sheet_rows"] is None:
-            print("  sync needs the sheet (no --no-sheet).")
-        else:
-            if add_missing(inputs, sheet_id, dry_run=dry_run, add=add) and not dry_run:
-                inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read the new rows
-            if inputs["monarch"] is None and inputs["books"] is None:
-                print("  balances need at least one live source (no --offline).")
-            elif sync(inputs, sheet_id, dry_run=dry_run) and not dry_run:
-                inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read what we wrote
+        if render(inputs, sheet_id, dry_run=dry_run) and not dry_run:
+            inputs, _ = await gather(category, offline, no_sheet, sheet_id)   # re-read what we wrote
     return run_checks(balances=balances, **inputs)
 
 
@@ -696,7 +790,7 @@ async def run_all(category=None, offline=False, no_sheet=False, sheet_id=None, b
 
 def format_errors(errors, color=True):
     if not errors:
-        return "  Register is one-to-one."
+        return "  Register is one-to-one and the sheet is rendered."
     red = "\033[31m" if color else ""
     dim = "\033[2m" if color else ""
     reset = "\033[0m" if color else ""
@@ -709,23 +803,21 @@ def format_errors(errors, color=True):
 
 
 def main():
-    p = argparse.ArgumentParser(description="Prove the Bills sheet, payments.yaml and Monarch/Zoho Books agree.")
-    p.add_argument("--category", choices=CATEGORIES, help="only this owner's accounts")
-    p.add_argument("--offline", action="store_true", help="skip Monarch and Zoho Books (sheet <-> registry only)")
+    p = argparse.ArgumentParser(description="Render payments.yaml into the Bills sheet and prove it agrees with Monarch/Zoho Books.")
+    p.add_argument("--category", choices=CATEGORIES, help="only this owner's accounts (checks only)")
+    p.add_argument("--offline", action="store_true", help="skip Monarch and Zoho Books (no balances)")
     p.add_argument("--no-sheet", action="store_true", help="skip the sheet (registry <-> live only)")
     p.add_argument("--sheet-id", help=f"Zoho Sheet resource id (default ${SHEET_ID_ENV} or {DEFAULT_SHEET_ID})")
-    p.add_argument("--no-balances", action="store_true", help="membership checks only")
-    p.add_argument("--sync", action="store_true",
-                   help="write live balances into the sheet first (refused while membership errors exist)")
-    p.add_argument("--add", action="store_true",
-                   help="with --sync: add every registry account the sheet lacks without asking "
-                        "(default: one yes/no per account; nothing is ever closed or removed)")
-    p.add_argument("--dry-run", action="store_true", help="with --sync: show the writes, change nothing")
+    p.add_argument("--no-balances", action="store_true", help="do not report balance_mismatch")
+    p.add_argument("--sync", action="store_true", help="render the registry into the sheet, then check")
+    p.add_argument("--migrate", action="store_true",
+                   help="one-time: add the Registry Id column and fill it on rows that map to the registry")
+    p.add_argument("--dry-run", action="store_true", help="with --sync / --migrate: show the writes, change nothing")
     p.add_argument("--json", action="store_true", help="machine-readable output")
     a = p.parse_args()
     errors = asyncio.run(run_all(category=a.category, offline=a.offline, no_sheet=a.no_sheet,
                                  sheet_id=a.sheet_id, balances=not a.no_balances,
-                                 do_sync=a.sync, dry_run=a.dry_run, add="always" if a.add else "ask"))
+                                 do_sync=a.sync, do_migrate=a.migrate, dry_run=a.dry_run))
     if a.json:
         print(json.dumps(errors, indent=2))
     else:
