@@ -219,6 +219,13 @@ def test_sources_and_category_narrowing():
 
 # --- the render ------------------------------------------------------------------
 
+def test_RND_DIFF_a_date_cell_zoho_reformatted_still_compares_equal():
+    """The render writes As of as 2026-11-16; Zoho stores a date and returns 11/16/2026."""
+    rows = [dict(SHEET[0], **{"As of": "11/15/2026"})] + SHEET[1:]
+    plan = plan_render(CONFIG, DEBTS, live(), rows, today=TODAY)
+    assert [c for c in plan["changes"] if c["column"] == "As of"] == []
+
+
 def test_RND_DIFF_a_rendered_sheet_plans_no_changes():
     plan = plan_render(CONFIG, DEBTS, live(), SHEET, today=TODAY)
     assert plan["errors"] == [] and plan["retired"] == [] and plan["fit_ok"]
