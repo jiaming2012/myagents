@@ -287,6 +287,16 @@ def test_RND_ORDER_rows_past_the_new_end_are_retired():
     assert [(r["row"], r["id"]) for r in plan["retired"]] == [(4, "chase-7667"), (5, "mercury-0551")]
 
 
+def test_RND_KEY_a_duplicate_id_is_reported_but_does_not_block_the_render():
+    """What a half-finished render leaves: the account already at its new row, the old
+    row not yet overwritten. The full render rewrites both positions."""
+    rows = SHEET + [dict(SHEET[1], row_index=6)]                 # Plat 1 twice (rows 3 and 6)
+    plan = plan_render(CONFIG, DEBTS, live(), rows, today=TODAY)
+    assert plan["errors"] == [] and kinds(plan["warnings"]) == ["sheet_duplicate_id"]
+    assert [(r["row"], r["action"]) for r in plan["retired"]] == [(6, "delete")]
+    assert kinds(check_sheet_vs_render(plan)) == ["sheet_drift", "sheet_duplicate_id"]
+
+
 def test_RND_KEY_unregistered_rows_and_missing_columns_block_the_render():
     rows = SHEET + [row(6, "Wex Health", "Personal Debit", "")]
     assert kinds(plan_render(CONFIG, DEBTS, live(), rows, today=TODAY)["errors"]) == ["sheet_unregistered_row"]
