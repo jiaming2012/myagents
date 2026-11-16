@@ -1,5 +1,15 @@
 # Design: registry-renders-sheet
 
+## 0. Decisions (operator, 2026-11-16: recommendations accepted as written)
+
+| # | Decision |
+|---|---|
+| D1 | Identity, balances and card terms are rendered from the registry; `notes` and `site` stay operator-owned; `Recurring`, `Routing Number`, `Target Balance`, `Amount Due`, `Last Paid`, `Last Statement End Date`, `Days in Billing Cycle`, `Next Statement Date`, `Scheduled Payments` are never written |
+| D2 | The Credit Cards tab is retired by hand after the first clean render |
+| D3 | Registry order, closed accounts last |
+| D4 | Closed accounts render with Status `closed` for one statement cycle after closing, then drop from the render; the registry entry keeps `status: closed` |
+| D5 | The totals row is never touched; the render refuses when the block would reach it |
+
 ## 1. Column ownership
 
 Every column on Chart of Accounts gets exactly one owner. The tool writes only the columns
