@@ -9,6 +9,17 @@ the existing `write_cells` / `delete_rows` / `blank_rows_below` primitives, all 
 sandbox and the live gap row). `--migrate --dry-run` run against the live sheet: 35 rows map,
 19 do not (listed by the run) and must be registered or deleted before task 7.
 
+Status later 2026-11-16 (branch `worktree-registry-migration`): task 7 DONE. The 19 rows were
+settled (5 closed-and-unknown or empty rows deleted; ECSI ×2 and CRI retyped `Loan`, Bera 401k
+`Investment`, both pass-through types now; Coinbase, Wex Health, Bilt Obsidian, Pure Craft
+Mercury and Mercury 8478 registered with `feed: manual`; Bluevine registered closed; Navy
+Federal Visa given last4 3274 and reopened), `--migrate` run (columns added, 39 rows mapped),
+four name-mismatch rows given ids by hand, debts.yaml seeded. Task 8 is BLOCKED on one UI
+action: the totals row sits at row 56 inside the block and the render needs 64 rows (47
+accounts + 17 Investment/Loan pass-through rows), so the operator must insert at least 10
+blank rows above the totals row in the sheet; the API has no row insert. Then
+`task finance:accounts:sync -- --dry-run`, review, `task finance:accounts:sync`.
+
 1. **Operator sign-off on D1 to D5** in `proposal.md`. Record the answers at the top of
    `design.md`.
 2. **Registry fields.** Add optional `credit_limit` and `due_day` to ordinary `debts.yaml`

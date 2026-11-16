@@ -85,6 +85,7 @@ accounts:
     nicknames: ["Mercury Outgoing", "Mercury Biz Outgoing", "Mercury 5396"]
 
   - id: mercury-biz-operations-0551
+    closed_on: 2026-10-01   # exact date unknown; Books showed it closed before the Oct 19 2026 register build. Retires the sheet row.
     name: "Mercury Business Operations"
     institution: "Mercury"
     last4: "0551"
