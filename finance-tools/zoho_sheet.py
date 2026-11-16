@@ -173,8 +173,11 @@ def records(resource_id, worksheet_name):
 
 
 def update_records(resource_id, worksheet_name, criteria, data, first_match_only=True):
-    """Update the row(s) matching `criteria` (e.g. '"Account Last 4"="5153"') with the
-    header-keyed `data` dict (worksheet.records.update). Returns the affected-row count."""
+    """Update the row(s) matching `criteria` (e.g. '"Name"="Quicksilver"') with the
+    header-keyed `data` dict (worksheet.records.update). Returns the affected-row
+    count: CHECK IT, a non-matching criteria is a success with 0 rows. Equality on
+    a digit-string column ('"Account Last 4"="0732"') never matches (2026-11-16
+    probe); use write_cells() by row and column for those."""
     r = requests.post(f"{SHEET_BASE}/{resource_id}",
                       data={"method": "worksheet.records.update", "worksheet_name": worksheet_name,
                             "criteria": criteria, "data": json.dumps(data),
@@ -184,9 +187,14 @@ def update_records(resource_id, worksheet_name, criteria, data, first_match_only
 
 
 def add_records(resource_id, worksheet_name, rows):
-    """Append header-keyed `rows` (list of dicts) below the tab's last used row
+    """Append header-keyed `rows` (list of dicts) below the tab's last USED row
     (worksheet.records.add). Returns the number of rows sent; _json exits on a
-    Zoho failure, so a normal return means they were written."""
+    Zoho failure, so a normal return means they were written.
+
+    Caution: "last used row" is the bottom of the whole tab, not of the records
+    block. On a tab with a totals row under the data (Bills' Chart of Accounts)
+    the rows land below the totals, where worksheet.records.fetch never looks.
+    Use insert_record() for such tabs."""
     if not rows:
         return 0
     r = requests.post(f"{SHEET_BASE}/{resource_id}",
@@ -195,6 +203,105 @@ def add_records(resource_id, worksheet_name, rows):
                       headers=_headers(), timeout=60)
     _json(r)
     return len(rows)
+
+
+def _content(resource_id, worksheet_name, start_row):
+    """worksheet.content.get from `start_row` to the used row: [(row_index, [cells])].
+    Zoho ignores row_count, so callers filter by row_index."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.content.get", "worksheet_name": worksheet_name,
+                            "start_row": start_row, "start_column": 1},
+                      headers=_headers(), timeout=60)
+    return [(rd.get("row_index"), rd.get("row_details", [])) for rd in _json(r).get("range_details", [])]
+
+
+def header_columns(resource_id, worksheet_name):
+    """{header text: 1-based column index} of the tab's first row."""
+    for idx, cells in _content(resource_id, worksheet_name, 1):
+        if idx == 1:
+            return {c["content"]: c["column_index"] for c in cells if c.get("content")}
+    return {}
+
+
+def row_is_blank(resource_id, worksheet_name, row):
+    """True when no cell of 1-based `row` has content."""
+    for idx, cells in _content(resource_id, worksheet_name, row):
+        if idx == row and any(c.get("content") not in ("", None) for c in cells):
+            return False
+    return True
+
+
+def last_record_row(resource_id, worksheet_name):
+    """1-based index of the last row worksheet.records.fetch returns; the header
+    row (1) when the tab has no records. records.fetch reads the contiguous block
+    under the header and stops at the first blank row."""
+    return max((r.get("row_index", 0) for r in records(resource_id, worksheet_name)), default=1)
+
+
+def insert_record(resource_id, worksheet_name, data):
+    """Write one header-keyed row into the first blank row directly below the tab's
+    last record (worksheet.csvdata.set at that row), so it joins the block that
+    worksheet.records.fetch reads back. Values go in raw: on Bills the last4
+    column is text, so 0621 keeps its zero (a leading apostrophe or an ="0621"
+    formula would come back verbatim from records.fetch and break the key).
+    Exits when the row below the last record is not blank, which on Bills means
+    the blank gap above the totals row is used up: insert blank rows above the
+    totals in the sheet and re-run. Returns the 1-based row written."""
+    import csv
+    import io
+    columns = header_columns(resource_id, worksheet_name)
+    unknown = sorted(set(data) - set(columns))
+    if unknown:
+        sys.exit(f"{worksheet_name}: header row has no column {unknown}")
+    row = last_record_row(resource_id, worksheet_name) + 1
+    if not row_is_blank(resource_id, worksheet_name, row):
+        sys.exit(f"{worksheet_name}: row {row}, directly below the last record, is not blank "
+                 f"(the totals row?). Insert blank rows above it in the sheet, then re-run.")
+    cells = [""] * max(columns[k] for k in data)
+    for k, v in data.items():
+        if v is not None and v != "":
+            cells[columns[k] - 1] = str(v)
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="").writerow(cells)
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                            "row": row, "column": 1, "data": buf.getvalue()},
+                      headers=_headers(), timeout=60)
+    _json(r)
+    return row
+
+
+def write_cells(resource_id, worksheet_name, row, data, columns=None):
+    """Set the header-keyed cells in `data` on 1-based `row`, one
+    worksheet.csvdata.set per cell, addressed by row and column. Use this rather
+    than update_records for anything keyed on a digit string such as a last4:
+    a records criteria "Account Last 4"="0732" matches nothing (2026-11-16 probe),
+    so a criteria update silently affects 0 rows. `columns` is header_columns()
+    output; pass it in when writing many rows. Returns the number of cells set."""
+    columns = columns or header_columns(resource_id, worksheet_name)
+    unknown = sorted(set(data) - set(columns))
+    if unknown:
+        sys.exit(f"{worksheet_name}: header row has no column {unknown}")
+    n = 0
+    for header, value in data.items():
+        r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                          data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                                "row": row, "column": columns[header], "data": "" if value is None else str(value)},
+                          headers=_headers(), timeout=60)
+        _json(r)
+        n += 1
+    return n
+
+
+def delete_rows(resource_id, worksheet_name, start_row, end_row):
+    """Delete 1-based rows start_row..end_row inclusive (worksheet.rows.delete); the
+    rows below shift up, as in the UI. Returns the number of rows removed."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.rows.delete", "worksheet_name": worksheet_name,
+                            "row_index_array": json.dumps([{"start_row": start_row, "end_row": end_row}])},
+                      headers=_headers(), timeout=60)
+    _json(r)
+    return end_row - start_row + 1
 
 
 def fetch_records(resource_id, worksheet_name, as_json=False):

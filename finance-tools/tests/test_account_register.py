@@ -225,8 +225,8 @@ def test_plan_sync_writes_only_what_differs():
     sheet, _ = sheet_accounts([row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 1}),
                                row(3, "Plat 1", "Personal Credit", "5153", **{"Credit Balance": 5603})])
     writes = plan_sync(sheet, registry_accounts(CONFIG), monarch_accounts(MONARCH), "personal")
-    assert [(w["criteria"], w["data"], w["old"], w["new"]) for w in writes] == [
-        ('"Account Last 4"="4354"', {"Debit Balance": 100.0}, 1.0, 100.0)]
+    assert [(w["row"], w["data"], w["old"], w["new"]) for w in writes] == [
+        (2, {"Debit Balance": 100.0}, 1.0, 100.0)]
     # with an As of column every matched row is refreshed, equal or not
     writes = plan_sync(sheet, registry_accounts(CONFIG), monarch_accounts(MONARCH), "personal",
                        as_of="2026-10-19", has_as_of_column=True)
@@ -250,6 +250,24 @@ def test_sync_dry_run_plans_but_writes_nothing():
     assert sync(inputs, "sheet-id", dry_run=True, log=log.append) == 0
     assert [l for l in log if "would write" in l] == [
         "  would write sheet row 2 'Recurring ACH': 1.00 -> 100.00"]
+
+
+def test_sync_writes_cells_by_row_not_by_last4_criteria(monkeypatch):
+    """A records.update criteria on the last4 column matches nothing in Zoho, so
+    the balance goes to the cell addressed by sheet row and header column."""
+    import zoho_sheet
+    written = []
+    monkeypatch.setattr(zoho_sheet, "header_columns", lambda sid, tab: {"Debit Balance": 8, "Credit Balance": 9})
+    monkeypatch.setattr(zoho_sheet, "write_cells",
+                        lambda sid, tab, row, data, columns: written.append((sid, tab, row, data, columns)) or len(data))
+    monkeypatch.setattr(zoho_sheet, "update_records", lambda *a, **k: pytest.fail("criteria update must not be used"))
+    log = []
+    rows = [row(2, "Recurring ACH", "Personal Debit", "4354", **{"Debit Balance": 1})] + SHEET[1:]
+    inputs = dict(config=CONFIG, sheet_rows=rows, monarch=MONARCH, books=BOOKS, category=None, source_status={})
+    assert sync(inputs, "sheet-id", log=log.append) == 1
+    assert written == [("sheet-id", "Chart of Accounts", 2, {"Debit Balance": 100.0},
+                        {"Debit Balance": 8, "Credit Balance": 9})]
+    assert log[-1] == "  sync: 1 row(s) written."
 
 
 # --- adding missing rows -----------------------------------------------------
@@ -286,7 +304,7 @@ def test_plan_additions_never_closes_or_removes():
 
 def test_add_missing_asks_by_default_and_a_no_adds_nothing(monkeypatch):
     import zoho_sheet
-    monkeypatch.setattr(zoho_sheet, "add_records", lambda *a: pytest.fail("must not write on no"))
+    monkeypatch.setattr(zoho_sheet, "insert_record", lambda *a: pytest.fail("must not write on no"))
     log, asked = [], []
     inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[2:], monarch=MONARCH, books=BOOKS,
                   category=None, source_status={})
@@ -298,7 +316,7 @@ def test_add_missing_asks_by_default_and_a_no_adds_nothing(monkeypatch):
 def test_add_missing_with_add_flag_writes_without_asking(monkeypatch):
     import zoho_sheet
     sent = []
-    monkeypatch.setattr(zoho_sheet, "add_records", lambda sid, tab, rows: sent.append((sid, tab, rows)) or len(rows))
+    monkeypatch.setattr(zoho_sheet, "insert_record", lambda sid, tab, data: sent.append((sid, tab, data)) or 55)
     log = []
     inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[2:], monarch=MONARCH, books=BOOKS,
                   category=None, source_status={})
@@ -310,9 +328,10 @@ def test_add_missing_with_add_flag_writes_without_asking(monkeypatch):
     assert add_missing(inputs, "sheet-id", add="always", ask=lambda q: pytest.fail("must not ask"),
                        log=log.append) == 1
     assert sent == [("sheet-id", "Chart of Accounts",
-                     [{"Name": "Plat 1", "Company": "Bank of America", "Account Last 4": "5153",
-                       "Type": "Personal Credit", "Status": "active", "Credit Balance": 5603}])]
-    assert log[-2:] == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00", "  sync: 1 row(s) added."]
+                     {"Name": "Plat 1", "Company": "Bank of America", "Account Last 4": "5153",
+                      "Type": "Personal Credit", "Status": "active", "Credit Balance": 5603})]
+    assert log[-2:] == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00 (sheet row 55)",
+                        "  sync: 1 row(s) added."]
 
 
 def test_add_missing_writes_each_yes_before_the_next_question(monkeypatch):
@@ -320,7 +339,7 @@ def test_add_missing_writes_each_yes_before_the_next_question(monkeypatch):
     failure) at question two keeps row one."""
     import zoho_sheet
     sent = []
-    monkeypatch.setattr(zoho_sheet, "add_records", lambda sid, tab, rows: sent.append(rows) or len(rows))
+    monkeypatch.setattr(zoho_sheet, "insert_record", lambda sid, tab, data: sent.append(data) or 54 + len(sent))
     log, asked = [], []
     inputs = dict(config=CONFIG, sheet_rows=SHEET[:1] + SHEET[3:], monarch=MONARCH, books=BOOKS,
                   category=None, source_status={})      # Plat 1 and Chase Ink both missing
@@ -335,14 +354,14 @@ def test_add_missing_writes_each_yes_before_the_next_question(monkeypatch):
 
     with pytest.raises(KeyboardInterrupt):
         add_missing(inputs, "sheet-id", ask=answer, log=log.append)
-    assert [r[0]["Account Last 4"] for r in sent] == ["5153"]
-    assert log == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00",
+    assert [r["Account Last 4"] for r in sent] == ["5153"]
+    assert log == ["  added 'Plat 1' as Personal Credit 5153, balance 5603.00 (sheet row 55)",
                    "  sync: interrupted; 1 row(s) added before the interrupt."]
 
 
 def test_add_missing_with_nothing_missing_is_silent(monkeypatch):
     import zoho_sheet
-    monkeypatch.setattr(zoho_sheet, "add_records", lambda *a: pytest.fail("must not write"))
+    monkeypatch.setattr(zoho_sheet, "insert_record", lambda *a: pytest.fail("must not write"))
     log = []
     inputs = dict(config=CONFIG, sheet_rows=SHEET, monarch=MONARCH, books=BOOKS, category=None, source_status={})
     assert add_missing(inputs, "sheet-id", add="always", log=log.append) == 0 and log == []
