@@ -22,8 +22,8 @@ original plan), `zoho-books-recon-report.md` (outcome + API facts),
 ## 2. Weekly cycle (after the catch-up)
 
 ```
-cd ~/projects/yumyums/accounting/xero && task toast:export -- --from <last> --to <today>   # new Toast sales days
 cd ~/projects/myagents/finance-tools
+task zoho:toast-export -- --from <last> --to <today>   # new Toast sales days (runs toast_xero's export in its checkout; browser login when needed)
 task zoho:toast-dump            # refresh .toast_preview_2026.json
 task zoho:recon                 # dry run: pairing table, plan, unmatched merchants
 task zoho:recon:apply           # categorize / match / Toast journals; stops cleanly at the API cap
@@ -114,8 +114,8 @@ posted, 5396 and 7818 = bank, October records posted for both; BoA 1778 / 2119 a
 LFCU = feed (19 writes); 17 new bank rules (11 Mercury, 3 BoA, plus the 5 merchants
 added to `merchants.yaml`: Advance Auto Parts, Harbor Freight, Zoho, Cloudflare,
 Mail Xpress; Hostinger on BoA). **Still open:** 4613's 16 Toast credits (Oct 19 →
-Nov 10, 7,868.17) wait on the Toast export (`task toast:export -- --from 2026-10-16`
-in yumyums needs a browser login), then `task zoho:toast-dump`, `task zoho:recon:apply`,
+Nov 10, 7,868.17) wait on the Toast export (`task zoho:toast-export -- --from 2026-10-16`
+needs a browser login), then `task zoho:toast-dump`, `task zoho:recon:apply`,
 `task zoho:reconcile -- --apply` (4613 October). October statement balances for
 1778 / 2119 not yet in `closing_balances.yaml`.
 
