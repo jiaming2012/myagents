@@ -29,16 +29,15 @@ accounts:
     last4: "6343"
     type: depository
     category: personal
-    monarch_match: null
+    monarch_match: "Mercury Personal Checking (...6343)"   # linked in Monarch by 2026-11-16 (was null)
     role: income_hub
     nicknames: ["Mercury Personal", "Mercury 6343", "Mercury Checking"]
     min_balance: 500
     # alert_on: error (default) | warning | none — controls email alert threshold
     alert_on: error
-    # NO BALANCE SOURCE (2026-10-17): not in Monarch, and MERCURY_PERSONAL_API_KEY in .env is a
-    # placeholder (401 from Mercury). This is the hub that wires money into Recurring ACH 4354,
-    # so until a real personal Mercury API token is minted the forecast cannot see what is
-    # available to top 4354 up.
+    # Balance source: Monarch (feed linked by 2026-11-16; before that there was none, and
+    # MERCURY_PERSONAL_API_KEY in .env is still a placeholder that gets 401 from Mercury).
+    # This is the hub that wires money into Recurring ACH 4354.
 
   - id: mercury-personal-savings-5237
     name: "Mercury Personal Savings"
@@ -46,8 +45,18 @@ accounts:
     last4: "5237"
     type: depository
     category: personal
-    monarch_match: null
-    nicknames: ["Mercury Savings", "Mercury 5237"]
+    monarch_match: "Profit ••5237 (...5237)"   # Mercury sub-account named "Profit"; linked in Monarch by 2026-11-16
+    nicknames: ["Mercury Savings", "Mercury 5237", "Profit", "Mercury Profit"]
+
+  # Mercury "Vacation Fun" sub-account (added 2026-11-16 from Monarch; balance 0.84)
+  - id: mercury-personal-vacation-9620
+    name: "Vacation Fun"
+    institution: "Mercury"
+    last4: "9620"
+    type: depository
+    category: personal
+    monarch_match: "Vacation Fun ••9620 (...9620)"
+    nicknames: ["Vacation Fun", "Mercury Vacation", "Mercury 9620"]
 
   # --- Mercury Business (Yumyums Kitchen LLC) ---
   - id: mercury-biz-income-4613
@@ -229,6 +238,7 @@ accounts:
     type: credit
     category: personal
     monarch_match: "CREDIT CARD (...7006)"
+    status: closed   # closed at $0 (owner, Nov 2026); Monarch shows the connection deactivated. Set 2026-11-16.
     nicknames: ["Whole Foods", "Chase 7006", "Whole Foods Card", "WF Card"]
 
   # --- Discover ---
@@ -359,6 +369,19 @@ accounts:
     monarch_match: "Checking (...0621)"
     nicknames: ["Lafayette Checking", "Lafayette 0621", "Lafayette Federal 0621"]
 
+  - id: lafayette-savings-0621s
+    name: "Share Savings"
+    institution: "Lafayette Federal"
+    # last4 null on purpose: LFCU shows the member number 0621 on every share account, and
+    # account_register.py requires last4 to be unique per owner (lafayette-checking-0621 has
+    # it). No key means no Chart of Accounts row is offered; Monarch match only. Added
+    # 2026-11-16 from Monarch (balance 0.00).
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: "Share Savings Account (...0621)"
+    nicknames: ["Lafayette Savings", "Lafayette Share Savings", "LFCU Personal Savings"]
+
   - id: lafayette-business-3617
     name: "Business Basic Checking"
     institution: "Lafayette Federal"
@@ -413,6 +436,31 @@ accounts:
     zoho_match: "WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637"
     nicknames: ["Wells Fargo Signify", "WF Signify", "Signify", "Wells 4637"]
     # Added 2026-10-17: feed-linked in Zoho Books; never used (operator), 0.00 balance.
+
+  # --- Robinhood ---
+  - id: robinhood-card-8465
+    name: "Robinhood Credit Card"
+    institution: "Robinhood"
+    last4: "8465"
+    type: credit
+    category: personal
+    monarch_match: "Robinhood Credit Card **8465 (...8465)"
+    nicknames: ["Robinhood Card", "Robinhood Credit", "Robinhood 8465"]
+    # Added 2026-11-16 from Monarch (owed 1,151.00). Not the Robinhood brokerage that the
+    # "Cap1 Income -> Robinhood (weekly)" transfer feeds; that one is still unregistered.
+
+  # --- Charles Schwab ---
+  - id: schwab-investor-checking-585
+    name: "Investor Checking"
+    institution: "Charles Schwab"
+    # last4 null on purpose: Monarch only shows the last three digits (585). Fill in the real
+    # last four from Schwab to get a Chart of Accounts row. Added 2026-11-16 from Monarch
+    # (balance 17.85).
+    last4: null
+    type: depository
+    category: personal
+    monarch_match: "Investor Checking ...585 (....585)"
+    nicknames: ["Schwab Checking", "Schwab Investor Checking", "Schwab 585", "Charles Schwab"]
 
   # --- Loans ---
   - id: truist-auto-1001

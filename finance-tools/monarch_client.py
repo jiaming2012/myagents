@@ -9,6 +9,10 @@ Credential precedence:
 
 The saved session wins over the env token so that `task finance:balances:login`
 alone is enough to recover from an expired token; no .env edit required.
+
+The session lives in .mm/ next to this file, or under $FINANCE_TOOLS_DATA when
+set (the same knob zoho_sheet.py and zoho_books_recon.py use), so a git
+worktree can run against the main checkout's login without re-authenticating.
 """
 
 import getpass
@@ -18,8 +22,12 @@ import sys
 import uuid
 from pathlib import Path
 
+HERE = Path(__file__).parent
+DATA_DIR = Path(os.getenv("FINANCE_TOOLS_DATA", HERE))
+
 try:
     from dotenv import load_dotenv
+    load_dotenv(DATA_DIR / ".env")
     load_dotenv()
 except ImportError:
     pass
@@ -31,7 +39,7 @@ try:
 except ImportError:
     MonarchMoney = None
 
-SESSION_FILE = Path(__file__).parent / ".mm" / "mm_session.pickle"
+SESSION_FILE = DATA_DIR / ".mm" / "mm_session.pickle"
 DEVICE_UUID_FILE = SESSION_FILE.parent / "device_uuid"
 
 # Monarch's login endpoint rejects clients it considers out of date

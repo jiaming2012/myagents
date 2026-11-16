@@ -35,7 +35,12 @@ prints them and exits 1 if any exist.
 `--sync` first offers to ADD a Chart of Accounts row for every open registry
 account the sheet lacks (one yes/no per account; `--add` says yes to all), with
 Name, Company, last4, Type, Status and, when the live source resolves, the
-balance. It never closes or removes a row: the register only grows by itself,
+balance. Each yes is written before the next question is asked, so a run that
+is interrupted or fails part-way keeps the rows already confirmed. A row goes
+into the first blank row under the last record (the sheet keeps a blank gap and
+a totals row below the data; when the gap is used up the run stops and asks you
+to insert blank rows above the totals). It never
+closes or removes a row: the register only grows by itself,
 and retiring an account stays a hand edit on both sides. It then writes the
 live balances (and today's date into an `As of` column, if the sheet has one)
 into the matched rows before checking, so a clean register stays clean day to
@@ -138,9 +143,12 @@ def _err(kind, message, fix=""):
     return {"severity": "error", "kind": kind, "message": message, "fix": fix}
 
 
-def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None):
+def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None, row=None):
+    """`row` is the 1-based sheet row (sheet accounts only): balance writes address
+    the cell by row and column, because a records.update criteria on the last4
+    column never matches (Zoho compares the digit string numerically)."""
     return {"key": key, "name": name, "owner": owner, "kind": kind, "closed": bool(closed),
-            "balance": balance, "match": match, "ref": ref, "institution": institution}
+            "balance": balance, "match": match, "ref": ref, "institution": institution, "row": row}
 
 
 # ---------------------------------------------------------------------------
@@ -196,7 +204,7 @@ def sheet_accounts(rows, category=None):
                                f"{ref} '{name}' ({typ}): no Account Last 4.",
                                "Fill Account Last 4; it is the join key to the registry."))
             continue
-        accounts.append(_acct(key, name, owner, kind, closed=closed,
+        accounts.append(_acct(key, name, owner, kind, closed=closed, row=row.get("row_index"),
                               balance=_num(row.get(BALANCE_COLUMN[kind])), ref=ref))
     errors += _duplicate_keys(accounts, "sheet_duplicate_last4", "Chart of Accounts")
     return accounts, errors
@@ -424,8 +432,9 @@ def check_balances(sheet, registry, live, owner):
 
 def plan_sync(sheet, registry, live, owner, as_of=None, has_as_of_column=False):
     """Writes needed to make the sheet's balances equal the live ones:
-    [{criteria, data, ref, name, old, new}]. Rows already equal are skipped
-    unless an As of column exists (then the date is refreshed too)."""
+    [{row, data, ref, name, old, new}], `row` being the sheet row to write and
+    `data` the header-keyed cells. Rows already equal are skipped unless an
+    As of column exists (then the date is refreshed too)."""
     writes = []
     for sa, ra, la in matched_triples(sheet, registry, live, owner):
         if la["balance"] is None:
@@ -437,7 +446,7 @@ def plan_sync(sheet, registry, live, owner, as_of=None, has_as_of_column=False):
         data = {BALANCE_COLUMN[ra["kind"]]: new}
         if has_as_of_column and as_of:
             data[AS_OF_COLUMN] = as_of
-        writes.append({"criteria": f'"{KEY_COLUMN}"="{ra["key"]}"', "data": data, "ref": sa["ref"],
+        writes.append({"row": sa["row"], "data": data, "ref": sa["ref"],
                        "name": sa["name"], "old": sa["balance"], "new": new})
     return writes
 
@@ -586,7 +595,9 @@ def _confirm(prompt):
 def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print):
     """Add a Chart of Accounts row for each open registry account the sheet lacks.
     add="ask" puts one yes/no per account to `ask` (default: the terminal);
-    add="always" adds them all. Nothing is ever closed or removed here.
+    add="always" adds them all. Every yes is written to the sheet at once, before
+    the next question, so an interrupted or failed run keeps the rows already
+    confirmed. Nothing is ever closed or removed here.
     Returns the number of rows added (0 on dry run or when none were chosen)."""
     rows = inputs["sheet_rows"]
     if rows is None:
@@ -594,21 +605,34 @@ def add_missing(inputs, sheet_id, dry_run=False, add="ask", ask=None, log=print)
     sheet, _ = sheet_accounts(rows)
     additions = plan_additions(sheet, registry_accounts(inputs["config"]), _live_sides(inputs),
                                inputs["category"])
-    chosen = []
-    for a in additions:
-        label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
-        if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
-            log(f"  skipped {label}.")
-            continue
-        chosen.append(a)
-        bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
-        log(f"  {'would add' if dry_run else 'add'} '{a['name']}' as {a['data']['Type']} {a['key']}"
-            + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
-    if dry_run or not chosen:
+    if not additions:
         return 0
-    from zoho_sheet import add_records
-    n = add_records(sheet_id, SHEET_TAB, [a["data"] for a in chosen])
-    log(f"  sync: {n} row(s) added.")
+    if not dry_run:
+        # insert_record, not add_records: the Chart of Accounts has a totals row under
+        # a blank gap, and records.add appends below the totals where records.fetch
+        # (and so every check here) never looks.
+        from zoho_sheet import insert_record
+    n = 0
+    try:
+        for a in additions:
+            label = f"{a['ref']} '{a['name']}' ({a['owner']} {a['key']})"
+            if add == "ask" and not (ask or _confirm)(f"  add {label} to the Chart of Accounts? [y/N] "):
+                log(f"  skipped {label}.")
+                continue
+            bal = a["data"].get(BALANCE_COLUMN["debit"], a["data"].get(BALANCE_COLUMN["credit"]))
+            detail = (f"'{a['name']}' as {a['data']['Type']} {a['key']}"
+                      + (f", balance {bal:.2f}" if bal is not None else ", balance unknown"))
+            if dry_run:
+                log(f"  would add {detail}")
+                continue
+            row = insert_record(sheet_id, SHEET_TAB, a["data"])
+            n += 1
+            log(f"  added {detail} (sheet row {row})")
+    except KeyboardInterrupt:
+        log(f"  sync: interrupted; {n} row(s) added before the interrupt.")
+        raise
+    if n:
+        log(f"  sync: {n} row(s) added.")
     return n
 
 
@@ -637,10 +661,15 @@ def sync(inputs, sheet_id, dry_run=False, log=print):
         log(f"  {'would write' if dry_run else 'write'} {w['ref']} '{w['name']}': {old} -> {w['new']:.2f}")
     if dry_run:
         return 0
-    from zoho_sheet import update_records
+    # write_cells by row and column, not update_records by criteria: a criteria on
+    # the last4 column never matches a row (2026-11-16, live probe: "Account Last 4"
+    # ="0732" finds nothing, and the old update silently affected 0 rows).
+    from zoho_sheet import header_columns, write_cells
+    columns = header_columns(sheet_id, SHEET_TAB)
     n = 0
     for w in writes:
-        n += update_records(sheet_id, SHEET_TAB, w["criteria"], w["data"])
+        write_cells(sheet_id, SHEET_TAB, w["row"], w["data"], columns)
+        n += 1
     log(f"  sync: {n} row(s) written.")
     return n
 
