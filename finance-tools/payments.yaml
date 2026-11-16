@@ -842,16 +842,16 @@ payments:
     zoho_match: "Amex Delta"
     notes: "Autopay on the 5th; balance usually ~$0."
 
-  - name: "Quicksilver (full)"
+  - name: "Quicksilver (min)"
     amount: 0.00
-    day_of_month: 11
+    day_of_month: 12
     funding_account: cap1-recurring-4354
     pays_account: cap1-quicksilver-0732
     autopay: true
-    autopay_type: full
+    autopay_type: min
     category: personal
     zoho_match: "Quicksilver"
-    notes: "Monarch stream: ~$70 on the 11th; balance $0 as of Oct 2026."
+    notes: "Capital One autopay = minimum due, on the due date (12th; same-day post from Cap1 checking). Balance $0 since Sep 2025, so the minimum is $0. Earlier Monarch stream was ~$70 on the 11th."
 
   - name: "Wells Fargo Autograph (full)"
     amount: 0.00
