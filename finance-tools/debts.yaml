@@ -68,13 +68,19 @@ debts:
     # apr: fill in from the statement
     # min_payment: fill in
     funding_account: boa-business-1778
+    credit_limit: 1700     # from the Bills sheet, 2026-11-16
+    due_day: 5
 
   # --- personal (minimum-payment cards and loans) ---
   - account: boa-plat1-5153
     # apr: fill in
     # min_payment: 137 comes from the registry autopay entry
+    credit_limit: 18600    # from the Bills sheet, 2026-11-16
+    due_day: 4
   - account: boa-plat2-7250
     # apr: fill in
+    credit_limit: 4900     # from the Bills sheet, 2026-11-16
+    due_day: 23
   - account: truist-auto-1001
     # apr: fill in from the loan statement (instalment $702.91 is in the registry)
   - account: lafayette-loan-0621
@@ -83,6 +89,38 @@ debts:
   # --- personal cards paid in full monthly ---
   # These are left out of the paydown automatically because their registry payment is
   # autopay_type: full. If one starts revolving, add it here with carried: true and its APR.
+  # The credit_limit / due_day values below came off the Bills sheet on 2026-11-16 (the
+  # one-time --migrate seed); they render back into the sheet from here.
+  - account: cap1-quicksilver-0732
+    credit_limit: 3500
+    due_day: 12
+  - account: boa-visa-2986
+    credit_limit: 500
+    due_day: 7
+  - account: discover-gray-8886
+    credit_limit: 3300
+    due_day: 19
+  - account: discover-rainbow-9035
+    credit_limit: 3800
+    due_day: 13
+  - account: citi-rewards-8281
+    due_day: 1             # credit_limit 1270 lives on the promo entry above (fresher than the sheet's 1145)
+  - account: amex-delta-1008
+    credit_limit: 1000
+    due_day: 10
+  - account: amex-platinum-2004
+    credit_limit: 4700
+    due_day: 21
+  - account: apple-card
+    credit_limit: 2700
+    due_day: 30            # sheet said "30th" / "last day of month"
+  - account: bilt-4607
+    credit_limit: 4000
+    due_day: 27
+  - account: bilt-obsidian
+    credit_limit: 1750
+  - account: robinhood-card-8465
+    credit_limit: 6250
   # - account: wells-autograph-8694
   #   carried: true
   #   apr: 28.49

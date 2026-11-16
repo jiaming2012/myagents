@@ -320,6 +320,18 @@ def add_column(resource_id, worksheet_name, header):
     return col
 
 
+def blank_row(resource_id, worksheet_name, row, width):
+    """Clear the first `width` cells of 1-based `row` in one call (a CSV line of
+    empty fields; sandbox probe 2026-11-16: that clears, a bare "" is rejected).
+    The row stays, so rows below do not shift."""
+    r = requests.post(f"{SHEET_BASE}/{resource_id}",
+                      data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                            "row": row, "column": 1, "data": "," * max(1, width - 1)},
+                      headers=_headers(), timeout=60)
+    _json(r)
+    return 1
+
+
 def delete_rows(resource_id, worksheet_name, start_row, end_row):
     """Delete 1-based rows start_row..end_row inclusive (worksheet.rows.delete); the
     rows below shift up, as in the UI. Returns the number of rows removed."""

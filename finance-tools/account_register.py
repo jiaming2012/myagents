@@ -82,7 +82,7 @@ SHEET_TYPES = {
     "Business Credit": ("business", "credit"),
 }
 SHEET_TYPE_OF = {v: k for k, v in SHEET_TYPES.items()}             # (owner, kind) -> sheet Type
-OUT_OF_SCOPE_SHEET_TYPES = {"Investment"}
+OUT_OF_SCOPE_SHEET_TYPES = {"Investment", "Loan"}   # kept on the sheet, never checked; rendered after the accounts
 REGISTRY_TYPES = {"depository": "debit", "credit": "credit"}        # loan/investment skipped
 MONARCH_TYPES = {"depository": "debit", "credit": "credit"}         # brokerage/loan/other skipped
 BOOKS_TYPES = {"bank": "debit", "credit_card": "credit"}            # cash (Petty Cash etc.) skipped
@@ -151,13 +151,24 @@ def _err(kind, message, fix=""):
 
 
 def _acct(key, name, owner, kind, closed=False, balance=None, match=None, ref="", institution=None,
-          row=None, id=None, closed_on=None, cells=None):
+          row=None, id=None, closed_on=None, cells=None, manual=False):
     """One account as seen by one side. `row` is the 1-based sheet row and `cells`
     the raw sheet record (sheet side only); `id` the registry id (registry and
-    sheet sides)."""
+    sheet sides); `manual` marks a registry account with `feed: manual`, which
+    has no live source: its balance is whatever the sheet says and it is exempt
+    from registry_no_match_name."""
     return {"key": key, "name": name, "owner": owner, "kind": kind, "closed": bool(closed),
             "balance": balance, "match": match, "ref": ref, "institution": institution,
-            "row": row, "id": id, "closed_on": closed_on, "cells": cells}
+            "row": row, "id": id, "closed_on": closed_on, "cells": cells, "manual": bool(manual)}
+
+
+def is_totals_row(row):
+    """A row inside the records block with no Name, Type or Registry Id but with a
+    number in it: the sheet's totals row. Never written, never moved; the render
+    must end above it."""
+    if any(str(row.get(c) or "").strip() for c in ("Name", "Type", ID_COLUMN)):
+        return False
+    return any(_num(v) is not None for k, v in row.items() if k != "row_index")
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +188,7 @@ def sheet_accounts(rows, category=None):
         ref = f"sheet row {row.get('row_index', '?')}"
         name = str(row.get("Name") or "").strip()
         typ = str(row.get("Type") or "").strip()
-        if typ in OUT_OF_SCOPE_SHEET_TYPES:
+        if typ in OUT_OF_SCOPE_SHEET_TYPES or is_totals_row(row):
             continue
         acct_id = str(row.get(ID_COLUMN) or "").strip()
         if not acct_id:
@@ -218,7 +229,8 @@ def registry_accounts(config):
                 closed_on = None
         out.append(_acct(a.get("last4") or None, a.get("name", a.get("id")), owner, kind,
                          closed=closed, match=a.get(MATCH_FIELD[owner]), ref=f"registry {a.get('id')}",
-                         institution=a.get("institution"), id=a.get("id"), closed_on=closed_on))
+                         institution=a.get("institution"), id=a.get("id"), closed_on=closed_on,
+                         manual=str(a.get("feed") or "").casefold() == "manual"))
     return out
 
 
@@ -296,7 +308,7 @@ def check_registry_vs_live(registry, live, owner):
     claimed = {}
     for ra in (a for a in registry if a["owner"] == owner):
         if not ra["match"]:
-            if not ra["closed"]:
+            if not ra["closed"] and not ra["manual"]:
                 errors.append(_err("registry_no_match_name",
                                    f"{ra['ref']} '{ra['name']}': no {field}.",
                                    f"Set {field} to the exact {source} account name."))
@@ -444,8 +456,26 @@ def plan_render(config, debts, live_by_owner, sheet_rows, today=None, category=N
                            "Run --migrate (adds Registry Id) or add the column in the sheet."))
     existing = {a["id"]: a for a in sheet}
     current = {row["row_index"]: row for row in (sheet_rows or []) if "row_index" in row}
+    # The totals row can sit INSIDE the fetched block (when rows were added below it);
+    # it is never written or moved, and the render must end above it.
+    totals_row = next((i for i in sorted(current) if is_totals_row(current[i])), None)
+    passthrough = [current[i] for i in sorted(current)
+                   if str(current[i].get("Type") or "").strip() in OUT_OF_SCOPE_SHEET_TYPES]
     rows, changes = [], []
-    for pos, ra in enumerate(rendered_accounts(registry, today, category), start=2):
+
+    def diff(pos, acct_id, name, cells, operator_row=False):
+        if totals_row is not None and pos >= totals_row:
+            return                      # never a write at or past the totals row (the fit check refuses)
+        cur = current.get(pos, {})
+        for col in headers:
+            old, new = _cell_text(cur.get(col)), _cell_text(cells.get(col))
+            if old != new:
+                changes.append({"row": pos, "id": acct_id, "name": name, "column": col,
+                                "old": old, "new": new, "value": cells.get(col, ""),
+                                "moved": operator_row or col not in OWNED_COLUMNS})
+
+    pos = 2
+    for ra in rendered_accounts(registry, today, category):
         prev = existing.get(ra["id"])
         cells = dict(prev["cells"]) if prev else {}
         cells.pop("row_index", None)
@@ -466,20 +496,30 @@ def plan_render(config, debts, live_by_owner, sheet_rows, today=None, category=N
                                             or not _cell_text(cells.get(AS_OF_COLUMN))):
                 cells[AS_OF_COLUMN] = today.isoformat()
         rows.append({"row": pos, "id": ra["id"], "name": ra["name"], "cells": cells})
-        for col in headers:
-            old, new = _cell_text(cur.get(col)), _cell_text(cells.get(col))
-            if old != new:
-                changes.append({"row": pos, "id": ra["id"], "name": ra["name"], "column": col,
-                                "old": old, "new": new, "value": cells.get(col, ""),
-                                "moved": col not in OWNED_COLUMNS})
-    new_end = 1 + len(rows)
+        diff(pos, ra["id"], ra["name"], cells)
+        pos += 1
+    for row in passthrough:      # Investment / Loan rows: every cell kept, placed after the accounts
+        cells = {k: v for k, v in row.items() if k != "row_index"}
+        rows.append({"row": pos, "id": "", "name": str(row.get("Name") or ""), "cells": cells, "passthrough": True})
+        diff(pos, "", str(row.get("Name") or ""), cells, operator_row=True)
+        pos += 1
+    new_end = pos - 1
     old_end = max(current) if current else 1
-    retired = [{"row": i, "id": str(current[i].get(ID_COLUMN) or ""), "name": current[i].get("Name", "")}
-               for i in range(new_end + 1, old_end + 1) if i in current]
-    extra = max(0, new_end - old_end)
-    fit_ok = gap_rows is None or extra <= gap_rows
+    retired = []
+    for i in range(new_end + 1, old_end + 1):
+        if i not in current or i == totals_row:
+            continue
+        retired.append({"row": i, "id": str(current[i].get(ID_COLUMN) or ""), "name": current[i].get("Name", ""),
+                        "action": "delete" if (totals_row is None or i > totals_row) else "blank"})
+    if totals_row is not None:
+        extra = max(0, new_end - (totals_row - 1))
+        fit_ok = extra == 0
+    else:
+        extra = max(0, new_end - old_end)
+        fit_ok = gap_rows is None or extra <= gap_rows
+        totals_row = (old_end + 1 + gap_rows) if gap_rows is not None else None
     return {"rows": rows, "changes": changes, "retired": retired, "extra_rows_needed": extra,
-            "fit_ok": fit_ok, "errors": errors, "totals_row": (old_end + 1 + gap_rows) if gap_rows is not None else None}
+            "fit_ok": fit_ok, "errors": errors, "totals_row": totals_row}
 
 
 def check_sheet_vs_render(plan, balances=True):
@@ -660,25 +700,27 @@ def render(inputs, sheet_id, dry_run=False, log=print, today=None):
             log(f"    {e['message']}")
         return 0
     if not plan["fit_ok"]:
-        log(f"  render refused: {plan['extra_rows_needed']} new row(s) but only {gap} blank row(s) above "
-            f"row {plan['totals_row']} (the totals). Insert {plan['extra_rows_needed'] - gap} blank row(s) "
-            f"above it in the sheet, then re-run. Nothing written.")
+        log(f"  render refused: the block needs {plan['extra_rows_needed']} more row(s) above row "
+            f"{plan['totals_row']} (the totals). Insert {plan['extra_rows_needed']} blank row(s) above it "
+            f"in the sheet, then re-run. Nothing written.")
         return 0
     verb = "would write" if dry_run else "write"
     for c in plan["changes"]:
         log(f"  {verb} row {c['row']} '{c['name']}' {c['column']}: {c['old'] or 'empty'} -> {c['new'] or 'empty'}"
             + (" (moved)" if c["moved"] else ""))
+    blanks = [r for r in plan["retired"] if r["action"] == "blank"]
+    deletes = [r for r in plan["retired"] if r["action"] == "delete"]
     for r in plan["retired"]:
-        log(f"  {'would delete' if dry_run else 'delete'} row {r['row']} '{r['name']}' (no longer rendered)")
+        log(f"  {'would ' if dry_run else ''}{r['action']} row {r['row']} '{r['name']}' (no longer at this position)")
     n_rows = len(plan["rows"])
     if not plan["changes"] and not plan["retired"]:
         log(f"  render: {n_rows} row(s), nothing to change.")
         return 0
     if dry_run:
         log(f"  render (dry run): {n_rows} row(s), {len(plan['changes'])} cell(s) differ, "
-            f"{len(plan['retired'])} row(s) to delete.")
+            f"{len(blanks)} row(s) to blank, {len(deletes)} row(s) to delete.")
         return 0
-    from zoho_sheet import delete_rows, header_columns, write_cells
+    from zoho_sheet import blank_row, delete_rows, header_columns, write_cells
     columns = header_columns(sheet_id, SHEET_TAB)
     n = 0
     by_row = {}
@@ -686,10 +728,12 @@ def render(inputs, sheet_id, dry_run=False, log=print, today=None):
         by_row.setdefault(c["row"], {})[c["column"]] = c["value"]
     for row_idx in sorted(by_row):
         n += write_cells(sheet_id, SHEET_TAB, row_idx, by_row[row_idx], columns)
-    if plan["retired"]:
-        first, last = plan["retired"][0]["row"], plan["retired"][-1]["row"]
-        delete_rows(sheet_id, SHEET_TAB, first, last)
-    log(f"  render: {n_rows} row(s), {n} cell(s) written, {len(plan['retired'])} row(s) deleted.")
+    for r in blanks:
+        blank_row(sheet_id, SHEET_TAB, r["row"], max(columns.values()))
+    if deletes:                                   # contiguous: everything below the totals row
+        delete_rows(sheet_id, SHEET_TAB, deletes[0]["row"], deletes[-1]["row"])
+    log(f"  render: {n_rows} row(s), {n} cell(s) written, {len(blanks)} row(s) blanked, "
+        f"{len(deletes)} row(s) deleted.")
     return n
 
 
@@ -708,12 +752,15 @@ def plan_migration(config, sheet_rows):
         if str(row.get(ID_COLUMN) or "").strip():
             continue
         name, typ = str(row.get("Name") or "").strip(), str(row.get("Type") or "").strip()
-        if typ in OUT_OF_SCOPE_SHEET_TYPES:
+        if typ in OUT_OF_SCOPE_SHEET_TYPES or is_totals_row(row):
             continue
         owner, _ = SHEET_TYPES.get(typ, (None, None))
         key = str(row.get(KEY_COLUMN) or "").strip() or None
         hit = by_key.get((owner, key)) if owner and key else None
-        if hit is None:
+        if hit is None and not key:
+            # name is a fallback only for rows with no last4: a row whose last4 matches
+            # nothing is a different account, not a misspelt one (Cap One 0474 vs the
+            # Lafayette checking share the name "Business Basic Checking")
             cands = [a for a in by_name.get(norm_name(name), []) if not owner or a["owner"] == owner]
             hit = cands[0] if len(cands) == 1 else None
         if hit is None or hit["id"] in taken:
