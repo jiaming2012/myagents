@@ -207,21 +207,18 @@ accounts:
     last4: "2119"
     type: credit
     category: business
-    monarch_match: null  # TODO: confirm Monarch name
+    monarch_match: null  # business; Monarch holds only the personal BoA accounts
     xero_account_id: "BoA: CORP Account (2119)"
     zoho_match: "CORP Account - Business Adv Customized Cash Rewards - 2119"
-    nicknames: ["BoA Corp", "BoA 2119", "Bank of America 2119", "CORP"]
-
-  - id: boa-cash-rewards-5819
-    name: "Business Adv Cash Rewards"
-    institution: "Bank of America"
-    last4: "5819"
-    type: credit
-    category: business
-    monarch_match: null  # TODO: confirm Monarch name
-    xero_account_id: "BoA: Jamal Cash Rewards (5819)"
-    zoho_match: null   # no such bank account in Zoho Books (2026-10-19); accounts:check errors until it is added there or this is closed
-    nicknames: ["BoA Cash Rewards", "BoA 5819", "Bank of America 5819", "Biz Cash Rewards"]
+    nicknames: ["BoA Corp", "BoA 2119", "Bank of America 2119", "CORP",
+                "BoA Cash Rewards", "BoA 5819", "Bank of America 5819", "Biz Cash Rewards"]
+    # Business Advantage Customized Cash Rewards. 2119 is the COMPANY account: the statement,
+    # balance, limit ($1,700), minimum and autopay all live here, and it is the Balance Connect
+    # overdraft source for checking 1778. 5819 is Jamal's cardholder CARD under this account
+    # (statement "Cardholder Activity Summary: COLE, JAMAL A ... 5819"); its purchases and the
+    # overdraft advances roll into this balance. Verified 2026-11-16 from eStmt_2025-02-10.pdf.
+    # The former separate entry boa-cash-rewards-5819 (a Xero-era duplicate, "BoA: Jamal Cash
+    # Rewards (5819)") was folded in here; its nicknames stay so notes saying 5819 resolve.
 
   # --- Chase ---
   - id: chase-ink-7667
