@@ -526,6 +526,9 @@ def reconcile(z, accounts, openings, apply, log):
         name = BANK_NAMES[acct["xero_bank_account"]]
         existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
         docs = list(z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"))
+        # feed lines still uncategorized (they only list under Status.Uncategorized, never
+        # in the account's transaction listing): a month holding one is not ready for a record
+        pending = [ln["date"] for ln in feed_lines(z, zid)]
         docs = [d for d in docs if d.get("status") not in ("uncategorized", "excluded")]
         for d in docs:
             mid = (d.get("reference_number") or "").removeprefix("mercury:")
@@ -553,6 +556,10 @@ def reconcile(z, accounts, openings, apply, log):
                 continue
             if not sel and acct.get("closed") and first.isoformat() > acct["closed"]:
                 continue  # closed account, nothing after the closure
+            unc = sum(1 for p in pending if first.isoformat() <= p <= last.isoformat())
+            if unc:
+                log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | skipped: {unc} uncategorized line(s) in month |")
+                break  # later months depend on this one
             if not apply:
                 log(f"| {name} | {first:%Y-%m} | {z_close} | {mbal} | {z_close - mbal} | {len(sel)} | dry run |")
             else:
@@ -982,7 +989,9 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
     The BoA block (`boa_merchants`) gets its own rules on the feed-only accounts;
     deposit-side patterns (owner contributions, 3100) stay script-driven."""
     existing = {r["rule_name"] for r in z.get("/bankaccounts/rules").get("rules", [])}
-    wanted = [("Mercury", ",".join(a["zoho_id"] for a in accounts), m) for m in cfg["merchants"]] if accounts else []
+    # live Mercury accounts only: Zoho rejects a rule naming an inactive account (11015)
+    live_mercury = [a for a in accounts if not a.get("closed")]
+    wanted = [("Mercury", ",".join(a["zoho_id"] for a in live_mercury), m) for m in cfg["merchants"]] if live_mercury else []
     boa = cfg.get("zoho_feed_only_accounts") or []
     if boa and banks:
         # the BoA block plus the shared merchants seen on a BoA line this run; withdrawals

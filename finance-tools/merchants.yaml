@@ -114,6 +114,12 @@ merchants:
   - {pattern: "Alto-Hartley",         account: "5200"}   # COGS - Supplies (restaurant supply)
   - {pattern: "Snagajob",             account: "6000"}   # Advertising (job posting; review)
   - {pattern: "Inova",                account: "3200"}   # Owner's Draws (medical, personal; review)
+  # 2026-11-16 catch-up (Oct 16 - Nov 15 Mercury lines)
+  - {pattern: "Advance Auto Parts",   account: "6440"}   # Vehicle Expense: truck parts
+  - {pattern: "Harbor Freight Tools", account: "6140"}   # Equipment & Tools
+  - {pattern: "Zoho Corporation",     account: "6340"}   # Software & Web (Zoho Books)
+  - {pattern: "Cloudflare",           account: "6340"}   # Software & Web (domains / DNS)
+  - {pattern: "Mail Xpress",          account: "6270"}   # Postage and Delivery
 
 # Accounts reconciled in Zoho Books only (NOT by mercury_precode.py / Xero).
 # No bank feed: zoho_books_recon.py imports the Mercury history as a statement.
@@ -208,3 +214,4 @@ boa_merchants:
   - {pattern: "PEACOCKTVLL",              account: "3200"}   # Peacock TV -> owner draw
   - {pattern: "UBER *",                   account: "3200"}   # owner draw
   - {pattern: "APPLE CASH SENT MONEY",    account: "6450"}   # Wages and Salaries: payroll sent to an employee
+  - {pattern: "Hostinger",                account: "6340"}   # Software & Web: web hosting (BoA 1778, 2026-11)
