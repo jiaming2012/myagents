@@ -319,8 +319,9 @@ def test_render_writes_differing_cells_by_row_and_deletes_retired_rows(monkeypat
     import zoho_sheet
     written, deleted = [], []
     monkeypatch.setattr(zoho_sheet, "header_columns", lambda sid, tab: {h: i + 1 for i, h in enumerate(HEADERS)})
-    monkeypatch.setattr(zoho_sheet, "write_cells",
-                        lambda sid, tab, r, data, columns: written.append((r, data)) or len(data))
+    monkeypatch.setattr(zoho_sheet, "write_row",
+                        lambda sid, tab, r, data, columns: written.append((r, data)) or 1)
+    monkeypatch.setattr(zoho_sheet, "write_cells", lambda *a: pytest.fail("render writes whole rows"))
     monkeypatch.setattr(zoho_sheet, "delete_rows", lambda sid, tab, a, b: deleted.append((a, b)) or (b - a + 1))
     monkeypatch.setattr(zoho_sheet, "blank_rows_below", lambda sid, tab, r: 5)
     cfg = {**CONFIG, "accounts": CONFIG["accounts"][:2] + CONFIG["accounts"][4:]}
@@ -332,14 +333,17 @@ def test_render_writes_differing_cells_by_row_and_deletes_retired_rows(monkeypat
     assert render(inputs, "sheet-id", dry_run=True, log=log.append, today=TODAY) == 0 and written == []
     assert "  would write row 2 'Recurring ACH' Debit Balance: 1.00 -> 100.00" in log
     n = render(inputs, "sheet-id", log=log.append, today=TODAY)
-    assert n == 2 and [r for r, _ in written] == [2] and written[0][1] == {"Debit Balance": 100.0, "As of": "2026-11-16"}
+    assert n == 1 and [r for r, _ in written] == [2]
+    full = written[0][1]                      # the whole target row, not just the two changed cells
+    assert (full["Name"], full["Debit Balance"], full["As of"], full[ID_COLUMN]) == (
+        "Recurring ACH", 100.0, "2026-11-16", "cap1-4354")
     assert deleted == [(4, 5)]
-    assert log[-1] == "  render: 2 row(s), 2 cell(s) written, 0 row(s) blanked, 2 row(s) deleted."
+    assert log[-1] == "  render: 2 row(s), 1 row(s) written (2 cell(s) changed), 0 row(s) blanked, 2 row(s) deleted."
 
 
 def test_render_refuses_on_unregistered_row_and_on_no_fit(monkeypatch):
     import zoho_sheet
-    monkeypatch.setattr(zoho_sheet, "write_cells", lambda *a: pytest.fail("must not write"))
+    monkeypatch.setattr(zoho_sheet, "write_row", lambda *a: pytest.fail("must not write"))
     monkeypatch.setattr(zoho_sheet, "blank_rows_below", lambda sid, tab, r: 0)
     log = []
     inputs = dict(config=CONFIG, sheet_rows=SHEET + [row(6, "Wex Health", "Personal Debit", "")], monarch=MONARCH,

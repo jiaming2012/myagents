@@ -163,13 +163,34 @@ def list_worksheets(resource_id):
     return sheets
 
 
+RATE_LIMIT_CODE = 2950          # "You have exceeded the API request limit": the document is blocked ~5 min
+RATE_LIMIT_WAIT = 310           # seconds to wait before retrying after that answer
+
+
+def _call(resource_id, data, retries=3):
+    """POST one Data API call and return its JSON; exits on failure like _json.
+    A rate-limit answer (error 2950) is waited out and retried up to `retries`
+    times, so a long render finishes instead of dying half-written (2026-11-16:
+    626 single-cell writes tripped the per-minute limit at row 12)."""
+    import time
+    for attempt in range(retries + 1):
+        r = requests.post(f"{SHEET_BASE}/{resource_id}", data=data, headers=_headers(), timeout=60)
+        try:
+            d = r.json()
+        except ValueError:
+            return _json(r)
+        if d.get("error_code") == RATE_LIMIT_CODE and attempt < retries:
+            print(f"  Zoho Sheet rate limit hit; waiting {RATE_LIMIT_WAIT}s, retry {attempt + 1}/{retries}",
+                  file=sys.stderr, flush=True)
+            time.sleep(RATE_LIMIT_WAIT)
+            continue
+        return _json(r)
+
+
 def records(resource_id, worksheet_name):
     """Rows of one tab as dicts keyed by the header row, formulas evaluated, each
     with a 1-based `row_index` (Sheet Data API worksheet.records.fetch)."""
-    r = requests.post(f"{SHEET_BASE}/{resource_id}",
-                      data={"method": "worksheet.records.fetch", "worksheet_name": worksheet_name},
-                      headers=_headers(), timeout=60)
-    return _json(r).get("records", [])
+    return _call(resource_id, {"method": "worksheet.records.fetch", "worksheet_name": worksheet_name}).get("records", [])
 
 
 def update_records(resource_id, worksheet_name, criteria, data, first_match_only=True):
@@ -208,11 +229,9 @@ def add_records(resource_id, worksheet_name, rows):
 def _content(resource_id, worksheet_name, start_row):
     """worksheet.content.get from `start_row` to the used row: [(row_index, [cells])].
     Zoho ignores row_count, so callers filter by row_index."""
-    r = requests.post(f"{SHEET_BASE}/{resource_id}",
-                      data={"method": "worksheet.content.get", "worksheet_name": worksheet_name,
-                            "start_row": start_row, "start_column": 1},
-                      headers=_headers(), timeout=60)
-    return [(rd.get("row_index"), rd.get("row_details", [])) for rd in _json(r).get("range_details", [])]
+    d = _call(resource_id, {"method": "worksheet.content.get", "worksheet_name": worksheet_name,
+                            "start_row": start_row, "start_column": 1})
+    return [(rd.get("row_index"), rd.get("row_details", [])) for rd in d.get("range_details", [])]
 
 
 def header_columns(resource_id, worksheet_name):
@@ -287,13 +306,30 @@ def write_cells(resource_id, worksheet_name, row, data, columns=None):
     n = 0
     for header, value in data.items():
         text = "" if value is None else str(value)
-        r = requests.post(f"{SHEET_BASE}/{resource_id}",
-                          data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
-                                "row": row, "column": columns[header], "data": text if text != "" else '""'},
-                          headers=_headers(), timeout=60)
-        _json(r)
+        _call(resource_id, {"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                            "row": row, "column": columns[header], "data": text if text != "" else '""'})
         n += 1
     return n
+
+
+def write_row(resource_id, worksheet_name, row, data, columns=None):
+    """Set a whole 1-based `row` in ONE call from header-keyed `data`: every header
+    column is written, blank where `data` has no value (a CSV line of empty fields
+    clears the cells). For a render, where the target row is fully known: one call
+    per row keeps a 60-row render inside Zoho's per-minute limit, which one call
+    per cell (write_cells) tripped on 2026-11-16. Returns 1."""
+    import csv
+    import io
+    columns = columns or header_columns(resource_id, worksheet_name)
+    cells = [""] * max(columns.values())
+    for header, value in data.items():
+        if header in columns and value is not None:
+            cells[columns[header] - 1] = str(value)
+    buf = io.StringIO()
+    csv.writer(buf, lineterminator="").writerow(cells)
+    _call(resource_id, {"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                        "row": row, "column": 1, "data": buf.getvalue()})
+    return 1
 
 
 def blank_rows_below(resource_id, worksheet_name, row):
@@ -324,22 +360,16 @@ def blank_row(resource_id, worksheet_name, row, width):
     """Clear the first `width` cells of 1-based `row` in one call (a CSV line of
     empty fields; sandbox probe 2026-11-16: that clears, a bare "" is rejected).
     The row stays, so rows below do not shift."""
-    r = requests.post(f"{SHEET_BASE}/{resource_id}",
-                      data={"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
-                            "row": row, "column": 1, "data": "," * max(1, width - 1)},
-                      headers=_headers(), timeout=60)
-    _json(r)
+    _call(resource_id, {"method": "worksheet.csvdata.set", "worksheet_name": worksheet_name,
+                        "row": row, "column": 1, "data": "," * max(1, width - 1)})
     return 1
 
 
 def delete_rows(resource_id, worksheet_name, start_row, end_row):
     """Delete 1-based rows start_row..end_row inclusive (worksheet.rows.delete); the
     rows below shift up, as in the UI. Returns the number of rows removed."""
-    r = requests.post(f"{SHEET_BASE}/{resource_id}",
-                      data={"method": "worksheet.rows.delete", "worksheet_name": worksheet_name,
-                            "row_index_array": json.dumps([{"start_row": start_row, "end_row": end_row}])},
-                      headers=_headers(), timeout=60)
-    _json(r)
+    _call(resource_id, {"method": "worksheet.rows.delete", "worksheet_name": worksheet_name,
+                        "row_index_array": json.dumps([{"start_row": start_row, "end_row": end_row}])})
     return end_row - start_row + 1
 
 

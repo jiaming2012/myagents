@@ -720,20 +720,21 @@ def render(inputs, sheet_id, dry_run=False, log=print, today=None):
         log(f"  render (dry run): {n_rows} row(s), {len(plan['changes'])} cell(s) differ, "
             f"{len(blanks)} row(s) to blank, {len(deletes)} row(s) to delete.")
         return 0
-    from zoho_sheet import blank_row, delete_rows, header_columns, write_cells
+    # One call per changed ROW (the whole target row, operator cells included as
+    # copied), not one per cell: 626 cell writes tripped Zoho's per-minute limit.
+    from zoho_sheet import blank_row, delete_rows, header_columns, write_row
     columns = header_columns(sheet_id, SHEET_TAB)
+    target = {r["row"]: r["cells"] for r in plan["rows"]}
+    changed_rows = sorted({c["row"] for c in plan["changes"]})
     n = 0
-    by_row = {}
-    for c in plan["changes"]:
-        by_row.setdefault(c["row"], {})[c["column"]] = c["value"]
-    for row_idx in sorted(by_row):
-        n += write_cells(sheet_id, SHEET_TAB, row_idx, by_row[row_idx], columns)
+    for row_idx in changed_rows:
+        n += write_row(sheet_id, SHEET_TAB, row_idx, target[row_idx], columns)
     for r in blanks:
         blank_row(sheet_id, SHEET_TAB, r["row"], max(columns.values()))
     if deletes:                                   # contiguous: everything below the totals row
         delete_rows(sheet_id, SHEET_TAB, deletes[0]["row"], deletes[-1]["row"])
-    log(f"  render: {n_rows} row(s), {n} cell(s) written, {len(blanks)} row(s) blanked, "
-        f"{len(deletes)} row(s) deleted.")
+    log(f"  render: {n_rows} row(s), {n} row(s) written ({len(plan['changes'])} cell(s) changed), "
+        f"{len(blanks)} row(s) blanked, {len(deletes)} row(s) deleted.")
     return n
 
 
