@@ -445,6 +445,11 @@ def plan_render(config, debts, live_by_owner, sheet_rows, today=None, category=N
     today = today or date.today()
     registry = registry_accounts(config)
     sheet, errors = sheet_accounts(sheet_rows or [])
+    # A duplicate Registry Id is what a half-finished render leaves behind (the account
+    # already moved up, its old row not yet overwritten); a full render rewrites every
+    # position and so resolves it. Reported by the check, never a reason to refuse.
+    warnings = [e for e in errors if e["kind"] == "sheet_duplicate_id"]
+    errors = [e for e in errors if e["kind"] != "sheet_duplicate_id"]
     headers = []
     for row in sheet_rows or []:
         for k in row:
@@ -519,7 +524,7 @@ def plan_render(config, debts, live_by_owner, sheet_rows, today=None, category=N
         fit_ok = gap_rows is None or extra <= gap_rows
         totals_row = (old_end + 1 + gap_rows) if gap_rows is not None else None
     return {"rows": rows, "changes": changes, "retired": retired, "extra_rows_needed": extra,
-            "fit_ok": fit_ok, "errors": errors, "totals_row": totals_row}
+            "fit_ok": fit_ok, "errors": errors, "warnings": warnings, "totals_row": totals_row}
 
 
 def check_sheet_vs_render(plan, balances=True):
@@ -527,7 +532,7 @@ def check_sheet_vs_render(plan, balances=True):
     operator cells differ from the render (or that is missing / no longer
     rendered), one `balance_mismatch` per row whose only differences are balance
     cells. Both are fixed by --sync."""
-    errors = list(plan["errors"])
+    errors = list(plan["errors"]) + list(plan.get("warnings", []))
     if any(e["kind"] == "sheet_missing_column" for e in errors):
         return errors            # not migrated yet: per-row drift would be noise
     by_row = {}
