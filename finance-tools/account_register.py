@@ -415,7 +415,12 @@ def _cell_text(v):
     if s == "":
         return ""
     n = _num(v)
-    return f"{n:.2f}" if n is not None else s
+    if n is not None:
+        return f"{n:.2f}"
+    m = re.fullmatch(r"(\d{1,2})/(\d{1,2})/(\d{4})", s)     # Zoho hands a date cell back as 11/16/2026
+    if m:
+        return f"{m.group(3)}-{int(m.group(1)):02d}-{int(m.group(2)):02d}"
+    return s
 
 
 def rendered_accounts(registry, today, category=None):
