@@ -20,6 +20,15 @@ accounts + 17 Investment/Loan pass-through rows), so the operator must insert at
 blank rows above the totals row in the sheet; the API has no row insert. Then
 `task finance:accounts:sync -- --dry-run`, review, `task finance:accounts:sync`.
 
+Status evening 2026-11-16: task 8 DONE (main 133913f). The operator inserted 20 rows; the
+first render tripped Zoho's per-minute limit at one call per cell, so the render now writes
+one whole row per call and waits out error 2950; a half-finished render's duplicate ids are
+reported, not blocking. Full render: 63 rows, 52 written, 496 cells; six rows the insert had
+cut off below the totals were deleted by hand afterwards. A second dry run reports "nothing to
+change" and `task finance:accounts:check` shows one error, boa-cash-rewards-5819 with no
+zoho_match (pre-existing). Remaining: task 9 (retire the Credit Cards tab by hand), task 10
+(docs), task 11 (archive after `/spec-init`).
+
 1. **Operator sign-off on D1 to D5** in `proposal.md`. Record the answers at the top of
    `design.md`.
 2. **Registry fields.** Add optional `credit_limit` and `due_day` to ordinary `debts.yaml`
