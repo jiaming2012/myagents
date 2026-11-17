@@ -4,8 +4,11 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import json  # noqa: E402
+
 from monarch_categorize import (  # noqa: E402
-    Categories, history_candidate, monarch_rules_as_local, plan_updates, propose, rule_matches,
+    Categories, ai_prompt, history_candidate, load_ai_proposals, monarch_rules_as_local, plan_updates, propose,
+    rule_matches, write_ai_request,
 )
 
 CATS = Categories([
@@ -73,6 +76,47 @@ def test_propose_orders_candidates_and_local_rule_wins():
     cands = propose(txn(), local, [], CATS, [])
     assert cands[0]["source"] == "rule:tj" and cands[0]["category_id"] == "c-groceries"
     assert cands[-1]["source"] == "monarch-default"
+
+
+def _item(i, **over):
+    base = {"id": f"t{i}", "date": "2026-11-16", "amount": -5.0, "merchant": "M", "plaid_name": "M*", "account": "A",
+            "current_category": "Restaurants & Bars", "notes": "", "candidates": []}
+    base.update(over)
+    return base
+
+
+def test_ai_request_and_prompt_are_self_contained(tmp_path):
+    items = [_item(1, candidates=[{"category_name": "Groceries", "source": "history:2/3", "confidence": 0.44, "reason": "r"}])]
+    req = write_ai_request(tmp_path, "run1", items, CATS)
+    doc = json.loads(req.read_text())
+    assert doc["run_id"] == "run1" and [c["name"] for c in doc["categories"]] == ["Groceries", "Restaurants & Bars", "Transfer"]
+    assert doc["transactions"][0]["signals"][0]["source"] == "history:2/3"
+    prompt = ai_prompt(req, tmp_path / "ai_proposals.json")
+    assert str(req) in prompt and "ai_proposals.json" in prompt and "EXACTLY ONE proposal" in prompt
+
+
+def test_load_ai_proposals_validates_like_apply(tmp_path):
+    items = [_item(1), _item(2)]
+    p = tmp_path / "ai_proposals.json"
+    p.write_text(json.dumps({"run_id": "run1", "proposals": [
+        {"transaction_id": "t1", "category_id": "c-groceries", "category_name": "Groceries", "confidence": 1.7, "reasoning": "ok"},
+        {"transaction_id": "t2", "category_id": "nope", "category_name": "Not A Category", "confidence": 0.9, "reasoning": "x"},
+        {"transaction_id": "t9", "category_id": "c-groceries", "category_name": "Groceries", "confidence": 0.9, "reasoning": "x"},
+    ]}))
+    picks, err = load_ai_proposals(p, items, CATS, "test-model")
+    assert list(picks) == ["t1"]
+    assert picks["t1"]["confidence"] == 1.0 and picks["t1"]["source"] == "ai:test-model"
+    assert "unknown category" in err and "unknown transaction t9" in err and "no proposal for 1" in err
+
+
+def test_load_ai_proposals_falls_back_to_category_name():
+    import tempfile
+    with tempfile.TemporaryDirectory() as d:
+        p = Path(d) / "ai_proposals.json"
+        p.write_text(json.dumps({"proposals": [{"transaction_id": "t1", "category_id": "", "category_name": "groceries",
+                                                 "confidence": "0.8", "reasoning": "name only"}]}))
+        picks, err = load_ai_proposals(p, [_item(1)], CATS)
+        assert picks["t1"]["category_id"] == "c-groceries" and picks["t1"]["confidence"] == 0.8 and err is None
 
 
 def test_plan_updates_only_changed_or_unreviewed():

@@ -191,6 +191,12 @@ tasks:
       - task: sync-status:warn
       - python monarch_categorize.py run {{.CLI_ARGS}}
 
+  categorize:no-ai:
+    desc: "Same run but skip the Claude step (use when Claude Code is unavailable); low-confidence rows go straight to the reviewer"
+    cmds:
+      - task: sync-status:warn
+      - python monarch_categorize.py run --no-ai {{.CLI_ARGS}}
+
   categorize:rules:
     desc: Snapshot the rules stored inside Monarch into data/categorize/monarch_rules.json
     cmds:

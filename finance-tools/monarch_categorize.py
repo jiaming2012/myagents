@@ -21,6 +21,10 @@ Confidence ladder (highest wins; below --ai-threshold the AI model is asked):
   monarch-default      whatever Monarch/Plaid already assigned           (0.50)
   ai                   Claude's pick among the household's categories   (model-reported)
 
+AI step: modelled on sales-processor's payroll classify step. The run writes ai_request.json, invokes
+the `claude` CLI (interactive at a terminal, -p when unattended) with a prompt that reads that file and
+writes ai_proposals.json, then validates the verdicts. No API key; --no-ai skips it.
+
 Data folder: data/categorize/ (rules.yaml, monarch_rules.json, runs/<run-id>/ — runs are gitignored).
 """
 
@@ -58,7 +62,8 @@ MONARCH_RULES_FILE = DATA_DIR / "monarch_rules.json"
 RUNS_DIR = DATA_DIR / "runs"
 TEMPLATE = HERE / "templates" / "categorize_review.html"
 
-AI_MODEL = os.environ.get("CATEGORIZE_AI_MODEL", "claude-opus-5-5")
+# Passed to `claude --model` when set; empty means the CLI's own default, as sales-processor does.
+AI_MODEL = os.environ.get("CATEGORIZE_AI_MODEL", "").strip()
 
 # Every field of Monarch's TransactionRuleV2 that resolves for a normal user (spiked 2026-11-17;
 # mergeTransactionAction errors server-side and is left out on purpose).
@@ -303,58 +308,136 @@ def propose(txn, local_rules, monarch_rules, categories, history_txns):
     return cands
 
 
-def ai_pick(items, categories, model=AI_MODEL):
-    """Ask Claude for the best category of each uncertain item in one call.
+# --------------------------------------------------------------------------- AI step (claude CLI)
+#
+# Same shape as sales-processor's payroll classify step (internal/classify): the pipeline writes a
+# request file, invokes the `claude` CLI with a self-contained prompt that reads that file and writes
+# a proposals file, waits for the CLI to exit, then validates the proposals against the request.
+# No API key: the CLI uses the operator's Claude Code login. The intermediate files are the contract,
+# so an operator can hand-edit ai_proposals.json before the review page is built.
 
-    Returns ({txn_id: pick}, error_string_or_None). A credential or API failure never raises:
-    the caller leaves those items for the human reviewer.
+AI_REQUEST_FILE = "ai_request.json"
+AI_PROPOSALS_FILE = "ai_proposals.json"
+
+
+def write_ai_request(run_dir, run_id, items, categories):
+    """Snapshot of the uncertain items + the category list for Claude to read."""
+    req = {
+        "run_id": run_id,
+        "categories": categories.public(),
+        "transactions": [{
+            "id": it["id"], "date": it["date"], "amount": it["amount"], "merchant": it["merchant"],
+            "statement": it["plaid_name"], "account": it["account"], "current_category": it["current_category"],
+            "notes": it["notes"],
+            "signals": [{"category": c["category_name"], "source": c["source"], "confidence": c["confidence"],
+                         "reason": c["reason"]} for c in it["candidates"]],
+        } for it in items],
+    }
+    path = run_dir / AI_REQUEST_FILE
+    path.write_text(json.dumps(req, indent=2))
+    return path
+
+
+def ai_prompt(request_path, proposals_path):
+    """Self-contained prompt: each `claude` invocation is a fresh session with no prior context."""
+    return f"""You are categorizing personal-finance transactions for a household's Monarch Money account.
+
+Read this JSON file: {request_path}
+It has shape: {{ run_id, categories[], transactions[] }}. Each transaction carries signals[]: category guesses
+from local rules, Monarch's stored rules, and the merchant's past reviewed transactions (history:n/total means
+n of the merchant's last total reviewed transactions carried that category).
+
+Write your verdicts to: {proposals_path}
+Use this exact shape:
+{{
+  "run_id": "<copy from input>",
+  "proposals": [
+    {{
+      "transaction_id": "<transactions[].id from the request>",
+      "category_id": "<one of categories[].id from the request>",
+      "category_name": "<the matching categories[].name>",
+      "confidence": 0.0,
+      "reasoning": "<one sentence>"
+    }}
+  ]
+}}
+
+RULES:
+1. Produce EXACTLY ONE proposal per transaction in the request. No more, no fewer.
+2. category_id MUST be drawn from the request's categories[] list. Do not invent ids or names.
+3. Negative amounts are money out, positive amounts are money in. Match the category's type (expense / income / transfer).
+4. Weigh the signals: a strong merchant history usually wins; the current category may be a Plaid guess.
+   When nothing fits with confidence, pick the closest category and report a low confidence (below 0.6); the
+   human reviewer decides those.
+5. Output VALID JSON only in the file: no markdown fences, no commentary.
+6. After you have written the proposals file, your final message to the user MUST be exactly:
+   "Classification complete — please exit (Ctrl+D or /exit) so monarch_categorize can resume the run."
+   Do nothing else after writing the file; the parent process is blocked on this CLI exiting.
+"""
+
+
+def load_ai_proposals(path, items, categories, model_label="claude-cli"):
+    """Validate Claude's proposals file against the request. Returns ({txn_id: pick}, error_or_None).
+
+    Unknown transaction ids and unknown categories are errors, like sales-processor's Apply; a missing
+    proposal for an item is reported but the other verdicts are kept.
     """
     try:
-        import anthropic
-        from pydantic import BaseModel
-    except ImportError as e:
-        return {}, f"anthropic SDK not installed ({e})"
+        doc = json.loads(Path(path).read_text())
+    except (OSError, ValueError) as e:
+        return {}, f"could not read {path}: {e}"
+    wanted = {it["id"] for it in items}
+    picks, problems = {}, []
+    for p in doc.get("proposals") or []:
+        tid = str(p.get("transaction_id", ""))
+        if tid not in wanted:
+            problems.append(f"proposal for unknown transaction {tid}")
+            continue
+        cat = categories.resolve(p.get("category_id") or "") or categories.resolve(p.get("category_name") or "")
+        if not cat:
+            problems.append(f"transaction {tid}: unknown category {p.get('category_id')!r} / {p.get('category_name')!r}")
+            continue
+        try:
+            conf = max(0.0, min(1.0, float(p.get("confidence", 0))))
+        except (TypeError, ValueError):
+            conf = 0.0
+        picks[tid] = {"category_id": cat["id"], "category_name": cat["name"], "confidence": conf,
+                      "source": f"ai:{model_label}", "reason": str(p.get("reasoning") or "")}
+    missing = wanted - set(picks)
+    if missing:
+        problems.append(f"no proposal for {len(missing)} transaction(s): {', '.join(sorted(missing))}")
+    return picks, ("; ".join(problems) or None)
 
-    class Pick(BaseModel):
-        transaction_id: str
-        category: str
-        confidence: float
-        reason: str
 
-    class Picks(BaseModel):
-        picks: list[Pick]
+def ai_pick(run_dir, run_id, items, categories):
+    """The analyze step: request file -> `claude` CLI -> proposals file. Never raises."""
+    import shutil
+    import subprocess
 
-    cat_lines = "\n".join(f"- {c['name']}  [{c['group']}]" for c in categories.public())
-    txn_lines = []
-    for it in items:
-        hist = ", ".join(f"{c['category_name']} ({c['source']}, {c['confidence']:.2f})" for c in it["candidates"]) or "none"
-        txn_lines.append(
-            f"id={it['id']} date={it['date']} amount={it['amount']:.2f} merchant={it['merchant']!r} "
-            f"statement={it['plaid_name']!r} account={it['account']!r} current={it['current_category']!r} "
-            f"signals: {hist}")
-    prompt = (
-        "You categorize personal-finance transactions for a household's Monarch Money account. "
-        "Negative amounts are money out, positive are money in. Pick exactly one category per transaction "
-        "from this list (use the exact name):\n" + cat_lines +
-        "\n\nFor each transaction give the best category, a confidence from 0 to 1, and a one-sentence reason. "
-        "Weigh the signals: a strong merchant history usually wins; the current category may be a Plaid guess.\n\n"
-        "Transactions:\n" + "\n".join(txn_lines))
+    if shutil.which("claude") is None:
+        return {}, "`claude` CLI not found on PATH (install Claude Code or run with --no-ai)"
+    request_path = write_ai_request(run_dir, run_id, items, categories)
+    proposals_path = run_dir / AI_PROPOSALS_FILE
     try:
-        client = anthropic.Anthropic()
-        resp = client.messages.parse(model=model, max_tokens=4000, output_format=Picks,
-                                     messages=[{"role": "user", "content": prompt}])
-        if resp.stop_reason == "refusal":
-            return {}, "model declined the request"
-        picks = {}
-        for p in resp.parsed_output.picks:
-            cat = categories.resolve(p.category)
-            if cat:
-                picks[p.transaction_id] = {"category_id": cat["id"], "category_name": cat["name"],
-                                           "confidence": max(0.0, min(1.0, p.confidence)), "source": f"ai:{model}",
-                                           "reason": p.reason}
-        return picks, None
-    except Exception as e:  # auth, network, rate limit, schema: all leave the human in charge
-        return {}, f"{type(e).__name__}: {str(e)[:200]}"
+        proposals_path.unlink()  # a leftover from an interrupted run must not pass as fresh
+    except FileNotFoundError:
+        pass
+    cmd = ["claude"]
+    if not sys.stdin.isatty():
+        cmd.append("-p")  # unattended (cron, background job): print mode instead of the interactive session
+    if AI_MODEL:
+        cmd += ["--model", AI_MODEL]
+    cmd.append(ai_prompt(request_path, proposals_path))
+    print(f"  invoking `claude` to classify {len(items)} transaction(s); exit the session when it reports completion")
+    try:
+        rc = subprocess.run(cmd, stdout=sys.stdout, stderr=sys.stderr).returncode
+    except OSError as e:
+        return {}, f"could not start `claude`: {e}"
+    if rc != 0:
+        return {}, f"`claude` exited with status {rc}"
+    if not proposals_path.exists():
+        return {}, f"Claude did not write {proposals_path.name}; re-run or use --no-ai"
+    return load_ai_proposals(proposals_path, items, categories, AI_MODEL or "claude-cli")
 
 
 # --------------------------------------------------------------------------- monarch I/O
@@ -468,30 +551,30 @@ def cmd_run(args):
                 "proposed": dict(best) if best else None,
             })
 
+        run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
+        run_dir = RUNS_DIR / run_id
+        run_dir.mkdir(parents=True, exist_ok=True)
+        (run_dir / "transactions.json").write_text(json.dumps(txns, indent=2))
+
         uncertain = [it for it in items if not it["proposed"] or it["proposed"]["confidence"] < args.ai_threshold]
         ai_error = None
         if uncertain and not args.no_ai:
-            print(f"Asking {AI_MODEL} about {len(uncertain)} low-confidence transaction(s)...")
-            picks, ai_error = ai_pick(uncertain, cats)
+            print(f"AI step: {len(uncertain)} low-confidence transaction(s) -> {run_dir.relative_to(HERE) / AI_REQUEST_FILE}")
+            picks, ai_error = ai_pick(run_dir, run_id, uncertain, cats)
             for it in uncertain:
                 p = picks.get(it["id"])
                 if p:
                     it["candidates"].insert(0, p)
                     it["proposed"] = dict(p)
             if ai_error:
-                print(f"  AI step unavailable: {ai_error}\n  Those rows stay flagged for the reviewer.", file=sys.stderr)
+                print(f"  AI step incomplete: {ai_error}\n  Rows without a verdict stay flagged for the reviewer.", file=sys.stderr)
         for it in items:
             it["needs_human"] = (not it["proposed"]) or it["proposed"]["confidence"] < args.ai_threshold
-
-        run_id = datetime.now().strftime("%Y%m%d-%H%M%S")
-        run_dir = RUNS_DIR / run_id
-        run_dir.mkdir(parents=True, exist_ok=True)
-        (run_dir / "transactions.json").write_text(json.dumps(txns, indent=2))
         run = {
             "run_id": run_id, "generated_at": datetime.now().isoformat(timespec="seconds"),
             "selection": {"limit": args.limit, "days": args.days, "since": args.since, "until": args.until, "all": args.all},
-            "ai": {"model": AI_MODEL, "threshold": args.ai_threshold, "asked": len(uncertain) if not args.no_ai else 0,
-                   "error": ai_error},
+            "ai": {"model": AI_MODEL or "claude-cli", "threshold": args.ai_threshold,
+                   "asked": len(uncertain) if not args.no_ai else 0, "error": ai_error},
             "categories": cats.public(),
             "items": items,
         }

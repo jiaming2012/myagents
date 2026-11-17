@@ -4,8 +4,9 @@ Goal: categorize repeating Monarch Money transactions quickly and accurately, se
 or low-confidence ones to an AI model, let a human review and correct everything on one page, and
 write back to Monarch only after approval.
 
-Status (2026-11-17): spike works end to end on 5 transactions except the AI call, which needs an
-Anthropic credential on this machine (see Open items).
+Status (2026-11-17): spike works end to end on 5 transactions, AI step included. The AI step is
+modelled on sales-processor's payroll classify step (`internal/classify`): request file, `claude` CLI,
+proposals file.
 
 ## Pipeline
 
@@ -28,9 +29,24 @@ Selection defaults to needs-review transactions only; `--all` includes reviewed 
 | `monarch-default` | 0.50 | whatever Monarch or Plaid already assigned |
 | `ai:<model>` | model-reported | one structured-output call for every item below the threshold |
 
-Items whose best candidate is below `--ai-threshold` (default 0.8) go to the model; if the model is
-unavailable they stay flagged "needs a human pick" and the review page offers an Ask Claude button
-that uses the artifact's own sampling capability instead.
+Items whose best candidate is below `--ai-threshold` (default 0.8) go to the AI step. A verdict
+that still lands below the threshold stays flagged "needs a human pick"; the review page also
+offers an Ask Claude button that uses the artifact's own sampling capability.
+
+### AI step (same shape as `task payroll` in sales-processor)
+
+1. The run writes `runs/<run-id>/ai_request.json`: the uncertain transactions, their signals
+   (rule, Monarch rule, history), and the household's category list.
+2. It invokes the `claude` CLI with a self-contained prompt that names both files, the exact output
+   shape, and the rules (one proposal per transaction, ids only from the request, low confidence
+   instead of a guess). At a terminal this is an interactive Claude Code session that ends with
+   "Classification complete — please exit"; unattended (no TTY) it runs in print mode (`-p`).
+3. After the CLI exits the run validates `ai_proposals.json` like sales-processor's Apply: unknown
+   transaction or category ids are errors, missing verdicts are reported, the rest are merged.
+
+No API key: the CLI uses the operator's Claude Code login. `CATEGORIZE_AI_MODEL` passes `--model`;
+`task finance:categorize:no-ai` is the equivalent of `payroll:no-classify`. An operator can hand-edit
+`ai_proposals.json` before the review page is built, the same contract as `proposals_<to>.json`.
 
 ### Data folder `finance-tools/data/categorize/`
 
@@ -68,17 +84,19 @@ or have Claude read the artifact's data store and write the file.
 - **Writes exist.** `update_transaction(category_id=…, needs_review=False)` is the apply primitive; the
   spike exercised it in dry-run only.
 
+- **The CLI analyze step runs.** Run 20261117-112314 sent 3 uncertain rows to Claude: Google Fiber
+  came back Tech at 0.80 (clears the threshold), the two Navy Federal transfers at 0.65 and 0.75
+  (stay with the reviewer). Each `claude` invocation loads the project context, so a run costs on
+  the order of a dollar regardless of how many rows it classifies; batching rows per run is the
+  lever, not per-row calls.
+
 ## Open items
 
-1. **AI credential.** The only Anthropic CLI profile (`admin`) is OAuth without a refresh token, so
-   the SDK cannot authenticate. Fix with `ant auth login` (stores a usable profile) or
-   `ANTHROPIC_API_KEY` in `finance-tools/.env`. Model defaults to `claude-opus-5-5`
-   (`CATEGORIZE_AI_MODEL` overrides).
-2. **Hidden rule criteria.** Capture the web app's current `GetTransactionRules` request in DevTools
+1. **Hidden rule criteria.** Capture the web app's current `GetTransactionRules` request in DevTools
    (Network tab, filter `graphql`) and add the missing criteria field to `RULES_QUERY`.
-3. **Rule actions beyond category.** Monarch rules can also rename the merchant, add tags, hide from
+2. **Rule actions beyond category.** Monarch rules can also rename the merchant, add tags, hide from
    reports, or split. Local rules only set a category for now.
-4. **Promote learned rules.** After a few runs, merchants the AI or the human picked consistently
+3. **Promote learned rules.** After a few runs, merchants the AI or the human picked consistently
    should be offered as new `rules.yaml` entries (or created in Monarch via `createTransactionRuleV2`).
-5. **Selection by account** (`--account 8206`) and a scheduled weekly run that publishes the review
+4. **Selection by account** (`--account 8206`) and a scheduled weekly run that publishes the review
    page and leaves a Todoist task.

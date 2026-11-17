@@ -6,4 +6,3 @@ gql<4
 pytest
 tabulate
 python-dateutil
-anthropic
