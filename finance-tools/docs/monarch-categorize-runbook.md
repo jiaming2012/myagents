@@ -1,6 +1,6 @@
 # Monarch categorize — end-to-end runbook (this Mac)
 
-Five pastes and three clicks. Every command uses `latest`, so nothing has to be typed by hand.
+Five pastes and two clicks. Every command uses `latest`, so nothing has to be typed by hand.
 
 ## Once per terminal
 
@@ -46,8 +46,7 @@ On the page that opened:
 
 1. Change any category from its dropdown; tick or untick **Apply** per row. Rows flagged "needs a
    pick" start unticked.
-2. **Click Approve.**
-3. **Click Copy approved JSON.** The status line confirms the copy.
+2. **Click Approve and copy JSON.** The status line confirms the count and the copy.
 
 (As a local file the page has no saved state and no Ask Claude button; both only exist when the
 page is published as a claude.ai artifact.)
@@ -78,7 +77,7 @@ should fetch a different set, since the applied rows are reviewed now.
 | `Monarch rejected the saved credentials (401)` | `task finance:balances:login` from `/Users/jamal/projects/myagents`, then retry |
 | `` `claude` CLI not found on PATH `` | install Claude Code, or use `task finance:categorize:no-ai` |
 | `Claude did not write ai_proposals.json` | re-run step 2, or use the no-ai task |
-| `Clipboard does not hold JSON` | on the review page click Approve, then Copy approved JSON, then retry step 4 |
+| `Clipboard does not hold JSON` | on the review page click Approve and copy JSON again, then retry step 4 |
 | `Clipboard holds decisions for run X, not Y` | the page open in the browser is an older run; open `data/categorize/runs/<latest>/review.html` |
 | Want to change a verdict after step 4 | edit `data/categorize/runs/<id>/approved.json` (set `"apply": false` or a new `category_id`), then step 5 |
 

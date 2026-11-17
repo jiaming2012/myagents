@@ -617,7 +617,7 @@ def cmd_run(args):
                   f"{p['category_name'][:20]:20} {p['confidence']:>5.2f}  {p['source']}{flag}")
         n_h = sum(it["needs_human"] for it in items)
         print(f"\n{len(items)} proposed, {n_h} need a human pick (*). Review: {run_dir / 'review.html'}")
-        print("Then: click Approve and 'Copy approved JSON' on the review page, "
+        print("Then: click 'Approve and copy JSON' on the review page, "
               "task finance:categorize:approve -- latest, task finance:categorize:apply -- latest --execute")
         if args.open:
             import webbrowser
@@ -652,14 +652,14 @@ def read_clipboard():
 
 
 def save_approved_from_clipboard(run_dir, run_id):
-    """Write the review page's 'Copy approved JSON' payload to <run>/approved.json after checking it."""
+    """Write the review page's 'Approve and copy JSON' payload to <run>/approved.json after checking it."""
     text = read_clipboard()
     if not text:
-        sys.exit("Clipboard is empty or unreadable. On the review page click Approve, then 'Copy approved JSON'.")
+        sys.exit("Clipboard is empty or unreadable. On the review page click 'Approve and copy JSON'.")
     try:
         doc = json.loads(text)
     except ValueError:
-        sys.exit("Clipboard does not hold JSON. On the review page click 'Copy approved JSON' first.")
+        sys.exit("Clipboard does not hold JSON. On the review page click 'Approve and copy JSON' first.")
     if not isinstance(doc, dict) or "decisions" not in doc:
         sys.exit("Clipboard JSON is not an approved-decisions export (no 'decisions' key).")
     if doc.get("run_id") and doc["run_id"] != run_id:
@@ -781,7 +781,7 @@ def main():
     ra.add_argument("run", help="run id (folder name under data/categorize/runs/), or 'latest'")
     ra.add_argument("--approved", help="approved.json exported from the review page (default: <run>/approved.json if present)")
     ra.add_argument("--from-clipboard", action="store_true",
-                    help="take the review page's 'Copy approved JSON' payload from the clipboard and save it as <run>/approved.json")
+                    help="take the review page's 'Approve and copy JSON' payload from the clipboard and save it as <run>/approved.json")
     ra.add_argument("--execute", action="store_true", help="actually update Monarch (default: dry run)")
     ra.add_argument("--no-mark-reviewed", action="store_true", help="leave the needs-review flag as is")
 

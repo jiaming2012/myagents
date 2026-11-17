@@ -14,7 +14,7 @@ proposals file.
 |------|---------|--------------|
 | 1. Rules | `task finance:categorize:rules` | Snapshots the rules stored inside Monarch to `data/categorize/monarch_rules.json` |
 | 2. Run | `task finance:categorize -- --limit 50` or `-- --days 7` or `-- --since 2026-11-01` | Fetches the group, proposes a category per transaction, writes `data/categorize/runs/<run-id>/` |
-| 3. Review | `review.html` (opens itself with `--open`) or the published artifact | Human edits picks, ticks what to apply, presses Approve, copies the approved JSON |
+| 3. Review | `review.html` (opens itself with `--open`) or the published artifact | Human edits picks, ticks what to apply, presses "Approve and copy JSON" |
 | 4. Approve | `task finance:categorize:approve -- latest` | Saves the clipboard payload as `<run>/approved.json` and prints the dry run |
 | 5. Apply | `task finance:categorize:apply -- latest --execute` | Pushes category changes and clears needs-review; dry run without `--execute` |
 
@@ -66,8 +66,8 @@ as a local file and as a published artifact. As an artifact it declares the `db`
 `sample` capabilities:
 
 - every edit is saved to `runs/<run-id>/decisions/<transaction-id>` ({category_id, category_name, apply});
-- Approve writes `runs/<run-id>` = {status: approved, approved_at, count};
-- Copy approved JSON puts the same decisions on the clipboard in the shape `apply --approved` reads;
+- the single "Approve and copy JSON" button writes `runs/<run-id>` = {status: approved, approved_at, count} and
+  puts the decisions on the clipboard in the shape `apply --approved` reads;
 - Ask Claude on a flagged row asks the model from inside the page (no API key on the machine needed).
 
 Carrying decisions from the artifact to the apply step: paste the copied JSON into `approved.json`,

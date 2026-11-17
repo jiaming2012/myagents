@@ -203,7 +203,7 @@ tasks:
       - python monarch_categorize.py rules pull
 
   categorize:approve:
-    desc: "Save the review page's 'Copy approved JSON' clipboard payload into the run and show the dry run: -- latest (or a run id)"
+    desc: "Save the review page's 'Approve and copy JSON' clipboard payload into the run and show the dry run: -- latest (or a run id)"
     cmds:
       - python monarch_categorize.py apply {{.CLI_ARGS}} --from-clipboard
 

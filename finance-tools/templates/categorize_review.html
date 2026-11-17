@@ -86,8 +86,7 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
   <span class="count" id="count"></span>
   <span class="status" id="status"></span>
   <span class="spacer"></span>
-  <button class="btn" id="copy">Copy approved JSON</button>
-  <button class="btn primary" id="approve">Approve</button>
+  <button class="btn primary" id="approve">Approve and copy JSON</button>
 </div>
 
 <script>
@@ -121,7 +120,7 @@ function render() {
     .map(([n, l]) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`).join('');
   const notes = [];
   if (RUN.ai.error) notes.push(`<div class="note warn">AI step did not run (${escapeHtml(RUN.ai.error)}). Low-confidence rows show the best rule or history guess; use Ask Claude or pick by hand.</div>`);
-  if (runDoc && runDoc.status === 'approved') notes.push(`<div class="note ok">Approved ${runDoc.approved_at.replace('T', ' ')} with ${runDoc.count} change(s). Run the apply step to send them to Monarch.</div>`);
+  if (runDoc && runDoc.status === 'approved') notes.push(`<div class="note ok">Approved ${runDoc.approved_at.replace('T', ' ')} with ${runDoc.count} change(s). Next: task finance:categorize:approve -- latest, then apply.</div>`);
   $('#notes').innerHTML = notes.join('');
   $('#filters').innerHTML = [['all', 'All'], ['human', 'Needs a pick'], ['changed', 'Category changes'], ['apply', 'Marked apply']]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l}</button>`).join('');
@@ -178,18 +177,23 @@ document.addEventListener('click', async (e) => {
   const chip = e.target.closest('.chip'); if (chip) { filter = chip.dataset.f; render(); return; }
   const ask = e.target.closest('button.ask'); if (ask) { await askClaude(ask.dataset.id, ask); return; }
 });
-$('#copy').addEventListener('click', async () => {
-  const text = JSON.stringify(approvedJson(), null, 2);
-  try { await navigator.clipboard.writeText(text); setStatus('Approved JSON copied. Next: task finance:categorize:approve -- latest'); }
-  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); setStatus('Clipboard blocked: the JSON is selected below, copy it by hand.'); }
-});
+// One click: record the approval (in the shared store when there is one) and put the decisions on
+// the clipboard for `task finance:categorize:approve -- latest`. The clipboard write must stay inside
+// the click handler, so it runs before any awaited store write.
 $('#approve').addEventListener('click', async () => {
   const count = RUN.items.filter(it => state[it.id].apply).length;
   runDoc = { status: 'approved', approved_at: new Date().toISOString(), count };
+  const text = JSON.stringify(approvedJson(), null, 2);
+  let copied = true;
+  try { await navigator.clipboard.writeText(text); }
+  catch { copied = false; const ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('aria-label', 'Approved JSON'); document.body.appendChild(ta); ta.select(); }
+  let saved = '';
   if (db) {
-    try { await db.doc(`runs/${RUN.run_id}`).set(runDoc); setStatus('Approval saved.'); }
-    catch (e) { setStatus(`Could not save approval: ${e.code || e}`); }
-  } else setStatus('Approved. Now click "Copy approved JSON", then run: task finance:categorize:approve -- latest');
+    try { await db.doc(`runs/${RUN.run_id}`).set(runDoc); saved = ' Approval saved to the page.'; }
+    catch (e) { saved = ` Approval could not be saved to the page (${e.code || e}).`; }
+  }
+  setStatus(copied ? `Approved ${count} change(s) and copied the JSON.${saved} Next: task finance:categorize:approve -- latest`
+                   : `Approved ${count} change(s). Clipboard blocked: the JSON is selected below, copy it by hand.${saved}`);
   render();
 });
 function approvedJson() {
