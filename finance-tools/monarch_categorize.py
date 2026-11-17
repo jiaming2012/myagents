@@ -65,13 +65,17 @@ TEMPLATE = HERE / "templates" / "categorize_review.html"
 # Passed to `claude --model` when set; empty means the CLI's own default, as sales-processor does.
 AI_MODEL = os.environ.get("CATEGORIZE_AI_MODEL", "").strip()
 
-# Every field of Monarch's TransactionRuleV2 that resolves for a normal user (spiked 2026-11-17;
-# mergeTransactionAction errors server-side and is left out on purpose).
+# Field set taken from the web app's Web_GetTransactionRules request (DevTools capture, 2026-11-17).
+# merchantCriteria is the legacy merchant clause; newer rules use merchantNameCriteria (merchant name)
+# and originalStatementCriteria (the bank's raw description). None of the public client libraries
+# select the latter two, which is why those rules looked criteria-less at first.
 RULES_QUERY = """
 query GetTransactionRules {
   transactionRules {
     id order merchantCriteriaUseOriginalStatement
     merchantCriteria { operator value }
+    merchantNameCriteria { operator value }
+    originalStatementCriteria { operator value }
     amountCriteria { operator isExpense value valueRange { lower upper } }
     categoryIds accountIds
     categories { id name }
@@ -102,21 +106,29 @@ def load_local_rules(path=RULES_FILE):
 def monarch_rules_as_local(monarch_rules):
     """Translate Monarch's stored rules into the local rule shape so one matcher serves both.
 
-    Monarch operators seen in the wild: merchant `contains` / `eq` / `starts_with` / `ends_with`,
-    amount `eq` / `gt` / `lt` / `between`. Unknown operators make the rule never match and are
-    reported so the mapping can be extended.
+    Monarch operators seen in the wild: text `contains` / `eq`, amount `eq` / `gt` / `lt` / `between`.
+    Several criteria in one list are any-of (a merchant cannot equal two strings at once); different
+    criteria fields are and-ed. Unknown operators make the rule never match and are reported so the
+    mapping can be extended.
     """
     out = []
     for r in monarch_rules:
         if not r.get("setCategoryAction"):
             continue  # only category-setting rules matter here
         match = {}
-        mc = r.get("merchantCriteria") or []
-        if mc:
-            crit = mc[0]
-            match["merchant"] = {_merchant_op(crit.get("operator")): crit.get("value", "")}
-            if r.get("merchantCriteriaUseOriginalStatement"):
-                match["merchant"]["use_original_statement"] = True
+        legacy = r.get("merchantCriteria") or []
+        if legacy:
+            specs = [{_merchant_op(c.get("operator")): c.get("value", "")} for c in legacy]
+            key = "statement" if r.get("merchantCriteriaUseOriginalStatement") else "merchant"
+            match[key] = specs if len(specs) > 1 else specs[0]
+        names = r.get("merchantNameCriteria") or []
+        if names:
+            specs = [{_merchant_op(c.get("operator")): c.get("value", "")} for c in names]
+            match["merchant"] = specs if len(specs) > 1 else specs[0]
+        stmts = r.get("originalStatementCriteria") or []
+        if stmts:
+            specs = [{_merchant_op(c.get("operator")): c.get("value", "")} for c in stmts]
+            match["statement"] = specs if len(specs) > 1 else specs[0]
         ac = r.get("amountCriteria")
         if ac:
             amt = {}
@@ -139,8 +151,8 @@ def monarch_rules_as_local(monarch_rules):
         if r.get("categoryIds"):
             match["current_category"] = {"id_in": list(r["categoryIds"])}
         if not match:
-            # Criteria live in a field the query does not fetch (seen on ~25 of 87 rules, Nov 2026).
-            # An empty match would fire on everything, so the rule is kept for the report but never matches.
+            # No criteria the query knows about. An empty match would fire on everything, so the rule
+            # is kept for the report but never matches.
             match = {"_unresolved_criteria": True}
         out.append({
             "name": f"monarch-rule:{r['id']}",
@@ -159,7 +171,12 @@ def _merchant_op(op):
 
 
 def _text_match(spec, text):
-    """spec like {"contains": "x"} against text, case-insensitive; one operator per spec."""
+    """spec like {"contains": "x"} against text, case-insensitive; one operator per spec.
+
+    A list of specs is any-of, the way Monarch treats several values on one criterion.
+    """
+    if isinstance(spec, list):
+        return any(_text_match(s, text) for s in spec)
     text = (text or "").lower()
     for op, needle in spec.items():
         if op == "use_original_statement":
@@ -211,7 +228,8 @@ def rule_matches(rule, txn):
         return False  # a rule with no (known) criteria must never match everything
     if "merchant" in m:
         spec = m["merchant"]
-        text = txn.get("plaidName") if spec.get("use_original_statement") else (txn.get("merchant") or {}).get("name")
+        on_statement = isinstance(spec, dict) and spec.get("use_original_statement")
+        text = txn.get("plaidName") if on_statement else (txn.get("merchant") or {}).get("name")
         if not _text_match(spec, text):
             return False
     if "statement" in m and not _text_match(m["statement"], txn.get("plaidName")):

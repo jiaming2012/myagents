@@ -4,8 +4,9 @@
 # category action) so a rule can be moved into Monarch later without translation.
 #
 # match clauses (all optional, all case-insensitive):
-#   merchant:  { contains | equals | starts_with | ends_with | regex: "text", use_original_statement: false }
+#   merchant:  { contains | equals | starts_with | ends_with | regex: "text" }   # the Monarch merchant name
 #   statement: { contains | equals | starts_with | ends_with | regex: "text" }   # the bank's raw description
+#              either may be a list of such specs, meaning any-of (Monarch's "merchant is X or Y")
 #   amount:    { is_expense: true|false, equals: 12.34, between: [lo, hi], greater_than: x, less_than: y }
 #   account:   { contains: "8206" }        # matches the Monarch account display name
 # set:

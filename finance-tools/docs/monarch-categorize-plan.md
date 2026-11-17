@@ -74,11 +74,13 @@ or have Claude read the artifact's data store and write the file.
 
 - **Monarch's rules are readable.** `GetTransactionRules` over the GraphQL API returns 87 rules for this
   household. Every field the web app selects resolves except `mergeTransactionAction`.
-- **86 rules set a category.** 61 translate cleanly (merchant eq/contains, amount eq/gt/lt/between,
-  account, current category). 25 come back with every known criteria field null even though some
-  have `recentApplicationCount > 0`, so their criteria live in a field no public query selects.
-  They are kept in the snapshot but never matched. The monarchmoney-enhanced fork selects the same
-  five criteria fields, so it does not know the extra field either.
+- **86 rules set a category and all 86 translate.** The first pull left 25 looking criteria-less:
+  newer rules store their text criteria in `merchantNameCriteria` (merchant name) and
+  `originalStatementCriteria` (the bank's raw description), fields that neither the monarchmoney
+  library nor its enhanced fork select. The web app's `Web_GetTransactionRules` request (DevTools
+  capture) revealed them; `RULES_QUERY` now selects both. Several values on one criterion are
+  any-of (Monarch's "merchant is X or Y"); different criteria are and-ed. Legacy
+  `merchantCriteria` with `merchantCriteriaUseOriginalStatement` maps to the statement clause.
 - **Merchant history is a strong signal.** Citi 23/24 past transactions agree (0.96); Google Fiber and
   Navy Federal sit at 3/4 and 4/6 and were correctly handed to the AI/human tier.
 - **Writes exist.** `update_transaction(category_id=…, needs_review=False)` is the apply primitive; the
@@ -92,11 +94,9 @@ or have Claude read the artifact's data store and write the file.
 
 ## Open items
 
-1. **Hidden rule criteria.** Capture the web app's current `GetTransactionRules` request in DevTools
-   (Network tab, filter `graphql`) and add the missing criteria field to `RULES_QUERY`.
-2. **Rule actions beyond category.** Monarch rules can also rename the merchant, add tags, hide from
+1. **Rule actions beyond category.** Monarch rules can also rename the merchant, add tags, hide from
    reports, or split. Local rules only set a category for now.
-3. **Promote learned rules.** After a few runs, merchants the AI or the human picked consistently
+2. **Promote learned rules.** After a few runs, merchants the AI or the human picked consistently
    should be offered as new `rules.yaml` entries (or created in Monarch via `createTransactionRuleV2`).
-4. **Selection by account** (`--account 8206`) and a scheduled weekly run that publishes the review
+3. **Selection by account** (`--account 8206`) and a scheduled weekly run that publishes the review
    page and leaves a Todoist task.
