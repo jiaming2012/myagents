@@ -1,0 +1,234 @@
+<title>Monarch Category Review</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one ledger table, summary strip above, sticky approve bar below. */
+:root {
+  --bg: #f3f5f3; --surface: #ffffff; --fg: #1c2420; --muted: #5d6b64; --line: #d7ddd9;
+  --accent: #1f6f50; --accent-ink: #ffffff;
+  --ok: #2f7d4f; --warn: #b7791f; --crit: #b23a3a; --ok-bg: #e4f1e8; --warn-bg: #f7ecd6; --crit-bg: #f6e0e0;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #141a17; --surface: #1c2420; --fg: #e4e9e5; --muted: #98a69f; --line: #2d3832;
+  --accent: #5fc49a; --accent-ink: #0f1a14;
+  --ok: #6fcf97; --warn: #e2b05a; --crit: #ef8a8a; --ok-bg: #1d3328; --warn-bg: #3a2e16; --crit-bg: #3d2020;
+  color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #141a17; --surface: #1c2420; --fg: #e4e9e5; --muted: #98a69f; --line: #2d3832;
+  --accent: #5fc49a; --accent-ink: #0f1a14;
+  --ok: #6fcf97; --warn: #e2b05a; --crit: #ef8a8a; --ok-bg: #1d3328; --warn-bg: #3a2e16; --crit-bg: #3d2020;
+  color-scheme: dark; }
+
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--sans); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-block: 24px 96px; padding-inline: 16px; }
+h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; text-wrap: balance; }
+.sub { color: var(--muted); margin: 0 0 18px; }
+.sub code, td code, .reason code { font-family: var(--mono); font-size: 12px; }
+.strip { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 10px 14px; min-width: 120px; }
+.tile b { display: block; font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.tile span { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+.filters { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip { border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 999px; padding: 4px 12px; cursor: pointer; font: inherit; }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.note { padding: 10px 14px; border-radius: 6px; margin-bottom: 12px; }
+.note.warn { background: var(--warn-bg); color: var(--fg); border-left: 4px solid var(--warn); }
+.note.ok { background: var(--ok-bg); border-left: 4px solid var(--ok); }
+.tablewrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; min-width: 860px; }
+th { text-align: left; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 10px; border-bottom: 1px solid var(--line); }
+td { padding: 10px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+tr:last-child td { border-bottom: 0; }
+tr.hidden { display: none; }
+td.amt { font-family: var(--mono); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+td.amt.in { color: var(--ok); }
+.merchant b { font-weight: 500; display: block; }
+.merchant small, .acct { color: var(--muted); font-size: 12px; display: block; }
+select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); color: var(--fg); max-width: 220px; }
+select.changed { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 500; white-space: nowrap; }
+.pill.ok { background: var(--ok-bg); color: var(--ok); }
+.pill.warn { background: var(--warn-bg); color: var(--warn); }
+.pill.crit { background: var(--crit-bg); color: var(--crit); }
+.src { color: var(--muted); font-size: 12px; display: block; margin-top: 3px; font-family: var(--mono); }
+.reason { color: var(--muted); font-size: 12px; max-width: 260px; }
+button.ask { font: inherit; font-size: 12px; margin-top: 6px; padding: 4px 10px; border-radius: 4px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; }
+button.ask:disabled { opacity: .5; cursor: default; }
+input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
+.bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.bar .count { font-variant-numeric: tabular-nums; }
+.bar .spacer { flex: 1; }
+.btn { font: inherit; font-weight: 500; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+.status { color: var(--muted); font-size: 12px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: no-preference) { select.changed { transition: box-shadow .15s; } }
+</style>
+
+<div class="wrap">
+  <h1>Monarch Category Review</h1>
+  <p class="sub" id="sub"></p>
+  <div class="strip" id="strip"></div>
+  <div id="notes"></div>
+  <div class="filters" id="filters"></div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr>
+        <th>Date</th><th style="text-align:right">Amount</th><th>Merchant</th><th>Current</th><th>Category</th><th>Confidence</th><th>Why</th><th>Apply</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </div>
+</div>
+<div class="bar">
+  <span class="count" id="count"></span>
+  <span class="status" id="status"></span>
+  <span class="spacer"></span>
+  <button class="btn" id="copy">Copy approved JSON</button>
+  <button class="btn primary" id="approve">Approve</button>
+</div>
+
+<script>
+const RUN = /*__DATA__*/null;
+const $ = (s) => document.querySelector(s);
+const state = {};            // txn id -> {category_id, category_name, apply}
+let runDoc = null, db = null, sample = null, filter = "all";
+const catById = Object.fromEntries(RUN.categories.map(c => [c.id, c]));
+const inflight = {};         // txn id -> promise chain, one write at a time per doc
+
+for (const it of RUN.items) {
+  state[it.id] = { category_id: it.proposed ? it.proposed.category_id : it.current_category_id,
+                   category_name: it.proposed ? it.proposed.category_name : it.current_category,
+                   apply: !it.needs_human && !!it.proposed };
+}
+
+function pillFor(it) {
+  const p = it.proposed;
+  if (!p) return ['crit', 'no proposal'];
+  const c = p.confidence;
+  return c >= RUN.ai.threshold ? ['ok', c.toFixed(2)] : c >= 0.5 ? ['warn', c.toFixed(2)] : ['crit', c.toFixed(2)];
+}
+function money(n) { return (n < 0 ? '−' : '+') + Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+
+function render() {
+  const changed = RUN.items.filter(it => state[it.id].category_id !== it.current_category_id).length;
+  const human = RUN.items.filter(it => it.needs_human).length;
+  const toApply = RUN.items.filter(it => state[it.id].apply).length;
+  $('#sub').innerHTML = `Run <code>${RUN.run_id}</code> generated ${RUN.generated_at.replace('T', ' ')} · selection ${selectionText()} · AI ${RUN.ai.model}, threshold ${RUN.ai.threshold}`;
+  $('#strip').innerHTML = [[RUN.items.length, 'transactions'], [changed, 'category changes'], [human, 'need a human pick'], [toApply, 'marked apply']]
+    .map(([n, l]) => `<div class="tile"><b>${n}</b><span>${l}</span></div>`).join('');
+  const notes = [];
+  if (RUN.ai.error) notes.push(`<div class="note warn">AI step did not run (${escapeHtml(RUN.ai.error)}). Low-confidence rows show the best rule or history guess; use Ask Claude or pick by hand.</div>`);
+  if (runDoc && runDoc.status === 'approved') notes.push(`<div class="note ok">Approved ${runDoc.approved_at.replace('T', ' ')} with ${runDoc.count} change(s). Run the apply step to send them to Monarch.</div>`);
+  $('#notes').innerHTML = notes.join('');
+  $('#filters').innerHTML = [['all', 'All'], ['human', 'Needs a pick'], ['changed', 'Category changes'], ['apply', 'Marked apply']]
+    .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l}</button>`).join('');
+  $('#count').textContent = `${toApply} of ${RUN.items.length} will be applied`;
+  $('#approve').disabled = toApply === 0;
+  for (const it of RUN.items) {
+    const tr = document.getElementById('r-' + it.id);
+    const s = state[it.id];
+    tr.classList.toggle('hidden', !(filter === 'all' || (filter === 'human' && it.needs_human) || (filter === 'changed' && s.category_id !== it.current_category_id) || (filter === 'apply' && s.apply)));
+    const sel = tr.querySelector('select'); sel.value = s.category_id || ''; sel.classList.toggle('changed', s.category_id !== it.current_category_id);
+    tr.querySelector('input').checked = s.apply;
+  }
+}
+function selectionText() {
+  const s = RUN.selection;
+  const base = s.limit ? `last ${s.limit}` : s.since ? `${s.since} to ${s.until || 'today'}` : `last ${s.days || 7} days`;
+  return base + (s.all ? ', all' : ', needs review only');
+}
+function escapeHtml(t) { return String(t).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function buildRows() {
+  const groups = {};
+  for (const c of RUN.categories) (groups[c.group] = groups[c.group] || []).push(c);
+  const options = Object.entries(groups).map(([g, cs]) => `<optgroup label="${escapeHtml(g)}">` + cs.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('') + '</optgroup>').join('');
+  $('#rows').innerHTML = RUN.items.map(it => {
+    const [cls, txt] = pillFor(it);
+    const p = it.proposed || {};
+    return `<tr id="r-${it.id}">
+      <td style="white-space:nowrap">${it.date}</td>
+      <td class="amt ${it.amount > 0 ? 'in' : ''}">${money(it.amount)}</td>
+      <td class="merchant"><b>${escapeHtml(it.merchant || '(no merchant)')}</b><small>${escapeHtml(it.plaid_name)}</small><span class="acct">${escapeHtml(it.account)}</span></td>
+      <td>${escapeHtml(it.current_category || '—')}${it.needs_review ? '<span class="src">needs review</span>' : ''}</td>
+      <td><select id="sel-${it.id}" aria-label="Category for ${escapeHtml(it.merchant)}"><option value="">(keep current)</option>${options}</select></td>
+      <td><span class="pill ${cls}">${txt}</span><span class="src">${escapeHtml(p.source || '')}</span></td>
+      <td class="reason" id="why-${it.id}">${escapeHtml(p.reason || '')}${it.needs_human ? `<br><button class="ask" data-id="${it.id}" hidden>Ask Claude</button>` : ''}</td>
+      <td><input type="checkbox" id="ap-${it.id}" aria-label="Apply"></td>
+    </tr>`;
+  }).join('');
+}
+
+function persist(id) {
+  if (!db) return;
+  const body = { ...state[id], edited_at: new Date().toISOString() };
+  inflight[id] = (inflight[id] || Promise.resolve()).then(() => db.doc(`runs/${RUN.run_id}/decisions/${id}`).set(body)).catch(e => setStatus(`Could not save: ${e.code || e}`));
+}
+function setStatus(t) { $('#status').textContent = t; }
+
+document.addEventListener('change', (e) => {
+  const sel = e.target.closest('select'); const cb = e.target.closest('input[type=checkbox]');
+  if (sel) { const id = sel.id.slice(4); const c = catById[sel.value]; state[id].category_id = c ? c.id : null; state[id].category_name = c ? c.name : null; persist(id); render(); }
+  if (cb) { const id = cb.id.slice(3); state[id].apply = cb.checked; persist(id); render(); }
+});
+document.addEventListener('click', async (e) => {
+  const chip = e.target.closest('.chip'); if (chip) { filter = chip.dataset.f; render(); return; }
+  const ask = e.target.closest('button.ask'); if (ask) { await askClaude(ask.dataset.id, ask); return; }
+});
+$('#copy').addEventListener('click', async () => {
+  const text = JSON.stringify(approvedJson(), null, 2);
+  try { await navigator.clipboard.writeText(text); setStatus('Approved JSON copied. Save it as approved.json and run the apply task.'); }
+  catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); setStatus('Clipboard blocked: the JSON is selected below, copy it by hand.'); }
+});
+$('#approve').addEventListener('click', async () => {
+  const count = RUN.items.filter(it => state[it.id].apply).length;
+  runDoc = { status: 'approved', approved_at: new Date().toISOString(), count };
+  if (db) {
+    try { await db.doc(`runs/${RUN.run_id}`).set(runDoc); setStatus('Approval saved.'); }
+    catch (e) { setStatus(`Could not save approval: ${e.code || e}`); }
+  } else setStatus('Approved locally. Copy the JSON to carry it to the apply step.');
+  render();
+});
+function approvedJson() {
+  return { run_id: RUN.run_id, approved_at: (runDoc && runDoc.approved_at) || new Date().toISOString(), decisions: state };
+}
+
+async function askClaude(id, btn) {
+  if (!sample) return;
+  const it = RUN.items.find(x => x.id === id);
+  btn.disabled = true; btn.textContent = 'Thinking…';
+  const cats = RUN.categories.map(c => `${c.name} [${c.group}]`).join('; ');
+  const signals = it.candidates.map(c => `${c.category_name} (${c.source}, ${c.confidence})`).join('; ') || 'none';
+  const prompt = `Pick the single best Monarch Money category for this personal-finance transaction. Negative amounts are money out.\nCategories: ${cats}\nTransaction: date ${it.date}, amount ${it.amount}, merchant "${it.merchant}", bank description "${it.plaid_name}", account "${it.account}", current category "${it.current_category}". Signals: ${signals}.\nAnswer as JSON {"category": "<exact name>", "confidence": 0-1, "reason": "<one sentence>"}.`;
+  try {
+    const out = await sample.json(prompt);
+    const c = RUN.categories.find(x => x.name.toLowerCase() === String(out.category || '').toLowerCase());
+    if (!c) throw new Error('unknown category ' + out.category);
+    state[id].category_id = c.id; state[id].category_name = c.name;
+    document.getElementById('why-' + id).firstChild.textContent = `${out.reason} (Claude, ${Number(out.confidence).toFixed(2)})`;
+    persist(id); render();
+    btn.textContent = 'Ask again';
+  } catch (e) { btn.textContent = 'Ask Claude'; setStatus(`Claude could not answer: ${e.code || e.message || e}`); }
+  btn.disabled = false;
+}
+
+buildRows(); render();
+
+(async () => {
+  db = await window.claude?.use?.('db');
+  if (db) {
+    let timer = setTimeout(() => setStatus('Saved decisions are taking a while to load; the page shows the generated proposals.'), 10000);
+    db.collection(`runs/${RUN.run_id}/decisions`).onSnapshot((snap) => {
+      if (!snap.metadata.fromCache) { clearTimeout(timer); setStatus(''); }
+      for (const d of snap.docs) { const b = d.data(); if (state[d.id]) Object.assign(state[d.id], { category_id: b.category_id, category_name: b.category_name, apply: !!b.apply }); }
+      render();
+    }, (e) => { clearTimeout(timer); setStatus(`Saved decisions unavailable (${e.code}).`); });
+    db.doc(`runs/${RUN.run_id}`).onSnapshot((snap) => { runDoc = snap.exists ? snap.data() : null; render(); }, () => {});
+  }
+  sample = await window.claude?.use?.('sample');
+  if (sample) document.querySelectorAll('button.ask').forEach(b => b.hidden = false);
+})();
+</script>
