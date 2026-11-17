@@ -22,8 +22,8 @@ original plan), `zoho-books-recon-report.md` (outcome + API facts),
 ## 2. Weekly cycle (after the catch-up)
 
 ```
-cd ~/projects/yumyums/accounting/xero && task toast:export -- --from <last> --to <today>   # new Toast sales days
 cd ~/projects/myagents/finance-tools
+task zoho:toast-export -- --from <last> --to <today>   # new Toast sales days (runs toast_xero's export in its checkout; browser login when needed)
 task zoho:toast-dump            # refresh .toast_preview_2026.json
 task zoho:recon                 # dry run: pairing table, plan, unmatched merchants
 task zoho:recon:apply           # categorize / match / Toast journals; stops cleanly at the API cap
@@ -71,6 +71,13 @@ auto-categorize (rules fire at feed import, i.e. zero API calls).
 - A saved draft blocks new records (`19009`); `DELETE …/reconciliations/{id}` undoes
   the last one. Reconciled documents and the opening-balance record become immutable
   (`19007`, "This transaction has been reconciled").
+- A month that still holds an uncategorized feed line is **skipped** (and so are the
+  months after it on that account): posting it would freeze a wrong closing balance.
+  Added 2026-11-16 after 4613's October went in short by its 8 unbooked Toast credits
+  (undone with the DELETE above). Uncategorized lines are read from
+  `filter_by=Status.Uncategorized`; the account's transaction listing never shows them.
+- `--rules` names only the live Mercury accounts: a rule that lists an inactive
+  account (0551) is rejected with `11015`.
 
 ## 5. Repairs
 
@@ -101,6 +108,16 @@ Zoho has no bulk categorize/match endpoint; the levers are rules (free), the
 statement import (one call), and not re-running what the checkpoint already covers.
 
 ## 7. State as of 2026-10-16 and open items
+
+**2026-11-16 catch-up (Oct 16 → Nov 16):** Mercury transfers (19) and coded spends (6)
+posted, 5396 and 7818 = bank, October records posted for both; BoA 1778 / 2119 and
+LFCU = feed (19 writes); 17 new bank rules (11 Mercury, 3 BoA, plus the 5 merchants
+added to `merchants.yaml`: Advance Auto Parts, Harbor Freight, Zoho, Cloudflare,
+Mail Xpress; Hostinger on BoA). **Still open:** 4613's 16 Toast credits (Oct 19 →
+Nov 10, 7,868.17) wait on the Toast export (`task zoho:toast-export -- --from 2026-10-16`
+needs a browser login), then `task zoho:toast-dump`, `task zoho:recon:apply`,
+`task zoho:reconcile -- --apply` (4613 October). October statement balances for
+1778 / 2119 not yet in `closing_balances.yaml`.
 
 - 4613, 5396, 7818: every 2026 line booked, Jan–Sep records reconciled, book = Mercury.
 - 0551 (closed): fully booked, Jan–Jun reconciled, 0.00, **inactive**. Reconciliation

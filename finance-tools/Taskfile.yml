@@ -208,6 +208,12 @@ tasks:
     cmds:
       - python mercury_precode.py --apply {{.CLI_ARGS}}
 
+  zoho:toast-export:
+    desc: "Download new Toast sales days into the toast_xero checkout (opens a browser for the Toast login when needed): task zoho:toast-export -- --from YYYY-MM-DD [--to YYYY-MM-DD]"
+    dir: "{{.HOME}}/projects/yumyums/accounting/xero"
+    cmds:
+      - task toast:export -- {{.CLI_ARGS}}
+
   zoho:toast-dump:
     desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json"
     cmds:
