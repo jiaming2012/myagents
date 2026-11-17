@@ -215,9 +215,9 @@ tasks:
       - task toast:export -- {{.CLI_ARGS}}
 
   zoho:toast-dump:
-    desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json"
+    desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json; first re-exports any payout file Toast had not marked SENT (task zoho:toast-dump -- --no-refresh to skip)"
     cmds:
-      - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json
+      - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json {{.CLI_ARGS}}
 
   zoho:recon:
     desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md)"

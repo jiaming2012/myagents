@@ -3,7 +3,12 @@ line items) to JSON for zoho_books_recon.py. Read-only apart from toast_xero's
 own Mercury cache. Needs the toast_xero checkout at ~/projects/yumyums/accounting/xero
 with its inputs/ exports present (`task toast:export` there to add sales days).
 
-Usage: python toast_preview_dump.py FROM TO OUT.json   (see `task zoho:toast-dump`)"""
+Before collecting, payout zips whose rows Toast had not yet marked SENT are
+re-exported (toast_payout_status.py) — a CAPTURED row is not final and makes the
+deposit not balance. `--no-refresh` skips that (offline / no browser). Each
+deposit carries `payout_status` (worst Status over its payout rows).
+
+Usage: python toast_preview_dump.py FROM TO OUT.json [--no-refresh]   (see `task zoho:toast-dump`)"""
 import json
 import os
 import sys
@@ -13,6 +18,13 @@ from pathlib import Path
 
 REPO = Path.home() / "projects/yumyums/accounting/xero"
 fd, td, out = date.fromisoformat(sys.argv[1]), date.fromisoformat(sys.argv[2]), Path(sys.argv[3]).resolve()
+flags = set(sys.argv[4:])
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import toast_payout_status as tps  # noqa: E402
+
+if "--no-refresh" not in flags:
+    tps.refresh_provisional()
+statuses = tps.status_index()
 sys.path.insert(0, str(REPO))
 os.chdir(REPO)  # toast_xero resolves inputs/ relative to its package
 
@@ -26,9 +38,20 @@ except RuntimeError as e:
     print("collect() hard-failed:", str(e)[:2000])
     sys.exit(2)
 
+def payout_status(d):
+    """Worst Toast Status over the deposit's payout rows; None when no row is known."""
+    found = [statuses.get((r.settle_date.isoformat(), str(r.payouts.quantize(Decimal("0.01")))))
+             for r in d.payout_rows if r.settle_date]
+    found = [x for x in found if x]
+    if not found:
+        return None
+    return next((x for x in found if x != tps.FINAL_STATUS), tps.FINAL_STATUS)
+
+
 deps = []
 for d in res.deposits:
     deps.append({
+        "payout_status": payout_status(d),
         "settle_date": d.settle_date.isoformat() if d.settle_date else None,
         "bank_credit_date": d.bank_credit_date.isoformat() if d.bank_credit_date else None,
         "sales_dates": [s.isoformat() for s in d.sales_dates],

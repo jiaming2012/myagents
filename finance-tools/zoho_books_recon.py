@@ -373,8 +373,20 @@ def import_statement(z, zid, zoho_name, txns, state, apply, log):
 def load_toast(path):
     if not path:
         return []
-    data = json.loads(Path(path).read_text())
-    return [d for d in data["deposits"] if not d["has_problems"]]
+    # Flagged deposits (has_problems) are kept so a Mercury credit that pairs with
+    # one is reported with its reason instead of looking like a missing export.
+    return json.loads(Path(path).read_text())["deposits"]
+
+
+def toast_flag_reason(dep):
+    """Why toast_xero could not balance this deposit, and what clears it."""
+    status = dep.get("payout_status")
+    if status and status != "SENT":
+        return (f"payout row was still {status} in Toast when exported (not final): "
+                f"task zoho:toast-dump re-exports it once Toast has sent it")
+    if dep.get("unmapped"):
+        return f"unmapped Toast categories {dep['unmapped']}: add them to toast_xero config/mapping.yaml"
+    return "sales-day figures disagree with the payout row: task preview in the toast_xero checkout for that day"
 
 
 def pair_toast(toast_txns, deposits):
@@ -1083,7 +1095,8 @@ def main():
     needed |= {m["account"] for m in cfg.get("boa_merchants", [])}
     deposits = load_toast(args.toast)
     for dep in deposits:
-        needed |= {li["code"] for li in dep["line_items"]}
+        if not dep["has_problems"]:
+            needed |= {li["code"] for li in dep["line_items"]}
     missing_defs = [c for c in needed if c not in CHART]
     if missing_defs:
         sys.exit(f"codes without a CHART definition: {missing_defs}")
@@ -1151,8 +1164,10 @@ def main():
 
     # --- Toast pairing ---
     toast_map, toast_missing = pair_toast([t for _, t, _ in toast_txns], deposits) if deposits else ({}, [t for _, t, _ in toast_txns])
-    log(f"## Toast payouts: {len(toast_txns)} Mercury credits, {len(toast_map)} with a toast_xero deposit, "
-        f"{len(toast_missing)} without (left uncategorized)")
+    toast_flagged = {i: d for i, d in toast_map.items() if d["has_problems"]}
+    toast_map = {i: d for i, d in toast_map.items() if not d["has_problems"]}
+    log(f"## Toast payouts: {len(toast_txns)} Mercury credits, {len(toast_map)} with a clean toast_xero deposit, "
+        f"{len(toast_flagged)} with a deposit that does not balance, {len(toast_missing)} without (both left uncategorized)")
     if args.spike:
         clean = next((t for _, t, _ in toast_txns if t["id"] in toast_map and not toast_map[t["id"]]["split_remainder"]), None)
         split = next((t for _, t, _ in toast_txns if t["id"] in toast_map and toast_map[t["id"]]["split_remainder"]), None)
@@ -1247,10 +1262,18 @@ def main():
             agg[name][1] += money(t["amount"])
         for name, (n, s) in sorted(agg.items(), key=lambda kv: -kv[1][0]):
             log(f"- {name}: {n} txns, net {s}   # suggested: - {{pattern: \"{name[:30]}\", account: \"????\"}}")
+    if toast_flagged:
+        log(f"\n### Toast credits whose toast_xero deposit does not balance ({len(toast_flagged)}) — left uncategorized")
+        for _, t, _ in toast_txns:
+            dep = toast_flagged.get(t["id"])
+            if dep:
+                log(f"- {eastern_date(t['postedAt'])} {t['amount']:>10.2f}  split sums {dep['signed_sum']}, "
+                    f"off by {dep['unreconciled_diff']}: {toast_flag_reason(dep)}")
     if toast_missing:
         log(f"\n### Toast credits without a toast_xero deposit ({len(toast_missing)})")
         for t in toast_missing[:40]:
-            log(f"- {eastern_date(t['postedAt'])} {t['amount']:>10.2f}  (export the sales day: task toast:export)")
+            log(f"- {eastern_date(t['postedAt'])} {t['amount']:>10.2f}  "
+                f"(export the payout + sales day: task zoho:toast-export -- --from <day after the last payout export>, then task zoho:toast-dump)")
     log()
 
     if args.reconcile or args.rules:
