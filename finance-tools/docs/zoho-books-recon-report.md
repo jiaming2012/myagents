@@ -1,4 +1,4 @@
-# Zoho Books recon APPLY — 2026-11-16 (2026-01-01 → 2026-11-16)
+# Zoho Books recon DRY RUN — 2026-11-17 (2026-01-01 → 2026-11-17)
 
 ## Chart of accounts / bank accounts
   38 coded accounts, banks: Operations ••4613, Outgoing ACH ••5396, Taxes ••7818, Operations ••0551 (closed), Business Adv Fundamentals, CORP Account - Business Adv Customized Cash Rewards - 2119, Chase Ink ••7667, Bluevine Checking ••2189 (closed), LFCU Business Checking ••7011, LFCU Share Savings ••3617, WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637
@@ -6,12 +6,12 @@
 ## Mercury ↔ feed pairing
 | account | Mercury posted | feed uncategorized | paired | Mercury unpaired | feed unpaired | opening 2025-12-31 |
 |---|---|---|---|---|---|---|
-| Operations ••4613 | 617 | 0 | 0 | 44 | 0 | 388.69 |
+| Operations ••4613 | 617 | 1 | 1 | 41 | 0 | 388.69 |
 | Outgoing ACH ••5396 | 138 | 0 | 0 | 8 | 0 | 207.00 |
 | Taxes ••7818 | 147 | 0 | 0 | 0 | 0 | 37.21 |
 | Operations ••0551 (closed) | 253 | 0 | 0 | 0 | 0 | 371.11 |
 
-## Toast payouts: 0 Mercury credits, 0 with a toast_xero deposit, 0 without (left uncategorized)
+## Toast payouts: 1 Mercury credits, 0 with a toast_xero deposit, 1 without (left uncategorized)
 
 ## Plan
 - transfers: 0 lines -> 0 transfer documents (0 internal keys, 0 one-sided keys, 0 uneven)
@@ -20,7 +20,7 @@
 - unmatched merchants (left uncategorized): 0
 - already done (in state): 0
 
-### Mercury txns with no feed line (52)
+### Mercury txns with no feed line (49)
 - Operations ••4613 2026-10-16      -6.00 Facebook
 - Operations ••4613 2026-10-17     -12.00 Facebook
 - Operations ••4613 2026-10-18      -3.16 Save A Lot
@@ -62,6 +62,9 @@
 - Operations ••4613 2026-11-13      -1.89 Facebook
 - Operations ••4613 2026-11-15      -6.57 The Restaurant Store
 
+### Toast credits without a toast_xero deposit (1)
+- 2026-11-16     331.55  (export the sales day: task toast:export)
+
 ## Monthly reconciliation records
 | account | month | Zoho closing | Mercury closing | diff | docs | status |
 |---|---|---|---|---|---|---|
@@ -74,7 +77,7 @@
 | Operations ••4613 | 2026-07 | 25.34 | 25.34 | 0.00 | — | exists: reconciled |
 | Operations ••4613 | 2026-08 | 957.02 | 957.02 | 0.00 | — | exists: reconciled |
 | Operations ••4613 | 2026-09 | 293.64 | 293.64 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-10 | 511.91 | 511.91 | 0.00 | 63 | reconciled |
+| Operations ••4613 | 2026-10 | 511.91 | 511.91 | 0.00 | — | exists: reconciled |
 | Outgoing ACH ••5396 | 2026-01 | 3.89 | 3.89 | 0.00 | — | exists: reconciled |
 | Outgoing ACH ••5396 | 2026-02 | 100.0 | 100.00 | 0.00 | — | exists: reconciled |
 | Outgoing ACH ••5396 | 2026-03 | 0.29 | 0.29 | 0.00 | — | exists: reconciled |
