@@ -1,0 +1,2975 @@
+{
+  "pulled_at": "2026-11-17T13:27:09",
+  "rules": [
+    {
+      "id": "175665091725082480",
+      "order": 0,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "contains",
+          "value": "monarch"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "gt",
+        "isExpense": true,
+        "value": 0.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184421",
+        "name": "Financial & Legal Services"
+      },
+      "addTagsAction": [
+        {
+          "id": "175665091530046991",
+          "name": "Subscription"
+        }
+      ],
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-05-07T21:10:34.257233+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180806401360510628",
+      "order": 1,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "bilt rewards"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184394",
+        "name": "Rent"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-07-06T19:05:28.274095+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180806990157954970",
+      "order": 2,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "openai"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2024-09-13T14:09:58.403320+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180808100323114310",
+      "order": 3,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "to yumyums"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-20T10:30:57.219734+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180808988578135722",
+      "order": 4,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "github"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-12-11T17:19:20.078380+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180809125771722450",
+      "order": 5,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "amazon"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184409",
+        "name": "Shopping"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 8,
+      "lastAppliedAt": "2026-11-07T20:07:33.502242+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180809343607095098",
+      "order": 6,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "deposit from income"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-23T22:14:05.715180+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180810544929160560",
+      "order": 7,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "apple"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "eq",
+        "isExpense": true,
+        "value": 69.73,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184400",
+        "name": "Phone"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180810671086484910",
+      "order": 8,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "luxalgo"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180811178402233994",
+      "order": 9,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "contains",
+          "value": "empower"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "lt",
+        "isExpense": true,
+        "value": 20.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184392",
+        "name": "Taxi & Ride Shares"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-04-04T23:13:55.757226+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180811359812173516",
+      "order": 10,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "bilt"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": [
+        "210416085685878584"
+      ],
+      "categories": [],
+      "accounts": [
+        {
+          "id": "210416085685878584",
+          "displayName": "Recurring ACH (...4354)"
+        }
+      ],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-01-07T06:24:33.901149+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180812605616930088",
+      "order": 11,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "lastpass"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-03-02T18:32:12.298415+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180815308106612077",
+      "order": 12,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "educational comp"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "eq",
+        "isExpense": true,
+        "value": 149.45,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184415",
+        "name": "Student Loans"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "180815694223752703",
+      "order": 13,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "payment received"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": {
+        "id": "175743441712823821",
+        "name": "Truist"
+      },
+      "setCategoryAction": null,
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-08-21T01:39:22.890029+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "181252180030111403",
+      "order": 14,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "(enter transaction description here.)"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": {
+        "id": "175743441922539026",
+        "name": "Upgrade Inc."
+      },
+      "setCategoryAction": {
+        "id": "175665091576184420",
+        "name": "Loan Repayment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "182869762313141433",
+      "order": 15,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "lime"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184392",
+        "name": "Taxi & Ride Shares"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-08-29T13:03:49.343566+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "184195096139643994",
+      "order": 16,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "upgrade inc."
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184420",
+        "name": "Loan Repayment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2024-09-04T20:28:09.934846+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775011468000368",
+      "order": 17,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "google cloud"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775144901393563",
+      "order": 18,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "linkedin"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775241976462513",
+      "order": 19,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "contains",
+          "value": "plan fee"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": [
+        "175762455361076692"
+      ],
+      "categories": [],
+      "accounts": [
+        {
+          "id": "175762455361076692",
+          "displayName": "Platinum Card\u00ae (...2004)"
+        }
+      ],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184422",
+        "name": "Financial Fees"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-02-25T20:12:36.202236+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775297363295423",
+      "order": 20,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "contains",
+          "value": "polygon io"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-10-22T11:13:34.475586+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775345120689361",
+      "order": 21,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "overdraft protection transfer"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-17T12:31:42.085871+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775368117009627",
+      "order": 22,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "localxpose io"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-03-14T14:50:20.434774+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775387584871649",
+      "order": 23,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "overdraft protection deposit"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-15T12:00:18.159385+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193775408986307820",
+      "order": 24,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "google one"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-07-18T19:21:33.405618+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193776164193811911",
+      "order": 25,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "ecsi cornell university"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184420",
+        "name": "Loan Repayment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "193776412883533359",
+      "order": 26,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "ecsi cornell university"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184415",
+        "name": "Student Loans"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "196189528262032827",
+      "order": 27,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "wise"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184423",
+        "name": "Cash & ATM"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2024-12-06T22:28:05.488556+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "196383776495222662",
+      "order": 28,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "new york times"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-08-25T22:31:18.746348+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "196383904375357373",
+      "order": 29,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "streets market"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184428",
+        "name": "Miscellaneous"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-06-09T22:01:38.880618+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "196647036340518455",
+      "order": 30,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "deposit"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "gt",
+        "isExpense": false,
+        "value": 0.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "196646450695093863",
+        "name": "Reward Points"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-11T05:56:21.350940+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "199313044028112396",
+      "order": 31,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "tradingview"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "199313821629005651",
+      "order": 32,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "transfer to checking 1778"
+        },
+        {
+          "operator": "contains",
+          "value": "chk 1778"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "199314423601806427",
+      "order": 33,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "amtrak"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184388",
+        "name": "Public Transit"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 2,
+      "lastAppliedAt": "2026-11-04T15:08:50.658629+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "199314441885826147",
+      "order": 34,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "trader joe's"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184401",
+        "name": "Groceries"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 3,
+      "lastAppliedAt": "2026-11-09T08:46:50.284789+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200150846486723910",
+      "order": 35,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "overdraft transfer"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-02-28T12:18:18.061214+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200275566066515731",
+      "order": 36,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "streets market"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184401",
+        "name": "Groceries"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-06-09T22:01:38.874926+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200275646926405423",
+      "order": 37,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "truist"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "gt",
+        "isExpense": true,
+        "value": 0.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184387",
+        "name": "Auto Payment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-10-21T05:57:00.072746+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200275837259726720",
+      "order": 38,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "truist"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "gt",
+        "isExpense": false,
+        "value": 0.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184420",
+        "name": "Loan Repayment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-17T17:56:34.876949+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200276112553918450",
+      "order": 39,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "avant"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "gt",
+        "isExpense": true,
+        "value": 0.0,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "200276091276213341",
+        "name": "Loan Expense"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-06-14T01:43:19.757489+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "200277172088585654",
+      "order": 40,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "educational comp"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "200276091276213341",
+        "name": "Loan Expense"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-07-12T10:50:20.149691+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "202102923254415103",
+      "order": 41,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "transfer to checking"
+        },
+        {
+          "operator": "contains",
+          "value": "transfer from"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-31T21:16:03.942320+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "202103112808644443",
+      "order": 42,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "monarch"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-05-07T21:10:34.265533+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "204650993134452521",
+      "order": 43,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "tradingview"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "205457322610638762",
+      "order": 44,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "transfer jamal amir cole pure craft coding so confirmation"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184420",
+        "name": "Loan Repayment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210329188679663594",
+      "order": 45,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "venmo"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184428",
+        "name": "Miscellaneous"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-10-01T06:06:52.037969+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210763775074483860",
+      "order": 46,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "eq",
+        "isExpense": true,
+        "value": 21.31,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-01-31T13:07:13.281715+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210764623993224914",
+      "order": 47,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "noma wine and liqu washington dc"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180810955753897156",
+        "name": "Specialty Foods & Drinks"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-10-10T07:12:12.258226+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210764790980001497",
+      "order": 48,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "natasha kaushal"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184394",
+        "name": "Rent"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 2,
+      "lastAppliedAt": "2026-11-02T04:14:20.371066+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210764841462644446",
+      "order": 49,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "tradier brokerag"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180810099409141003",
+        "name": "Investment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "210764882262736610",
+      "order": 50,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "hopp"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184392",
+        "name": "Taxi & Ride Shares"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-06T12:11:28.863903+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "212260206121697231",
+      "order": 51,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "rocket bar"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184402",
+        "name": "Restaurants & Bars"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 7,
+      "lastAppliedAt": "2026-11-16T22:31:44.759892+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "212260235949490146",
+      "order": 52,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "astro beer hall"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184402",
+        "name": "Restaurants & Bars"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 5,
+      "lastAppliedAt": "2026-11-16T22:31:44.749291+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "214885476888591889",
+      "order": 53,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "tradingviewm product"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-24T15:08:08.556400+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "214885522620137006",
+      "order": 54,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "michael goddard"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184405",
+        "name": "Entertainment & Recreation"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-08-21T09:39:38.832222+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "217354088304983504",
+      "order": 55,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "dow"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184405",
+        "name": "Entertainment & Recreation"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-10-01T22:09:51.790162+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "218516034433695695",
+      "order": 56,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "streets market washington dcapple pay"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184401",
+        "name": "Groceries"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-02-25T18:29:38.227748+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "218516849261133120",
+      "order": 57,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "annandale"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184405",
+        "name": "Entertainment & Recreation"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "219473728795688274",
+      "order": 58,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "educational computer systems"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184415",
+        "name": "Student Loans"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-17T17:56:05.798444+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "220121450507779501",
+      "order": 59,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "transfer to account 1778"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-28T20:24:16.438778+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "221028585649323480",
+      "order": 60,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "harris insights"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184381",
+        "name": "Paychecks"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-12-31T06:17:29.369619+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "221031145383772133",
+      "order": 61,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": [
+        {
+          "operator": "eq",
+          "value": "vultr"
+        }
+      ],
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 3,
+      "lastAppliedAt": "2026-10-28T21:22:43.814740+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "224016290493611689",
+      "order": 62,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "apple"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": {
+        "operator": "eq",
+        "isExpense": true,
+        "value": 9.99,
+        "valueRange": null
+      },
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-06T12:11:28.857341+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "225549696960413108",
+      "order": 63,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "fidelity"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 4,
+      "lastAppliedAt": "2026-10-31T23:30:18.818226+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "228826489333071465",
+      "order": 64,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "d j barrons"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184405",
+        "name": "Entertainment & Recreation"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-08T17:02:41.758407+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "229021770191322112",
+      "order": 65,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "bilt rent"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "185716519898299927",
+        "name": "Rent Payable (Mom)"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-01-11T19:45:04.239615+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "229022936160648905",
+      "order": 66,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "interest"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184422",
+        "name": "Financial Fees"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-01T20:41:12.814741+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "229026632333377494",
+      "order": 67,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "electronic funds transfer received"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184438",
+        "name": "Transfer"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-27T23:42:27.264049+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "230989304844107465",
+      "order": 68,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "bank of america"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184439",
+        "name": "Credit Card Payment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 15,
+      "lastAppliedAt": "2026-11-10T10:12:31.254389+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "230989436333440790",
+      "order": 69,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "payment"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184439",
+        "name": "Credit Card Payment"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-03-17T17:50:39.301303+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "230989504726810428",
+      "order": 70,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "laundry kio"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184397",
+        "name": "Water"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2025-12-30T12:54:24.949749+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "230989550111276882",
+      "order": 71,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "atomic billiard"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184402",
+        "name": "Restaurants & Bars"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 13,
+      "lastAppliedAt": "2026-11-16T04:53:52.878404+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "230989894677544002",
+      "order": 72,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "biltprotect rent"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "185716576591658522",
+        "name": "Rent (Mom)"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-01-11T19:45:04.265016+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "233375737996230101",
+      "order": 73,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "street lights"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184405",
+        "name": "Entertainment & Recreation"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-07-02T21:33:34.741138+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "233375770994916865",
+      "order": 74,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "direct deposit harris insigpayroll cash"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184381",
+        "name": "Paychecks"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "236063821582942185",
+      "order": 75,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "empower"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184392",
+        "name": "Taxi & Ride Shares"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-04-04T23:13:55.752227+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "236064007390608467",
+      "order": 76,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "atomic billiards"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184402",
+        "name": "Restaurants & Bars"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 4,
+      "lastAppliedAt": "2026-11-16T22:31:44.754632+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "241590917143051976",
+      "order": 77,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "bank of america"
+        }
+      ],
+      "originalStatementCriteria": [
+        {
+          "operator": "contains",
+          "value": "chk 1778"
+        }
+      ],
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-10T10:12:31.248837+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "241591712180714847",
+      "order": 78,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "massive.com"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175761770230955755",
+        "name": "Tech"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": "2026-05-20T05:16:35.560825+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "245132093900045709",
+      "order": 79,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "yumyums"
+        }
+      ],
+      "originalStatementCriteria": [
+        {
+          "operator": "contains",
+          "value": "withdrawal to yumyums"
+        }
+      ],
+      "amountCriteria": null,
+      "categoryIds": [
+        "181251591070137406"
+      ],
+      "accountIds": [
+        "210416086125231930"
+      ],
+      "categories": [
+        {
+          "id": "181251591070137406",
+          "name": "Personal Loan Payable (Yumyums)"
+        }
+      ],
+      "accounts": [
+        {
+          "id": "210416086125231930",
+          "displayName": "Income (...8513)"
+        }
+      ],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "245133160572370074",
+      "order": 80,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "yumyums kitchen"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 3,
+      "lastAppliedAt": "2026-11-10T17:12:00.950047+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "249948792620957044",
+      "order": 81,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "kelley farm kitchen"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184401",
+        "name": "Groceries"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "251847319957650677",
+      "order": 82,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": null,
+      "originalStatementCriteria": [
+        {
+          "operator": "contains",
+          "value": "wire deposit"
+        }
+      ],
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 4,
+      "lastAppliedAt": "2026-10-29T16:38:33.297451+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "253675821959855983",
+      "order": 83,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "jcolefinance@gmail.com"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184402",
+        "name": "Restaurants & Bars"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "260233286336756901",
+      "order": 84,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "latanya mcgriff"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180734369086160588",
+        "name": "Yumyums"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-16T22:31:42.232823+00:00",
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "260233304810568872",
+      "order": 85,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "deep roots farm"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "175665091576184401",
+        "name": "Groceries"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    },
+    {
+      "id": "260643048491695747",
+      "order": 86,
+      "merchantCriteriaUseOriginalStatement": false,
+      "merchantCriteria": null,
+      "merchantNameCriteria": [
+        {
+          "operator": "eq",
+          "value": "freddie's"
+        }
+      ],
+      "originalStatementCriteria": null,
+      "amountCriteria": null,
+      "categoryIds": null,
+      "accountIds": null,
+      "categories": [],
+      "accounts": [],
+      "setMerchantAction": null,
+      "setCategoryAction": {
+        "id": "180810955753897156",
+        "name": "Specialty Foods & Drinks"
+      },
+      "addTagsAction": null,
+      "linkGoalAction": null,
+      "needsReviewByUserAction": null,
+      "unassignNeedsReviewByUserAction": false,
+      "sendNotificationAction": false,
+      "setHideFromReportsAction": false,
+      "reviewStatusAction": null,
+      "recentApplicationCount": 0,
+      "lastAppliedAt": null,
+      "splitTransactionsAction": null
+    }
+  ]
+}

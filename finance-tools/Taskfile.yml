@@ -185,6 +185,33 @@ tasks:
       - task: sync-status:warn
       - python transaction_audit.py {{.CLI_ARGS}}
 
+  categorize:
+    desc: "Propose categories for a group of Monarch transactions and build the review page: -- --limit 50 | --days 7 | --since 2026-11-01 [--all] [--no-ai]"
+    cmds:
+      - task: sync-status:warn
+      - python monarch_categorize.py run {{.CLI_ARGS}}
+
+  categorize:no-ai:
+    desc: "Same run but skip the Claude step (use when Claude Code is unavailable); low-confidence rows go straight to the reviewer"
+    cmds:
+      - task: sync-status:warn
+      - python monarch_categorize.py run --no-ai {{.CLI_ARGS}}
+
+  categorize:rules:
+    desc: Snapshot the rules stored inside Monarch into data/categorize/monarch_rules.json
+    cmds:
+      - python monarch_categorize.py rules pull
+
+  categorize:approve:
+    desc: "Save the review page's 'Approve and copy JSON' clipboard payload into the run and show the dry run: -- latest (or a run id)"
+    cmds:
+      - python monarch_categorize.py apply {{.CLI_ARGS}} --from-clipboard
+
+  categorize:apply:
+    desc: "Send an approved run to Monarch (dry run unless --execute): -- latest --execute (or a run id; --approved file.json to override)"
+    cmds:
+      - python monarch_categorize.py apply {{.CLI_ARGS}}
+
   zoho:balances:
     desc: "Print every live Zoho Books bank balance (the business side of the forecast)"
     cmds:

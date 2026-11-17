@@ -13,3 +13,4 @@ forecast_preview.html
 .rewards_snapshot.json
 .sync_status_cache.json
 .zoho_sheet_token.json
+data/categorize/runs/

@@ -1,0 +1,24 @@
+# Local categorization rules for monarch_categorize.py.
+# Checked top to bottom; the first rule whose every `match` clause holds wins.
+# Keep this file in the same spirit as Monarch's own rules (merchant + amount + account criteria,
+# category action) so a rule can be moved into Monarch later without translation.
+#
+# match clauses (all optional, all case-insensitive):
+#   merchant:  { contains | equals | starts_with | ends_with | regex: "text" }   # the Monarch merchant name
+#   statement: { contains | equals | starts_with | ends_with | regex: "text" }   # the bank's raw description
+#              either may be a list of such specs, meaning any-of (Monarch's "merchant is X or Y")
+#   amount:    { is_expense: true|false, equals: 12.34, between: [lo, hi], greater_than: x, less_than: y }
+#   account:   { contains: "8206" }        # matches the Monarch account display name
+# set:
+#   category:  "Name as shown in Monarch"  # required
+# confidence: 0.95                         # optional, default 0.95; below the AI threshold the model is still asked
+
+rules:
+  - name: Discover payment arriving by wire is a transfer
+    match:
+      merchant: { contains: "Discover" }
+      statement: { contains: "wire" }
+      amount: { is_expense: false }
+    set:
+      category: Transfer
+    confidence: 0.95
