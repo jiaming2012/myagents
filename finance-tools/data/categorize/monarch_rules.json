@@ -1,5 +1,5 @@
 {
-  "pulled_at": "2026-11-17T11:27:31",
+  "pulled_at": "2026-11-17T13:27:09",
   "rules": [
     {
       "id": "175665091725082480",
@@ -1345,8 +1345,8 @@
       "sendNotificationAction": false,
       "setHideFromReportsAction": false,
       "reviewStatusAction": null,
-      "recentApplicationCount": 0,
-      "lastAppliedAt": "2026-10-17T16:07:06.286377+00:00",
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-17T17:56:34.876949+00:00",
       "splitTransactionsAction": null
     },
     {
@@ -2014,8 +2014,8 @@
       "sendNotificationAction": false,
       "setHideFromReportsAction": false,
       "reviewStatusAction": null,
-      "recentApplicationCount": 0,
-      "lastAppliedAt": "2026-10-18T13:10:40.019075+00:00",
+      "recentApplicationCount": 1,
+      "lastAppliedAt": "2026-11-17T17:56:05.798444+00:00",
       "splitTransactionsAction": null
     },
     {
