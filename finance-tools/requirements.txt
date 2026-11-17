@@ -4,6 +4,5 @@ pyyaml
 monarchmoney
 gql<4
 pytest
-xero-python
 tabulate
 python-dateutil

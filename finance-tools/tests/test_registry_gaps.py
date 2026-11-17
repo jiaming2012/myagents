@@ -15,7 +15,6 @@ from registry_gaps import (  # noqa: E402
     check_registry_closed_in_monarch,
     check_sources,
     check_uncategorized,
-    check_xero_staleness,
     filter_config,
     norm_name,
     payment_category,
@@ -123,12 +122,16 @@ def test_resolve_balance_never_returns_silent_zero_when_source_is_down():
     }
     acct2 = {"id": "y", "monarch_match": "Nope (...1111)", "last4": "1111"}
     assert resolve_balance(acct2, monarch, {}) == (421.53, "monarch")
-    # Xero: whole source empty -> unknown; an account the org never connected -> also unknown
-    # (a BoA account absent from Xero's bank summary is not a $0 account)
-    biz = {"id": "b", "xero_account_id": "Mercury: Ops"}
+    # Zoho Books: whole source empty -> unknown; an account the org does not have -> also unknown
+    # (a bank account absent from Zoho's list is not a $0 account)
+    biz = {"id": "b", "zoho_match": "Operations ••4613"}
     assert resolve_balance(biz, {}, {}) == (None, None)
     assert resolve_balance(biz, {}, {"Other": {"balance": 1.0}}) == (None, None)
-    assert resolve_balance(biz, {}, {"Mercury: Ops": {"balance": 7.5}}) == (7.5, "xero")
+    assert resolve_balance(biz, {}, {"Operations ••4613": {"balance": 7.5}}) == (7.5, "zoho")
+    # linked in both ledgers: Zoho wins while it answers, Monarch vouches when Zoho is down
+    both = {"id": "l", "zoho_match": "LFCU Business Checking ••7011", "monarch_match": "LFCU (...3617)"}
+    assert resolve_balance(both, {"LFCU (...3617)": {"balance": 6.0}}, {"LFCU Business Checking ••7011": {"balance": 6.84}}) == (6.84, "zoho")
+    assert resolve_balance(both, {"LFCU (...3617)": {"balance": 6.0}}, {}) == (6.0, "monarch")
 
 
 def test_registry_closed_in_monarch():
@@ -158,46 +161,10 @@ def test_calendar_coverage():
 
 
 def test_sources():
-    gaps = check_sources({"monarch": "ok", "xero": "no Xero organisation connected", "zoho": "ok"})
+    gaps = check_sources({"monarch": "ok", "zoho_books": "Zoho /bankaccounts -> 401", "zoho": "ok"})
     assert len(gaps) == 1 and gaps[0]["kind"] == "source_unavailable"
-    assert "xero" in gaps[0]["message"] and "9091" in gaps[0]["fix"]
+    assert "zoho_books" in gaps[0]["message"] and "sync-status" in gaps[0]["fix"]
     assert check_sources(None) == []
-
-
-def test_xero_staleness():
-    today = date(2026, 10, 15)
-    latest = {"Fresh": date(2026, 10, 12), "Stale": date(2026, 9, 1), "Empty": None}
-    gaps = check_xero_staleness(latest, threshold_days=10, today=today)
-    names = {g["message"].split("'")[1] for g in gaps}
-    assert names == {"Stale", "Empty"}
-    assert "44d ago" in "\n".join(g["message"] for g in gaps)
-    assert check_xero_staleness({}) == []
-
-
-def test_xero_staleness_distinguishes_empty_from_behind():
-    """'never' is for an account with no transaction ever, and says so differently.
-
-    A dated-but-old account needs reconciling; an empty one needs an import or an
-    archive. Collapsing both into 'never' once reported 133 transactions as nothing.
-    """
-    today = date(2026, 10, 15)
-    by_name = {
-        g["message"].split("'")[1]: g
-        for g in check_xero_staleness(
-            {"Behind": date(2026, 6, 2), "Empty": None}, threshold_days=10, today=today
-        )
-    }
-    assert "2026-06-02 (135d ago)" in by_name["Behind"]["message"]
-    assert "never" not in by_name["Behind"]["message"]
-    assert "Reconcile" in by_name["Behind"]["fix"]
-
-    assert "never" in by_name["Empty"]["message"]
-    assert "archive" in by_name["Empty"]["fix"]
-
-
-def test_run_checks_offline_only_uses_registry():
-    gaps = run_checks(_config())
-    assert {g["kind"] for g in gaps} == {"no_payment_entry"}
 
 
 # ---------------------------------------------------------------------------
@@ -212,9 +179,9 @@ def _categorized():
             {"id": "p-card", "name": "P Card", "type": "credit", "category": "personal",
              "monarch_match": "P Card (...2)"},
             {"id": "b-chk", "name": "Biz Checking", "type": "depository",
-             "category": "business", "xero_account_id": "Biz Checking"},
+             "category": "business", "zoho_match": "Biz Checking"},
             {"id": "b-card", "name": "B Card", "type": "credit", "category": "business",
-             "xero_account_id": "B Card"},
+             "zoho_match": "B Card"},
             {"id": "b-dead", "name": "Old Biz", "type": "credit", "category": "business",
              "inactive": True, "monarch_match": "Old Biz (...9)"},
             {"id": "nocat", "name": "Unsorted", "type": "depository"},
@@ -259,7 +226,7 @@ def test_sources_needed_follows_the_filtered_registry():
     c = _categorized()
     assert sources_needed(filter_config(c, "personal")) == {"monarch", "zoho"}
     # inactive b-dead's monarch_match must not drag Monarch into a business run
-    assert sources_needed(filter_config(c, "business")) == {"xero", "zoho"}
+    assert sources_needed(filter_config(c, "business")) == {"zoho"}
     assert sources_needed({"accounts": [], "payments": []}) == set()
 
 

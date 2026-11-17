@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Reconcile the Mercury business accounts in Zoho Books, in one shot.
 
-Plan: docs/zoho-books-recon-plan.md. Mirrors mercury_precode.py (same
+Plan: docs/zoho-books-recon-plan.md. Mirrors mercury_classify.py (same
 merchants.yaml, same classifier) with Zoho Books as the sink. The Zoho bank
 feed already holds every 2026 Mercury posting as an uncategorized line; this
 script pairs each Mercury transaction with its feed line and then categorizes
@@ -29,7 +29,7 @@ Usage:
 
 Credentials: ZOHO_CLIENT_ID/SECRET, ZOHO_BOOKS_REFRESH_TOKEN, ZOHO_BOOKS_ORG_ID
 in finance-tools/.env; MERCURY_API_TOKEN from finance-tools/.env or the yumyums
-xero .env (same fallback as mercury_precode.py).
+toast_xero checkout's .env (same fallback as mercury_classify.py).
 """
 import argparse
 import json
@@ -55,7 +55,7 @@ load_dotenv(DATA_DIR / ".env")
 load_dotenv(HERE / ".env")
 load_dotenv(Path.home() / "projects/yumyums/accounting/xero/.env")
 
-import mercury_precode as mp  # noqa: E402  (classify, merchant_name, fetch_mercury)
+import mercury_classify as mp  # noqa: E402  (classify, merchant_name, fetch_mercury)
 
 BASE = "https://www.zohoapis.com/books/v3"
 TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
@@ -65,7 +65,7 @@ EASTERN = ZoneInfo("America/New_York")
 START_DEFAULT = "2026-01-01"
 OPENING_DATE = "2025-12-31"
 
-# Xero bank-account names (merchants.yaml) -> Zoho bank account names.
+# Short bank names (merchants.yaml `bank_account`) -> Zoho bank account names.
 # Feed accounts exist already; the other two are created without a feed.
 BANK_NAMES = {
     "Mercury: Operations (4613)": "Operations ••4613",
@@ -88,7 +88,7 @@ INCOME_PREFIX = "4"                                  # codes 4xxx: money in is a
 CLOSING_FILE = HERE / "closing_balances.yaml"   # operator-supplied statement balances (feed-only accounts)
 
 # Chart of accounts to seed: code -> (name, zoho account_type).
-# Stock Zoho accounts that stand in for a Xero code just get the code added.
+# Stock Zoho accounts that stand in for a chart code just get the code added.
 STOCK = {"5000": "Cost of Goods Sold", "3200": "Drawings", "3100": "Owner's Equity", "4000": "Sales",
          "6050": "Bank Fees and Charges", "6055": "Credit Card Charges", "4400": "Interest Income"}
 CHART = {
@@ -288,7 +288,7 @@ def bank_index(z):
 
 def seed_banks(z, apply, log):
     banks = bank_index(z)
-    for xero_name, zoho_name in BANK_NAMES.items():
+    for short_name, zoho_name in BANK_NAMES.items():
         if zoho_name not in banks:
             atype = BANK_TYPES.get(zoho_name, "bank")
             log(f"  bank: create '{zoho_name}' ({atype}, no feed)")
@@ -535,7 +535,7 @@ def reconcile(z, accounts, openings, apply, log):
     mercury_date = {t["id"]: eastern_date(t["postedAt"]) for a in accounts for t in a["txns_2026"]}
     for acct in accounts:
         zid = acct["zoho_id"]
-        name = BANK_NAMES[acct["xero_bank_account"]]
+        name = BANK_NAMES[acct["bank_account"]]
         existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
         docs = list(z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"))
         # feed lines still uncategorized (they only list under Status.Uncategorized, never
@@ -668,7 +668,7 @@ def fake_txn(line):
 
 
 def classify_feed(lines, cfg, own_name):
-    """-> [(line, kind, payload)]: transfer -> other account's Xero name;
+    """-> [(line, kind, payload)]: transfer -> other account's short bank name;
     coded -> (name, code, is_return); unmatched -> name."""
     by_key = defaultdict(list)
     for ln in lines:
@@ -749,7 +749,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
     log("|---|---|---|---|---|---|---|---|---|")
     plans = {}
     for acct in accounts:
-        name = acct["xero_bank_account"]
+        name = acct["bank_account"]
         b = banks[BANK_NAMES[name]]
         zid = acct["zoho_id"] = b["account_id"]
         acct["kind"] = acct.get("kind", "bank")
@@ -781,7 +781,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
             label = f"↔ {p}" if k == "transfer" else (f"{p[1]} {p[0]}" if k == "coded" else p)
             agg[(k, label)][0] += 1
             agg[(k, label)][1] += line_signed(ln)
-        log(f"### {BANK_NAMES[acct['xero_bank_account']]}")
+        log(f"### {BANK_NAMES[acct['bank_account']]}")
         for (k, label), (n, s) in sorted(agg.items(), key=lambda kv: (kv[0][0], -kv[1][0])):
             hint = f'   # suggested: - {{pattern: "{label[:30]}", account: "????"}}' if k == "unmatched" else ""
             log(f"- {k:9} {label}: {n} lines, net {s}{hint}")
@@ -925,7 +925,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
     log("|---|---|---|---|---|")
     banks = bank_index(z) if not z.capped else banks
     for zid, (acct, _) in plans.items():
-        b = banks[BANK_NAMES[acct["xero_bank_account"]]]
+        b = banks[BANK_NAMES[acct["bank_account"]]]
         ob = posted_ob.get(zid, "no (statement balance missing)")
         flag = "" if money(b["balance"]) == money(b["bank_balance"]) else "  ← differs"
         log(f"| {b['account_name'][:44]} | {b['balance']} | {b['bank_balance']} | {ob} | {b['uncategorized_transactions']} |{flag}")
@@ -939,14 +939,14 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
 
 def reconcile_feed_only(z, plans, apply, log):
     """One record per full month, closing = the statement balance the operator put in
-    closing_balances.yaml (`<Xero bank name>: {YYYY-MM: balance}`, a card's balance
+    closing_balances.yaml (`<short bank name>: {YYYY-MM: balance}`, a card's balance
     being the amount owed). Posted only when Zoho's own closing equals it."""
     closings = load_closings()
     log("## Monthly reconciliation records (statement closings from closing_balances.yaml)")
     log("| account | month | Zoho closing | statement | diff | docs | status |")
     log("|---|---|---|---|---|---|---|")
     for zid, (acct, _) in plans.items():
-        name = acct["xero_bank_account"]
+        name = acct["bank_account"]
         zname = BANK_NAMES[name]
         stmts = closings.get(name, {})
         existing = {r.get("start_date"): r for r in z.get(f"/bankaccounts/{zid}/reconciliations").get("reconciliations", [])}
@@ -1011,12 +1011,12 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
         # live feed accounts only (closed / statement-imported ones get no new lines);
         # Zoho caps account_ids at 100 characters, i.e. five ids
         live = [a for a in boa if not a.get("closed") and not a.get("no_rules")]
-        boa_ids = ",".join(banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"] for a in live)
+        boa_ids = ",".join(banks[BANK_NAMES[a["bank_account"]]]["account_id"] for a in live)
         if len(boa_ids) > 100:
             sys.exit(f"rules: account_ids is {len(boa_ids)} chars (Zoho max 100) — mark more accounts no_rules")
         seen = set(MATCHED_PATTERNS)
         for a in boa:   # posted documents keep "name | <bank description>", so the history can be re-matched
-            zid = banks[BANK_NAMES[a["xero_bank_account"]]]["account_id"]
+            zid = banks[BANK_NAMES[a["bank_account"]]]["account_id"]
             for d in z.pages(f"/bankaccounts/{zid}/transactions", "banktransactions"):
                 hay = f"{d.get('payee') or ''} {re.sub(r'INDN:.*?CO ID:', '', d.get('description') or '')}".lower()
                 seen |= {m["pattern"] for m in cfg["merchants"] if m["pattern"].lower() in hay}
@@ -1129,7 +1129,7 @@ def main():
     log("|---|---|---|---|---|---|---|")
     openings = {}
     for acct in accounts:
-        zoho_name = BANK_NAMES[acct["xero_bank_account"]]
+        zoho_name = BANK_NAMES[acct["bank_account"]]
         zid = banks[zoho_name]["account_id"]
         acct["zoho_id"] = zid
         txns = mp.fetch_mercury(acct["mercury_account_id"], args.start, args.end)
@@ -1147,7 +1147,7 @@ def main():
         openings[zid] = money(cur) - sum(money(t["amount"]) for t in all_2026)
         log(f"| {zoho_name} | {len(txns)} | {len(lines)} | {len(paired)} | {len(un_m_unknown)} | {len(un_z)} | {openings[zid]} |")
 
-        transfers, coded, skipped, unm = mp.classify(txns, cfg, acct["xero_bank_account"])
+        transfers, coded, skipped, unm = mp.classify(txns, cfg, acct["bank_account"])
         for t, target in transfers:
             if t["id"] in paired:
                 plan.append((acct, t, paired[t["id"]], "transfer", target))
@@ -1249,11 +1249,11 @@ def main():
     if unpaired_m:
         log(f"\n### Mercury txns with no feed line ({len(unpaired_m)})")
         for acct, t in unpaired_m[:40]:
-            log(f"- {BANK_NAMES[acct['xero_bank_account']]} {eastern_date(t['postedAt'])} {t['amount']:>10.2f} {mp.merchant_name(t)}")
+            log(f"- {BANK_NAMES[acct['bank_account']]} {eastern_date(t['postedAt'])} {t['amount']:>10.2f} {mp.merchant_name(t)}")
     if unpaired_z:
         log(f"\n### Feed lines with no Mercury txn ({len(unpaired_z)})")
         for acct, ln in unpaired_z[:40]:
-            log(f"- {BANK_NAMES[acct['xero_bank_account']]} {ln['date']} {ln['debit_or_credit']} {ln['amount']:>10.2f} {ln.get('description','')[:70]}")
+            log(f"- {BANK_NAMES[acct['bank_account']]} {ln['date']} {ln['debit_or_credit']} {ln['amount']:>10.2f} {ln.get('description','')[:70]}")
     if unmatched:
         log(f"\n### Unmatched merchants ({len(unmatched)}) — add to merchants.yaml or leave")
         agg = defaultdict(lambda: [0, Decimal(0)])
@@ -1303,7 +1303,7 @@ def main():
     # opening balances (once per account; the Zoho entity is one record, so PUT the full set)
     posted_ob = state.get("_opening", {})
     if not args.spike and any(zid not in posted_ob for zid in openings):
-        currency_id = banks[BANK_NAMES[accounts[0]["xero_bank_account"]]].get("currency_id")
+        currency_id = banks[BANK_NAMES[accounts[0]["bank_account"]]].get("currency_id")
         ob = {"date": OPENING_DATE, "accounts": [
             {"account_id": zid, "debit_or_credit": "debit" if bal >= 0 else "credit", "exchange_rate": 1,
              "currency_id": currency_id, "amount": float(abs(bal))}
@@ -1459,13 +1459,13 @@ def main():
     log("|---|---|---|---|---|")
     banks = bank_index(z) if not z.capped else banks
     for acct in accounts:
-        b = banks[BANK_NAMES[acct["xero_bank_account"]]]
+        b = banks[BANK_NAMES[acct["bank_account"]]]
         cur = mbal[acct["mercury_account_id"]]["currentBalance"]
         flag = "" if money(b["balance"]) == money(cur) else "  ← differs"
         log(f"| {b['account_name']} | {b['balance']} | {b['bank_balance']} | {cur} | {b['uncategorized_transactions']} |{flag}")
     # closed accounts: once they sit at 0.00 with nothing uncategorized, hide them
     for acct in accounts:
-        b = banks[BANK_NAMES[acct["xero_bank_account"]]]
+        b = banks[BANK_NAMES[acct["bank_account"]]]
         if acct.get("closed") and b.get("is_active") and money(b["balance"]) == 0 and not b.get("uncategorized_transactions"):
             try:
                 z.post(f"/bankaccounts/{b['account_id']}/inactive")

@@ -1,13 +1,13 @@
 # Banking Payment Forecaster
 
-Never miss a payment or finance charge. This tool pulls upcoming bills from Zoho Calendar, fetches real-time balances from Monarch Money (personal) and Xero (business), and projects per-account balances forward to flag shortfalls before they happen.
+Never miss a payment or finance charge. This tool pulls upcoming bills from Zoho Calendar, fetches real-time balances from Monarch Money (personal) and Zoho Books (business), and projects per-account balances forward to flag shortfalls before they happen.
 
 ## Setup
 
 ```bash
 pip install -r requirements.txt
 cp .env.example .env
-# Fill in Zoho, Monarch, and Xero credentials in .env
+# Fill in Zoho (Calendar + Books) and Monarch credentials in .env
 ```
 
 ## Quick Start
@@ -23,7 +23,7 @@ task forecast -- --timeline # Chronological view
 ## How It Works
 
 1. Reads payment schedules from `payments.yaml`
-2. Fetches live balances from Monarch Money and Xero
+2. Fetches live balances from Monarch Money and Zoho Books
 3. Projects each funding account's balance forward through scheduled payments
 4. Flags shortfalls (negative balance = ERROR, below threshold = WARNING)
 
@@ -145,13 +145,13 @@ Conventions the forecast relies on (all in `payments.yaml`):
 - **Stale balances are labelled, never hidden.** A funding account whose Monarch
   connection stopped syncing shows `STALE Nd`; a full-payment amount priced
   from a dead card feed shows `[card bal. STALE Nd]`. An account no source can
-  vouch for (e.g. a BoA account that is in neither Monarch nor Xero) is
+  vouch for (e.g. a BoA account that is in neither Monarch nor Zoho Books) is
   `UNKNOWN`, not `$0.00`.
 
 ## What's Due (no logins)
 
 ```bash
-task due                   # next 7 days from payments.yaml -- deterministic, no Monarch/Xero/Zoho
+task due                   # next 7 days from payments.yaml -- deterministic, no Monarch/Zoho
 task due:month             # next 30 days
 ```
 
@@ -248,10 +248,10 @@ task zoho:reconcile / zoho:feed:reconcile -- --apply   # month-end records
 ## Registry Gaps (what the forecast can't see)
 
 ```bash
-task gaps                  # live: Monarch + Xero + Zoho
+task gaps                  # live: Monarch + Zoho
 task gaps:offline          # registry-only
 task gaps:personal         # personal accounts/payments only (Monarch + Zoho)
-task gaps:business         # business only (Xero + Zoho; Monarch only if mapped)
+task gaps:business         # business only (Zoho; Monarch only if mapped)
 ```
 
 The `:personal` / `:business` views filter on `category:` in `payments.yaml`. A
@@ -261,8 +261,8 @@ it cannot hide from both views. Unknown Monarch liabilities count as personal.
 
 Flags: credit/loan accounts without a payment entry, Monarch liabilities the
 registry lacks, registry accounts that are closed or **stale** in Monarch (a
-balance not updated in 7 days), payments with no calendar event, Monarch/Xero
-outages, and Xero bank accounts with no transaction in 10 days. The same checks
+balance not updated in 7 days), payments with no calendar event, and Monarch /
+Zoho Books outages (feed health itself is `task finance:sync-status`). The same checks
 run as section 5 of `task health`, so drift shows up in the Monday email.
 
 `task health:schedule` installs a launchd agent that fires **daily** at 08:00
