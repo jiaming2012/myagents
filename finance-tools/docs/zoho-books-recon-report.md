@@ -1,4 +1,4 @@
-# Zoho Books recon DRY RUN — 2026-11-17 (2026-01-01 → 2026-11-17)
+# Zoho Books recon APPLY — 2026-11-17 (2026-01-01 → 2026-11-17)
 
 ## Chart of accounts / bank accounts
   38 coded accounts, banks: Operations ••4613, Outgoing ACH ••5396, Taxes ••7818, Operations ••0551 (closed), Business Adv Fundamentals, CORP Account - Business Adv Customized Cash Rewards - 2119, Chase Ink ••7667, Bluevine Checking ••2189 (closed), LFCU Business Checking ••7011, LFCU Share Savings ••3617, WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637
@@ -11,12 +11,12 @@
 | Taxes ••7818 | 147 | 0 | 0 | 0 | 0 | 37.21 |
 | Operations ••0551 (closed) | 253 | 0 | 0 | 0 | 0 | 371.11 |
 
-## Toast payouts: 1 Mercury credits, 0 with a toast_xero deposit, 1 without (left uncategorized)
+## Toast payouts: 1 Mercury credits, 1 with a toast_xero deposit, 0 without (left uncategorized)
 
 ## Plan
 - transfers: 0 lines -> 0 transfer documents (0 internal keys, 0 one-sided keys, 0 uneven)
 - coded spends/refunds: 0
-- Toast journals: 0 (approach A)
+- Toast journals: 1 (approach A)
 - unmatched merchants (left uncategorized): 0
 - already done (in state): 0
 
@@ -62,45 +62,14 @@
 - Operations ••4613 2026-11-13      -1.89 Facebook
 - Operations ••4613 2026-11-15      -6.57 The Restaurant Store
 
-### Toast credits without a toast_xero deposit (1)
-- 2026-11-16     331.55  (export the sales day: task toast:export)
+  Toast A: 2026-11-16 331.55 clean -> journal 1622286000000342001
 
-## Monthly reconciliation records
-| account | month | Zoho closing | Mercury closing | diff | docs | status |
-|---|---|---|---|---|---|---|
-| Operations ••4613 | 2026-01 | 509.29 | 509.29 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-02 | 257.51 | 257.51 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-03 | 414.18 | 114.18 | 300.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-04 | 82.92 | 82.92 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-05 | 168.49 | 168.49 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-06 | 1170.61 | 785.56 | 385.05 | — | exists: reconciled |
-| Operations ••4613 | 2026-07 | 25.34 | 25.34 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-08 | 957.02 | 957.02 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-09 | 293.64 | 293.64 | 0.00 | — | exists: reconciled |
-| Operations ••4613 | 2026-10 | 511.91 | 511.91 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-01 | 3.89 | 3.89 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-02 | 100.0 | 100.00 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-03 | 0.29 | 0.29 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-04 | 26.87 | 626.87 | -600.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-05 | 287.61 | 287.61 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-06 | 212.55 | 427.55 | -215.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-07 | 71.61 | 71.61 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-08 | 18.17 | 18.17 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-09 | 1283.25 | 1283.25 | 0.00 | — | exists: reconciled |
-| Outgoing ACH ••5396 | 2026-10 | 168.87 | 168.87 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-01 | 97.68 | 97.68 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-02 | 135.1 | 135.10 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-03 | 37.65 | 37.65 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-04 | 158.86 | 158.86 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-05 | 296.68 | 296.68 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-06 | 203.13 | 371.13 | -168.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-07 | 486.52 | 486.52 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-08 | 769.13 | 769.13 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-09 | 0.16 | 0.16 | 0.00 | — | exists: reconciled |
-| Taxes ••7818 | 2026-10 | 451.52 | 451.52 | 0.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-01 | 395.82 | 395.82 | 0.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-02 | 172.25 | 172.25 | 0.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-03 | 1058.7 | 1358.70 | -300.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-04 | 647.52 | 47.52 | 600.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-05 | 249.81 | 249.81 | 0.00 | — | exists: reconciled |
-| Operations ••0551 (closed) | 2026-06 | 0.0 | 0.00 | 0.00 | — | exists: reconciled |
+## Verification
+| account | Zoho book balance | Zoho feed balance | Mercury current | uncategorized left |
+|---|---|---|---|---|
+| Operations ••4613 | 1205.74 | 1205.74 | 1205.74 | 0 |
+| Outgoing ACH ••5396 | 51.09 | 51.09 | 51.09 | 0 |
+| Taxes ••7818 | 0.34 | 0.34 | 0.34 | 0 |
+| Operations ••0551 (closed) | 0.0 | 0.0 | 0.0 | 0 |
+
+writes: 1, Zoho calls: 11
