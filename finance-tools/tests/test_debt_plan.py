@@ -17,7 +17,6 @@ from debt_plan import (  # noqa: E402
     promo_statuses,
     simulate,
     solve_monthly_extra,
-    xero_shaped_from_zoho,
 )
 
 START = date(2026, 11, 1)
@@ -126,19 +125,6 @@ def test_owed_balance_from_zoho_then_monarch_then_last4():
     assert owed_balance({"monarch_match": "Discover it Card (...9035)"}, monarch, zoho) == (0.0, "monarch")  # credit balance
     assert owed_balance({"last4": "5153"}, monarch, zoho) == (5494.7, "monarch")
     assert owed_balance({"last4": "0000"}, monarch, zoho) == (None, None)
-
-
-def test_xero_shaped_from_zoho_negates_credit_cards():
-    config = {"accounts": [
-        {"id": "boa", "xero_account_id": "BoA: Business Checking (1778)", "zoho_match": "Business Adv Fundamentals"},
-        {"id": "corp", "xero_account_id": "BoA: CORP", "zoho_match": "CORP"},
-        {"id": "nomap", "xero_account_id": "X"},
-    ]}
-    zoho = {"Business Adv Fundamentals": {"book_balance": 52.16, "type": "bank"}, "CORP": {"book_balance": 1651.98, "type": "credit_card"}}
-    out = xero_shaped_from_zoho(config, zoho)
-    assert out["BoA: Business Checking (1778)"]["balance"] == 52.16
-    assert out["BoA: CORP"]["balance"] == -1651.98
-    assert "X" not in out
 
 
 def test_build_debts_enriches_from_registry_and_overrides():

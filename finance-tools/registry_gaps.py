@@ -9,26 +9,24 @@ what the registry does NOT know, by comparing it against:
   2. Monarch     - liability accounts Monarch has that the registry lacks,
                    and registry accounts Monarch says are closed
   3. Zoho        - payment entries with no calendar event in the next 31 days
-  4. the sources - Monarch/Xero auth or connection failures (a silent empty
-                   balance is a gap, not a success)
-  5. Xero        - bank accounts whose latest transaction is older than N days
-                   (the business books are behind, so business liabilities
-                   are under-reported)
+  4. the sources - Monarch / Zoho Books auth or connection failures (a silent
+                   empty balance is a gap, not a success). Zoho Books feed health
+                   itself (stale feeds, uncategorized lines) is sync_status.py's job.
 
 Each check returns a list of gap dicts: {"severity": "error"|"warning",
 "kind": str, "message": str, "fix": str}. `run_all()` gathers live data and
 runs every check; `main()` prints them and exits 1 if any exist.
 
 Usage:
-    python registry_gaps.py              # all checks (needs Monarch/Xero/Zoho creds)
+    python registry_gaps.py              # all checks (needs Monarch/Zoho creds)
     python registry_gaps.py --offline    # registry-only checks, no network
     python registry_gaps.py --no-calendar
     python registry_gaps.py --category personal   # personal accounts/payments only
     python registry_gaps.py --category business   # business only
 
 --category narrows the registry BEFORE the checks run and contacts only the
-sources the narrowed registry still needs: a personal run never touches Xero,
-a business run only logs in to Monarch if a business account has a
+sources the narrowed registry still needs: a business run only logs in to
+Monarch if a business account has a
 monarch_match. Monarch liabilities the registry does not know about carry no
 category; Monarch is the personal ledger here, so they count as personal.
 """
@@ -39,7 +37,6 @@ import sys
 from datetime import datetime, timedelta
 
 CATEGORIES = ("personal", "business")
-XERO_STALE_DAYS = 10
 MONARCH_STALE_DAYS = 7
 CALENDAR_WINDOW_DAYS = 31
 
@@ -109,8 +106,6 @@ def sources_needed(config):
             continue
         if a.get("monarch_match"):
             needed.add("monarch")
-        if a.get("xero_account_id"):
-            needed.add("xero")
     if config.get("payments"):
         needed.add("zoho")
     return needed
@@ -301,43 +296,13 @@ def check_sources(source_status):
             f"{source} unavailable: {status}. Balances and detections from it are missing, "
             f"so every '{source}'-backed account looks fine when it may not be.",
             {"monarch": "Run: task finance:balances:login",
-             "xero": "Re-consent: cd ~/projects/yumyums/accounting/xero && python app.py, "
-                     "then open http://localhost:9091/login"}.get(source, ""),
+             "zoho_books": "Check the Zoho Books feeds and token: task finance:sync-status"}.get(source, ""),
         ))
     return gaps
 
 
-def check_xero_staleness(latest_by_account, threshold_days=XERO_STALE_DAYS, today=None):
-    """Xero bank accounts with no transaction in the last N days."""
-    if not latest_by_account:
-        return []
-    today = today or datetime.now().date()
-    gaps = []
-    for name, latest in sorted(latest_by_account.items()):
-        if latest is None:
-            age = None
-        else:
-            age = (today - latest).days
-        if age is None or age > threshold_days:
-            if latest is None:
-                # No transaction ever -- an empty shell, not a reconciliation backlog.
-                when = "never"
-                fix = ("Import this account's transactions in Xero, or archive the account "
-                       "there if it is not in use.")
-            else:
-                when = f"{latest} ({age}d ago)"
-                fix = "Reconcile/import this account in Xero."
-            gaps.append(_gap(
-                "warning", "xero_stale",
-                f"Xero bank account '{name}': latest transaction {when}; books are behind, "
-                f"business liabilities are under-reported.",
-                fix,
-            ))
-    return gaps
-
-
 def run_checks(config, monarch_accounts=None, event_titles=None, source_status=None,
-               xero_latest=None, category=None):
+               category=None):
     """Run every check. `category` narrows the registry first (see filter_config);
     passing an already-filtered config is fine, filtering is idempotent."""
     config = filter_config(config, category)
@@ -351,7 +316,6 @@ def run_checks(config, monarch_accounts=None, event_titles=None, source_status=N
     gaps += check_registry_closed_in_monarch(config, monarch_accounts)
     gaps += check_monarch_stale(config, monarch_accounts)
     gaps += check_calendar_coverage(config, event_titles)
-    gaps += check_xero_staleness(xero_latest)
     return gaps
 
 
@@ -359,7 +323,7 @@ def run_checks(config, monarch_accounts=None, event_titles=None, source_status=N
 # Data gathering (I/O)
 # ---------------------------------------------------------------------------
 
-ALL_SOURCES = frozenset({"monarch", "xero", "zoho"})
+ALL_SOURCES = frozenset({"monarch", "zoho"})
 
 
 async def _gather_monarch(source_status):
@@ -376,21 +340,6 @@ async def _gather_monarch(source_status):
             source_status["monarch"] = f"{type(e).__name__}: {e}"[:160]
     except ImportError as e:
         source_status["monarch"] = f"import failed: {e}"
-    return None
-
-
-def _gather_xero(source_status):
-    try:
-        from xero_balances import xero_connection_status, fetch_xero_latest_activity
-        status = xero_connection_status()
-        source_status["xero"] = status
-        if status == "ok":
-            try:
-                return fetch_xero_latest_activity()
-            except Exception as e:
-                source_status["xero"] = f"activity fetch failed: {e}"[:160]
-    except ImportError as e:
-        source_status["xero"] = f"import failed: {e}"
     return None
 
 
@@ -419,20 +368,19 @@ async def gather(config, offline=False, calendar=True, sources=None):
     `sources` limits which live sources are contacted (default: all). A source
     that is not needed is neither fetched nor reported as unavailable, so a
     business-only run never logs in to Monarch unless a business account maps
-    to it, and a personal-only run never touches Xero.
+    to it.
     """
     if offline:
         return dict(config=config, monarch_accounts=None, event_titles=None,
-                    source_status=None, xero_latest=None)
+                    source_status=None)
 
     sources = ALL_SOURCES if sources is None else set(sources)
     source_status = {}
     monarch_accounts = await _gather_monarch(source_status) if "monarch" in sources else None
-    xero_latest = _gather_xero(source_status) if "xero" in sources else None
     event_titles = _gather_zoho(source_status) if calendar and "zoho" in sources else None
 
     return dict(config=config, monarch_accounts=monarch_accounts, event_titles=event_titles,
-                source_status=source_status, xero_latest=xero_latest)
+                source_status=source_status)
 
 
 async def run_all(offline=False, calendar=True, category=None):

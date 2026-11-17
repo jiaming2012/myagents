@@ -53,9 +53,9 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from xero_balances import fetch_xero_balances
+    from zoho_balances import fetch_with_status as fetch_zoho_with_status
 except ImportError:
-    fetch_xero_balances = None
+    fetch_zoho_with_status = None
 
 
 ZOHO_TOKEN_URL = "https://accounts.zoho.com/oauth/v2/token"
@@ -278,7 +278,7 @@ async def resolve_variable_amounts(payments, config):
     except MonarchAuthError as e:
         print(f"Warning: {e}; variable amounts fall back to calendar titles", file=sys.stderr)
         monarch_balances = {}
-    xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+    zoho_balances = fetch_zoho_with_status()[0] if fetch_zoho_with_status else {}
 
     # Build lookup from source_account nickname to account config
     nickname_lookup = build_nickname_lookup(config)
@@ -297,7 +297,7 @@ async def resolve_variable_amounts(payments, config):
             continue
 
         # Try to get balance from Monarch
-        balance, _ = resolve_balance(acct_config, monarch_balances, xero_balances)
+        balance, _ = resolve_balance(acct_config, monarch_balances, zoho_balances)
         if balance is not None:
             p["amount"] = abs(balance)  # Pitfall 6: credit cards are negative
             p["amount_source"] = "monarch"

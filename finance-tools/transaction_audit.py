@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
 Transaction coverage audit: checks that all transactions are captured
-and categorized across Monarch Money (personal) and Xero (business).
+and categorized across Monarch Money (personal) and Zoho Books (business).
 
 Checks:
   1. Uncategorized/unreviewed transactions in Monarch
-  2. Unreconciled bank statement lines in Xero
+  2. Uncategorized bank-feed lines in Zoho Books
   3. Expected recurring payments that didn't post
   4. Expected income deposits that didn't appear
 
@@ -41,9 +41,10 @@ except ImportError:
     sys.exit(1)
 
 try:
-    from xero_balances import fetch_xero_balances, load_token, refresh_token, CLIENT_ID, CLIENT_SECRET
+    from zoho_balances import uncategorized_lines as zoho_uncategorized_lines
+    from sync_status import fetch_zoho_accounts
 except ImportError:
-    fetch_xero_balances = None
+    fetch_zoho_accounts = None
 
 # ANSI colors with TTY detection
 class Color:
@@ -131,85 +132,21 @@ async def fetch_uncategorized_monarch(days=7):
     }
 
 
-def fetch_unreconciled_xero():
-    """Fetch unreconciled bank statement lines from Xero.
+def fetch_uncategorized_zoho():
+    """Bank-feed lines in Zoho Books that nobody has categorized or matched yet.
 
-    Uses the Xero BankTransactions API. In Xero, statement lines that haven't
-    been matched/reconciled show up differently than reconciled transactions.
-    We check for bank transactions with status != AUTHORISED.
-
-    Returns:
-        dict with keys:
-            unreconciled: list of txn dicts
-            error: str or None
+    Returns {"uncategorized": [{"account", "count"}], "error": str|None}. The
+    fix is the weekly recon (task zoho:recon:apply for Mercury, task zoho:feed:apply
+    for the feed-only banks) — not a click in a web UI.
     """
-    if fetch_xero_balances is None:
-        return {"unreconciled": [], "error": "Xero not available"}
-
-    if not CLIENT_ID or not CLIENT_SECRET:
-        return {"unreconciled": [], "error": "XERO_CLIENT_ID/SECRET not set"}
-
-    token = load_token()
-    if not token:
-        return {"unreconciled": [], "error": "No Xero token. Run: task xero:auth"}
-
+    if fetch_zoho_accounts is None:
+        return {"uncategorized": [], "error": "Zoho Books not available (sync_status/zoho_balances missing)"}
     try:
-        token = refresh_token(token)
-    except Exception as e:
-        return {"unreconciled": [], "error": f"Xero token refresh failed: {e}"}
-
-    try:
-        from xero_python.api_client import ApiClient, Configuration
-        from xero_python.api_client.oauth2 import OAuth2Token
-        from xero_python.accounting import AccountingApi
-        from xero_python.identity import IdentityApi
-
-        api_client = ApiClient(
-            Configuration(
-                oauth2_token=OAuth2Token(client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
-            ),
-            oauth2_token_getter=load_token,
-            oauth2_token_saver=lambda t: None,
-        )
-        api_client.set_oauth2_token(token)
-
-        identity_api = IdentityApi(api_client)
-        connections = identity_api.get_connections()
-        if not connections:
-            return {"unreconciled": [], "error": "No Xero tenants connected"}
-        tenant_id = connections[0].tenant_id
-
-        accounting_api = AccountingApi(api_client)
-
-        # Fetch recent bank transactions — look for ones not fully reconciled
-        # In Xero, bank statement lines that need attention are surfaced via
-        # the bank reconciliation report. We approximate by checking for
-        # bank transactions in the last 7 days.
-        since_date = datetime.now() - timedelta(days=30)
-        result = accounting_api.get_bank_transactions(
-            xero_tenant_id=tenant_id,
-            if_modified_since=since_date,
-        )
-
-        unreconciled = []
-        for txn in (result.bank_transactions or []):
-            # DELETED or VOIDED transactions are not interesting
-            if str(txn.status) in ("BankTransactionStatus.DELETED", "BankTransactionStatus.VOIDED"):
-                continue
-            # Check if the transaction is_reconciled flag is False
-            if not getattr(txn, "is_reconciled", True):
-                unreconciled.append({
-                    "date": str(txn.date) if txn.date else None,
-                    "amount": float(txn.total) if txn.total else 0,
-                    "description": txn.reference or (txn.contact.name if txn.contact else ""),
-                    "account": txn.bank_account.name if txn.bank_account else "Unknown",
-                    "type": str(txn.type) if txn.type else "",
-                })
-
-        return {"unreconciled": unreconciled}
-
-    except Exception as e:
-        return {"unreconciled": [], "error": f"Xero API error: {e}"}
+        return {"uncategorized": zoho_uncategorized_lines(fetch_zoho_accounts())}
+    except SystemExit as e:
+        return {"uncategorized": [], "error": f"Zoho Books exited with code {e.code}"}
+    except Exception as e:  # noqa: BLE001 - an outage is reported, never raised
+        return {"uncategorized": [], "error": f"Zoho Books API error: {str(e)[:160]}"}
 
 
 async def check_recurring_posted(days=7):
@@ -340,12 +277,11 @@ async def run_audit(days=7):
         uncategorized_task, recurring_task
     )
 
-    # Xero check is synchronous
-    xero_result = fetch_unreconciled_xero()
+    zoho_result = await asyncio.to_thread(fetch_uncategorized_zoho)
 
     return {
         "monarch_uncategorized": uncategorized_result,
-        "xero_unreconciled": xero_result,
+        "zoho_uncategorized": zoho_result,
         "recurring_check": recurring_result,
         "days": days,
         "run_at": datetime.now().isoformat(),
@@ -389,25 +325,22 @@ def print_report(audit):
 
             print(f"\n    {Color.CYAN}Action: Review at https://app.monarchmoney.com/transactions{Color.RESET}")
 
-    # --- Xero Unreconciled ---
-    xr = audit["xero_unreconciled"]
-    print(f"\n  {Color.BOLD}Xero — Unreconciled Items{Color.RESET}")
+    # --- Zoho Books uncategorized ---
+    zr = audit["zoho_uncategorized"]
+    print(f"\n  {Color.BOLD}Zoho Books — Uncategorized Feed Lines{Color.RESET}")
     print(f"  {'─' * 55}")
 
-    if xr.get("error"):
-        print(f"    {Color.YELLOW}Skipped: {xr['error']}{Color.RESET}")
+    if zr.get("error"):
+        print(f"    {Color.YELLOW}Skipped: {zr['error']}{Color.RESET}")
     else:
-        ur_count = len(xr["unreconciled"])
-        if ur_count == 0:
-            print(f"    {Color.GREEN}All bank transactions reconciled{Color.RESET}")
+        total = sum(x["count"] for x in zr["uncategorized"])
+        if total == 0:
+            print(f"    {Color.GREEN}Every feed line is booked{Color.RESET}")
         else:
-            print(f"    {Color.YELLOW}{ur_count} unreconciled transaction(s){Color.RESET}")
-            for txn in xr["unreconciled"][:10]:
-                desc = txn["description"] or "(no description)"
-                print(f"      {txn['date']}  {desc}  ${abs(txn['amount']):,.2f}  [{txn['account']}]")
-            if ur_count > 10:
-                print(f"      ... and {ur_count - 10} more")
-            print(f"\n    {Color.CYAN}Action: Reconcile at https://go.xero.com/Bank/BankAccounts.aspx{Color.RESET}")
+            print(f"    {Color.YELLOW}{total} uncategorized line(s){Color.RESET}")
+            for x in zr["uncategorized"]:
+                print(f"      {x['count']:>4}  {x['account']}")
+            print(f"\n    {Color.CYAN}Action: task zoho:recon:apply (Mercury) / task zoho:feed:apply (other banks){Color.RESET}")
 
     # --- Recurring Payments Check ---
     rc = audit["recurring_check"]
@@ -452,7 +385,7 @@ def print_report(audit):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Transaction coverage audit across Monarch Money and Xero"
+        description="Transaction coverage audit across Monarch Money and Zoho Books"
     )
     parser.add_argument(
         "--days", type=int, default=7,

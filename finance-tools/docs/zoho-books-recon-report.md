@@ -1,99 +1,75 @@
-# Zoho Books × Mercury reconciliation — final report (2026-10-16)
+# Zoho Books recon APPLY — 2026-11-17 (2026-01-01 → 2026-11-17)
 
-Runs: 2026-10-15 (spike + bulk apply, stopped by the 1,000/day API cap at 754/786) and
-2026-10-16 (remainder, opening balances, bank rules, monthly reconciliations).
-Script: `zoho_books_recon.py` (`task zoho:recon`, `task zoho:recon:apply`, `task zoho:rules`,
-`task zoho:reconcile`). Checkpoint: `finance-tools/.zoho_recon_state.json`.
+## Chart of accounts / bank accounts
+  38 coded accounts, banks: Operations ••4613, Outgoing ACH ••5396, Taxes ••7818, Operations ••0551 (closed), Business Adv Fundamentals, CORP Account - Business Adv Customized Cash Rewards - 2119, Chase Ink ••7667, Bluevine Checking ••2189 (closed), LFCU Business Checking ••7011, LFCU Share Savings ••3617, WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637
 
-## Outcome (after the merchant mapping on 2026-10-16)
-
-| account | Mercury posted 2026 | feed lines | categorized / matched | left uncategorized | Zoho book balance | Mercury current |
+## Mercury ↔ feed pairing
+| account | Mercury posted | feed uncategorized | paired | Mercury unpaired | feed unpaired | opening 2025-12-31 |
 |---|---|---|---|---|---|---|
-| Operations ••4613 | 533 | 533 | 533 | 0 | 47.24 | 47.24 |
-| Outgoing ACH ••5396 | 120 | 120 | 120 | 0 | 450.18 | 450.18 |
-| Taxes ••7818 | 137 | 137 | 137 | 0 | 214.29 | 214.29 |
+| Operations ••4613 | 617 | 1 | 1 | 41 | 0 | 388.69 |
+| Outgoing ACH ••5396 | 138 | 0 | 0 | 8 | 0 | 207.00 |
+| Taxes ••7818 | 147 | 0 | 0 | 0 | 0 | 37.21 |
+| Operations ••0551 (closed) | 253 | 0 | 0 | 0 | 0 | 371.11 |
 
-All three accounts equal Mercury to the cent with nothing uncategorized.
+## Toast payouts: 1 Mercury credits, 1 with a toast_xero deposit, 0 without (left uncategorized)
 
-### The closed 0551 account (added 2026-10-16)
+## Plan
+- transfers: 0 lines -> 0 transfer documents (0 internal keys, 0 one-sided keys, 0 uneven)
+- coded spends/refunds: 0
+- Toast journals: 1 (approach A)
+- unmatched merchants (left uncategorized): 0
+- already done (in state): 0
 
-0551 was the main spending account from Jan 1 until it was swept to zero and archived
-on 2026-06-02; only its transfer legs had reached Zoho, leaving a 12,374.84 balance on
-the placeholder. Its 253 Mercury postings were imported as one statement
-(`POST /bankstatements`), then 124 transfer lines matched to the documents the live
-accounts already had, 129 spends categorized (six new merchants mapped), the 371.11
-opening balance posted as a journal against Opening Balance Offset (the org's
-opening-balance record is reconciled and immutable), and Jan–Jun records reconciled.
-It ends at **0.00** and is **marked inactive**, which removes it from the bank-balance
-view without losing the ~12.6k of first-half expenses it carried. 0551 lives under
-`zoho_only_accounts` in merchants.yaml so the Xero pre-coder never touches it.
+### Mercury txns with no feed line (49)
+- Operations ••4613 2026-10-16      -6.00 Facebook
+- Operations ••4613 2026-10-17     -12.00 Facebook
+- Operations ••4613 2026-10-18      -3.16 Save A Lot
+- Operations ••4613 2026-10-19     -95.61 Restaurant Depot
+- Operations ••4613 2026-10-19     -12.00 Facebook
+- Operations ••4613 2026-10-20     -17.54 Dollar Tree
+- Operations ••4613 2026-10-20     -47.63 Unique
+- Operations ••4613 2026-10-21     -22.84 Save A Lot
+- Operations ••4613 2026-10-21     -33.84 Save A Lot
+- Operations ••4613 2026-10-22    -316.45 Restaurant Depot
+- Operations ••4613 2026-10-23    -400.72 Jamal Cole
+- Operations ••4613 2026-10-25     -11.08 Save A Lot
+- Operations ••4613 2026-10-26    -660.32 Restaurant Depot
+- Operations ••4613 2026-10-27     -10.59 Amazon
+- Operations ••4613 2026-10-28     -32.62 Shoppers Food & Pharmacy
+- Operations ••4613 2026-10-29    -365.98 Restaurant Depot
+- Operations ••4613 2026-10-29    -475.00 Jamal Cole
+- Operations ••4613 2026-10-29    -514.73 Jamal Cole
+- Operations ••4613 2026-10-30     -27.98 Save A Lot
+- Operations ••4613 2026-10-30    -121.01 Instacart
+- Operations ••4613 2026-10-31     -21.28 Save A Lot
+- Operations ••4613 2026-11-01      -9.68 Shoppers Food & Pharmacy
+- Operations ••4613 2026-11-01     -11.96 Save A Lot
+- Operations ••4613 2026-11-02    -103.87 Amazon
+- Operations ••4613 2026-11-03     -93.87 Public Storage
+- Operations ••4613 2026-11-03    -475.00 Jamal Cole
+- Operations ••4613 2026-11-06     -19.99 The Restaurant Store
+- Operations ••4613 2026-11-06      -7.99 Save A Lot
+- Operations ••4613 2026-11-07    -400.53 Restaurant Depot
+- Operations ••4613 2026-11-09     -42.70 Restaurant Depot
+- Operations ••4613 2026-11-09     -45.00 Royal Farms
+- Operations ••4613 2026-11-10    -186.12 Thompson Gas
+- Operations ••4613 2026-11-10     -16.51 Sling
+- Operations ••4613 2026-11-10     -55.54 Sunoco
+- Operations ••4613 2026-11-10    -475.00 Jamal Cole
+- Operations ••4613 2026-11-12    -879.16 Progressive
+- Operations ••4613 2026-11-12      -2.49 Save A Lot
+- Operations ••4613 2026-11-13    -438.56 Restaurant Depot
+- Operations ••4613 2026-11-13      -1.89 Facebook
+- Operations ••4613 2026-11-15      -6.57 The Restaurant Store
 
-| account | Zoho book | Mercury | uncategorized |
-|---|---|---|---|
-| Operations ••0551 (closed) | 0.00 (inactive) | 0.00 (archived) | 0 |
+  Toast A: 2026-11-16 331.55 clean -> journal 1622286000000342001
 
-**Documents posted:** 150 internal transfers (created once, matched from the other
-side), 192 expenses, 21 owner draws, 2 expense refunds, 144 Toast payout journals
-(sales / sales tax / tips / fees / cash / 1310 / 2050 / 1320 split from toast_xero),
-3 opening balances as of 2025-12-31 (388.69 / 207.00 / 37.21), 52 bank rules,
-27 monthly reconciliation records.
-
-## O-2: the four merchants that were missing from merchants.yaml (mapped 2026-10-16)
-
-| date | account | amount | merchant | mapped to |
+## Verification
+| account | Zoho book balance | Zoho feed balance | Mercury current | uncategorized left |
 |---|---|---|---|---|
-| 2026-10-02 | 5396 | −1,000.00 | Commerce Management | 6300 Rent - Real Estate — food truck location rent (operator) |
-| 2026-10-04 | 4613 | −338.00 | Jd Transport | 6440 Vehicle Expense — truck mechanic, propane line repair (operator; posted as 6090 on 2026-10-16, re-coded with its bank rule on 2026-10-17) |
-| 2026-10-11 | 4613 | −53.31 | Public Storage | 6310 Rent - Other (storage, like CubeSmart) |
-| 2026-10-16 | 4613 | −482.19 | Cummins Sales and Service | 6140 Equipment & Tools (engine/generator service; review) |
+| Operations ••4613 | 1205.74 | 1205.74 | 1205.74 | 0 |
+| Outgoing ACH ••5396 | 51.09 | 51.09 | 51.09 | 0 |
+| Taxes ••7818 | 0.34 | 0.34 | 0.34 | 0 |
+| Operations ••0551 (closed) | 0.0 | 0.0 | 0.0 | 0 |
 
-Posted to Zoho and added as bank rules. The same `merchants.yaml` drives the Xero
-pre-coder, so the Monday Xero run will code these the same way. No vendor contacts were
-created (O-3).
-
-## Monthly reconciliation records (all 27 created, status `reconciled`)
-
-Zoho reconciles strictly by its own document dates. The feed dates a transfer that
-Mercury posts late in the evening (Eastern) on the next day, so a few month-ends differ
-from Mercury's balance by those straddlers; each one reverses the next month.
-
-| account | Jan | Feb | Mar | Apr | May | Jun | Jul | Aug | Sep |
-|---|---|---|---|---|---|---|---|---|---|
-| 4613 Zoho closing | 509.29 | 257.51 | 414.18 | 82.92 | 168.49 | 1170.61 | 25.34 | 957.02 | 293.64 |
-| 4613 Mercury | 509.29 | 257.51 | 114.18 | 82.92 | 168.49 | 785.56 | 25.34 | 957.02 | 293.64 |
-| 5396 Zoho closing | 3.89 | 100.00 | 0.29 | 26.87 | 287.61 | 212.55 | 71.61 | 18.17 | 1283.25 |
-| 5396 Mercury | 3.89 | 100.00 | 0.29 | 626.87 | 287.61 | 427.55 | 71.61 | 18.17 | 1283.25 |
-| 7818 Zoho closing | 97.68 | 135.10 | 37.65 | 158.86 | 296.68 | 203.13 | 486.52 | 769.13 | 0.16 |
-| 7818 Mercury | 97.68 | 135.10 | 37.65 | 158.86 | 296.68 | 371.13 | 486.52 | 769.13 | 0.16 |
-
-Straddlers (feed date / Mercury date): Mar 31→Apr 1 −300.00 (4613→5396 reversed on
-5396 Apr 30→May 1 +600.00 includes a second transfer); Jun 30→Jul 1: 4613 −99.75,
-−215.00, −68.25 and a −2.05 expense; 5396 +215.00; 7818 +99.75, +68.25.
-
-## API facts learned (not in Zoho's docs)
-
-- **Daily cap on this org is 1,000 calls** (error code 45) although the plan reads
-  PREMIUM TRIAL. The client stops on code 45 and resumes from the checkpoint.
-- Feed lines list only under `filter_by=Status.Uncategorized`; once categorized, the
-  documents appear under `GET /bankaccounts/{id}/transactions` with `reconcile_status`.
-- `uncategorize` must be called with the **statement-line id** (`imported_transaction_id`
-  of the categorized row), not the document id; `DELETE` on a categorized/matched
-  document is refused.
-- A journal that debits the bank account is offered as a match candidate for the feed
-  line (`transaction_type: journal`) — this is what makes the Toast split work.
-- Reconciliation: `transactions_to_be_reconciled` must be a **plain list of ids** (the
-  documented object form is rejected); the opening of a period is the sum of reconciled
-  documents dated before it; the first period must include the opening-balance document
-  dated 2025-12-31; a saved draft blocks further records until completed or deleted;
-  `DELETE …/reconciliations/{id}` undoes the last one.
-- Rule names reject punctuation such as `:` and `>`.
-- Opening balances need `currency_id` per account.
-
-## API budget used
-
-| run | calls |
-|---|---|
-| 2026-10-15 inventory + spike + bulk apply | ~1,000 (cap) |
-| 2026-10-16 remainder + rules + reconciliations + probes | ~450 |
-
-A normal week from here: one `task zoho:recon:apply` ≈ 20–60 calls.
+writes: 1, Zoho calls: 11

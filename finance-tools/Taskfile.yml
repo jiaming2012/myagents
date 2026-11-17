@@ -127,7 +127,7 @@ tasks:
       - python payment_forecast.py --days 30 --no-balances --timeline
 
   gaps:
-    desc: "Registry gap check: liabilities without payment entries, Monarch/Xero/Zoho drift, source outages"
+    desc: "Registry gap check: liabilities without payment entries, Monarch / Zoho drift, source outages"
     cmds:
       - python registry_gaps.py {{.CLI_ARGS}}
 
@@ -137,12 +137,12 @@ tasks:
       - python registry_gaps.py --offline
 
   gaps:personal:
-    desc: "Gap check for personal accounts/payments only (Monarch + Zoho; never touches Xero)"
+    desc: "Gap check for personal accounts/payments only (Monarch + Zoho calendar)"
     cmds:
       - python registry_gaps.py --category personal {{.CLI_ARGS}}
 
   gaps:business:
-    desc: "Gap check for business accounts/payments only (Xero + Zoho; Monarch only if a business account maps to it)"
+    desc: "Gap check for business accounts/payments only (Zoho; Monarch only if a business account maps to it)"
     cmds:
       - python registry_gaps.py --category business {{.CLI_ARGS}}
 
@@ -179,39 +179,27 @@ tasks:
     cmds:
       - python monarch_balances.py --login
 
-  xero:auth:
-    desc: Run Xero OAuth flow then copy token to this project
-    cmds:
-      - echo "Starting Xero OAuth server..."
-      - echo "1. Visit http://localhost:9091/login in your browser"
-      - echo "2. Authorize the app on Xero"
-      - echo "3. Once you see 'Token saved', press Ctrl+C to stop the server"
-      - echo ""
-      - cmd: python /Users/jamal/projects/yumyums/accounting/xero/app.py
-        ignore_error: true
-      - cp /Users/jamal/projects/yumyums/accounting/xero/.xero_token.json .xero_token.json
-      - echo "Token copied. Run 'task forecast' to verify business balances load."
-
   audit:
     desc: Transaction coverage audit (default 7 days)
     cmds:
       - task: sync-status:warn
       - python transaction_audit.py {{.CLI_ARGS}}
 
-  precode:
-    desc: "Dry-run Mercury -> Xero pre-coding (spends + transfers, merchants.yaml)"
+  zoho:balances:
+    desc: "Print every live Zoho Books bank balance (the business side of the forecast)"
     cmds:
-      - python mercury_precode.py {{.CLI_ARGS}}
+      - python zoho_balances.py
 
-  precode:apply:
-    desc: Apply Mercury -> Xero pre-coding (creates transactions)
+  zoho:toast-export:
+    desc: "Download new Toast sales days into the toast_xero checkout (opens a browser for the Toast login when needed): task zoho:toast-export -- --from YYYY-MM-DD [--to YYYY-MM-DD]"
+    dir: "{{.HOME}}/projects/yumyums/accounting/xero"
     cmds:
-      - python mercury_precode.py --apply {{.CLI_ARGS}}
+      - task toast:export -- {{.CLI_ARGS}}
 
   zoho:toast-dump:
-    desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json"
+    desc: "Dump toast_xero's previewed payout splits for 2026 to .toast_preview_2026.json; first re-exports any payout file Toast had not marked SENT (task zoho:toast-dump -- --no-refresh to skip)"
     cmds:
-      - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json
+      - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json {{.CLI_ARGS}}
 
   zoho:recon:
     desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md)"

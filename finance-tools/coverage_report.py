@@ -3,7 +3,7 @@
 Weekly coverage report: checks if funding accounts have enough
 to cover upcoming payments for 7, 14, and 30 days.
 
-Pulls balances from Xero (business) and Monarch Money (personal),
+Pulls balances from Zoho Books (business) and Monarch Money (personal),
 matches against payments.yaml, and flags shortfalls.
 
 Usage:
@@ -42,9 +42,9 @@ except ImportError:
     MonarchMoney = None
 
 try:
-    from xero_balances import fetch_xero_balances
+    from zoho_balances import fetch_with_status as fetch_zoho_with_status
 except ImportError:
-    fetch_xero_balances = None
+    fetch_zoho_with_status = None
 
 PAYMENTS_FILE = Path(__file__).parent / "payments.yaml"
 
@@ -156,18 +156,18 @@ async def fetch_monarch_balances():
     return balances
 
 
-def resolve_balance(account, monarch_balances, xero_balances):
+def resolve_balance(account, monarch_balances, zoho_balances):
     """Get the current balance for an account from available sources.
 
     Returns (balance, source) or (None, None) when no source can vouch for it.
     A source that is entirely empty (login expired, org disconnected) yields
     None, never a silent 0.0 -- callers treat None as "unknown", not "broke".
     """
-    balance, source, _as_of = resolve_balance_entry(account, monarch_balances, xero_balances)
+    balance, source, _as_of = resolve_balance_entry(account, monarch_balances, zoho_balances)
     return balance, source
 
 
-def resolve_balance_entry(account, monarch_balances, xero_balances):
+def resolve_balance_entry(account, monarch_balances, zoho_balances):
     """Like resolve_balance, but also returns when the source last refreshed.
 
     Returns (balance, source, as_of). as_of is the source's last-updated
@@ -177,14 +177,13 @@ def resolve_balance_entry(account, monarch_balances, xero_balances):
     """
     from registry_gaps import norm_name
 
-    # Try Xero first (for business accounts with xero_account_id)
-    xero_id = account.get("xero_account_id")
-    if xero_id:
-        if xero_balances and xero_id in xero_balances:
-            return xero_balances[xero_id]["balance"], "xero", None
-        # Xero down, or the org has no such bank account (e.g. a BoA account that
-        # was never connected): either way nobody can vouch for the balance.
-        return None, None, None
+    # Zoho Books first: business accounts name their Zoho bank account in zoho_match.
+    zoho_name = account.get("zoho_match")
+    if zoho_name and zoho_balances and zoho_name in zoho_balances:
+        entry = zoho_balances[zoho_name]
+        return entry["balance"], "zoho", entry.get("updated")
+    # Zoho down, or the org has no such account: fall through to Monarch when the
+    # account is linked there too; otherwise nobody can vouch for the balance.
 
     if not monarch_balances:
         return None, None, None
@@ -208,7 +207,7 @@ def resolve_balance_entry(account, monarch_balances, xero_balances):
     return None, None, None
 
 
-def print_report(config, monarch_balances, xero_balances, windows):
+def print_report(config, monarch_balances, zoho_balances, windows):
     """Print the coverage report."""
     accounts_by_id = {a["id"]: a for a in config.get("accounts", [])}
     payments = config.get("payments", [])
@@ -247,7 +246,7 @@ def print_report(config, monarch_balances, xero_balances, windows):
                 continue
 
             total_due = sum(p.get("amount", 0) for p in upcoming)
-            balance, source = resolve_balance(account, monarch_balances, xero_balances)
+            balance, source = resolve_balance(account, monarch_balances, zoho_balances)
 
             acct_label = f"{account['name']}"
             if account.get("last4"):
@@ -277,7 +276,7 @@ def print_report(config, monarch_balances, xero_balances, windows):
                             "window": window,
                         })
             else:
-                print(f"      Balance:  unknown (no Xero/Monarch match)")
+                print(f"      Balance:  unknown (no Zoho Books/Monarch match)")
                 print(f"      Due:      ${total_due:,.2f} ({len(upcoming)} payment{'s' if len(upcoming) != 1 else ''})")
 
             for p in upcoming:
@@ -323,7 +322,7 @@ async def main():
 
     print("Fetching balances...", end=" ", flush=True)
     monarch_balances = await fetch_monarch_balances()
-    xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+    zoho_balances = fetch_zoho_with_status()[0] if fetch_zoho_with_status else {}
     print("OK")
 
     if args.days:
@@ -331,7 +330,7 @@ async def main():
     else:
         windows = [7, 14, 30]
 
-    print_report(config, monarch_balances, xero_balances, windows)
+    print_report(config, monarch_balances, zoho_balances, windows)
 
 
 if __name__ == "__main__":

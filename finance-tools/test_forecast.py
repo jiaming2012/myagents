@@ -99,10 +99,10 @@ class TestResolvePaymentAmount(unittest.TestCase):
         }
         account_lookup = {"boa-plat1-5153": credit_account}
         monarch_balances = {"BankAmericard Platinum Plus Mastercard (...5153)": {"balance": -1234.56}}
-        xero_balances = {}
+        zoho_balances = {}
 
         with patch("payment_forecast.resolve_balance", return_value=(-1234.56, "monarch")):
-            result = resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balances,
+            result = resolve_payment_amount(payment, account_lookup, monarch_balances, zoho_balances,
                                             credit_account=credit_account)
         self.assertAlmostEqual(result, 1234.56)
 
@@ -127,9 +127,9 @@ class TestResolvePaymentAmount(unittest.TestCase):
                     "autopay_type": None}
         account_lookup = {}
         monarch_balances = {}
-        xero_balances = {}
+        zoho_balances = {}
 
-        result = resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balances)
+        result = resolve_payment_amount(payment, account_lookup, monarch_balances, zoho_balances)
         self.assertAlmostEqual(result, 1000.00)
 
     def test_credit_card_fallback_to_yaml_when_balance_none(self):
@@ -144,10 +144,10 @@ class TestResolvePaymentAmount(unittest.TestCase):
         }
         account_lookup = {"boa-plat1-5153": credit_account}
         monarch_balances = {}
-        xero_balances = {}
+        zoho_balances = {}
 
         with patch("payment_forecast.resolve_balance", return_value=(None, None)):
-            result = resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balances,
+            result = resolve_payment_amount(payment, account_lookup, monarch_balances, zoho_balances,
                                             credit_account=credit_account)
         self.assertAlmostEqual(result, 953.00)
 

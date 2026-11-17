@@ -1,4 +1,4 @@
-# Merchant -> Xero account-code mapping for mercury_precode.py
+# Merchant -> chart-of-accounts code mapping for zoho_books_recon.py (Zoho Books)
 # (same pattern as payments.yaml: one YAML, edit freely, script re-reads each run)
 #
 # Matching: `pattern` is a case-insensitive substring tested against the Mercury
@@ -6,28 +6,26 @@
 # in order: skip -> transfers -> merchants. Unmatched transactions are never
 # posted -- they land in the dry-run review list.
 
-# Todoist project the weekly agent files action tasks into ("Bookkeeping")
-todoist_project_id: "6hXPPX7qRMJpfg49"
-
-# Mercury accounts to pre-code, each mapped to its Xero bank account.
+# Mercury accounts to reconcile, each with the short bank name used throughout this
+# file (BANK_NAMES in zoho_books_recon.py maps it to the Zoho Books account name).
 # Order matters a little: list 4613 first so internal transfers are created
 # from its side and the other accounts' sides dedup against them.
 accounts:
   - mercury_account_id: "9553aae6-abe5-11ed-99c1-97cfb7de9b47"   # Mercury Checking ..4613
-    xero_bank_account: "Mercury: Operations (4613)"
+    bank_account: "Mercury: Operations (4613)"
   - mercury_account_id: "739dbde6-ad85-11ed-9df0-fb27d7a74c22"   # Mercury Checking ..5396
-    xero_bank_account: "Mercury: Outgoing ACH (5396)"
+    bank_account: "Mercury: Outgoing ACH (5396)"
   - mercury_account_id: "955515ac-abe5-11ed-99c4-5322552875b7"   # Mercury Savings ..7818
-    xero_bank_account: "Mercury: Profit (7818)"
+    bank_account: "Mercury: Profit (7818)"
 
 # Never touched by this script
 skip:
   - pattern: TOAST
-    direction: credit          # Toast payouts are posted by toast_xero `task apply`
-    reason: handled by toast_xero
+    direction: credit          # Toast payouts are posted as split journals from the toast_xero dump
+    reason: handled by the Toast journal step
 
-# Mercury counterparties that are our own accounts -> Xero BankTransfer
-# (value must exactly match the Xero bank account name). Internal transfers
+# Mercury counterparties that are our own accounts -> internal transfer
+# (value must exactly match a `bank_account` short name in this file). Internal transfers
 # surface under user-set nicknames ("Taxes ••7818"), so match the ••suffix.
 transfers:
   "••4613": "Mercury: Operations (4613)"
@@ -110,16 +108,22 @@ merchants:
   # --- 0551 (closed Jun 2026) merchants, added 2026-10-16 ---
   - {pattern: "Dollar General",       account: "6350"}   # Supplies
   - {pattern: "QuickBooks",           account: "6340"}   # Software & Web
-  - {pattern: "Xero US",              account: "6340"}   # Software & Web
+  - {pattern: "Xero US",              account: "6340"}   # Software & Web (former accounting software, charges through 2026)
   - {pattern: "Alto-Hartley",         account: "5200"}   # COGS - Supplies (restaurant supply)
   - {pattern: "Snagajob",             account: "6000"}   # Advertising (job posting; review)
   - {pattern: "Inova",                account: "3200"}   # Owner's Draws (medical, personal; review)
+  # 2026-11-16 catch-up (Oct 16 - Nov 15 Mercury lines)
+  - {pattern: "Advance Auto Parts",   account: "6440"}   # Vehicle Expense: truck parts
+  - {pattern: "Harbor Freight Tools", account: "6140"}   # Equipment & Tools
+  - {pattern: "Zoho Corporation",     account: "6340"}   # Software & Web (Zoho Books)
+  - {pattern: "Cloudflare",           account: "6340"}   # Software & Web (domains / DNS)
+  - {pattern: "Mail Xpress",          account: "6270"}   # Postage and Delivery
 
-# Accounts reconciled in Zoho Books only (NOT by mercury_precode.py / Xero).
+# Mercury accounts with no bank feed in Zoho Books.
 # No bank feed: zoho_books_recon.py imports the Mercury history as a statement.
 zoho_only_accounts:
   - mercury_account_id: "fdb782d6-ddbc-11f0-84d7-eb66a2192bf9"   # Mercury Checking ..0551, archived 2026-06-02
-    xero_bank_account: "Mercury: Operations (0551) * Closed"
+    bank_account: "Mercury: Operations (0551) * Closed"
     statement_import: true
     closed: "2026-06-02"
 
@@ -128,26 +132,26 @@ zoho_only_accounts:
 # balance in closing_balances.yaml. Lines are classified on payee + description:
 # boa_transfers -> boa_merchants -> the shared merchants: block above.
 zoho_feed_only_accounts:
-  - xero_bank_account: "BoA: Business Checking (1778)"   # Zoho "Business Adv Fundamentals" 1622286000000143048
+  - bank_account: "BoA: Business Checking (1778)"   # Zoho "Business Adv Fundamentals" 1622286000000143048
     kind: bank
-  - xero_bank_account: "BoA: CORP Account (2119)"         # Zoho "CORP Account - ... - 2119" 1622286000000143054
+  - bank_account: "BoA: CORP Account (2119)"         # Zoho "CORP Account - ... - 2119" 1622286000000143054
     kind: credit_card
-  - xero_bank_account: "Bluevine: Checking * Closed"      # Zoho "Bluevine Checking ••2189 (closed)" 1622286000000207062, feed-linked 2026-10-17
+  - bank_account: "Bluevine: Checking * Closed"      # Zoho "Bluevine Checking ••2189 (closed)" 1622286000000207062, feed-linked 2026-10-17
     kind: bank
     closed: "2026-06-02"
-  - xero_bank_account: "Chase: Ink (7667)"                # Zoho "Chase Ink ••7667" 1622286000000212046; closed card, 2026 activity imported from the statements 2026-10-17
+  - bank_account: "Chase: Ink (7667)"                # Zoho "Chase Ink ••7667" 1622286000000212046; closed card, 2026 activity imported from the statements 2026-10-17
     kind: credit_card
     no_rules: true                                        # no feed, nothing new arrives
-  - xero_bank_account: "LFCU: Checking"                   # Zoho "LFCU Business Checking ••7011" 1622286000000207096, feed-linked 2026-10-17
+  - bank_account: "LFCU: Checking"                   # Zoho "LFCU Business Checking ••7011" 1622286000000207096, feed-linked 2026-10-17
     kind: bank
     opened: "2026-03-04"                                  # no reconciliation records before this
-  - xero_bank_account: "LFCU: Savings"                    # Zoho "LFCU Share Savings ••3617" 1622286000000207090
+  - bank_account: "LFCU: Savings"                    # Zoho "LFCU Share Savings ••3617" 1622286000000207090
     kind: bank
     opened: "2026-03-04"
-  - xero_bank_account: "Wells: Signify Business (4637)"   # Zoho 1622286000000207157, feed-linked 2026-10-17; never used (operator), 0 lines
+  - bank_account: "Wells: Signify Business (4637)"   # Zoho 1622286000000207157, feed-linked 2026-10-17; never used (operator), 0 lines
     kind: credit_card
 
-# description substring -> the other account of the transfer (Xero bank name)
+# description substring -> the other account of the transfer (short bank name)
 boa_transfers:
   "payment to CRD 2119":          "BoA: CORP Account (2119)"          # checking -> card (online payment)
   "BUSINESS CARD Bill Payment":   "BoA: CORP Account (2119)"          # checking -> card (autopay)
@@ -208,3 +212,4 @@ boa_merchants:
   - {pattern: "PEACOCKTVLL",              account: "3200"}   # Peacock TV -> owner draw
   - {pattern: "UBER *",                   account: "3200"}   # owner draw
   - {pattern: "APPLE CASH SENT MONEY",    account: "6450"}   # Wages and Salaries: payroll sent to an employee
+  - {pattern: "Hostinger",                account: "6340"}   # Software & Web: web hosting (BoA 1778, 2026-11)

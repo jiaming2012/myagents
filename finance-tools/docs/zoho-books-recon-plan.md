@@ -1,5 +1,8 @@
 # Zoho Books × Mercury reconciliation — one-shot plan
 
+> **Decision 2026-11-17: Zoho Books replaced Xero.** This plan is kept as the record of
+> how the switch was evaluated; the Xero-side tooling it mentions has been removed.
+
 **Status:** plan, 2026-10-15. Written for the agent that will run the trial; the operator
 (Jamal) wants Mercury reconciled in Zoho Books with as little input from him as possible.
 If the trial is painless, Zoho Books replaces Xero. Nothing here touches Xero.

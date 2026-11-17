@@ -7,11 +7,11 @@ Runs:
   2. Payment forecast (account balances, shortfalls, upcoming bills)
   3. Budget pacing (spending vs plan per category)
   4. Goal progress (savings contributions vs targets)
-  5. Registry gaps (liabilities the forecast cannot see; Monarch/Xero drift and outages)
+  5. Registry gaps (liabilities the forecast cannot see; Monarch / Zoho Books drift and outages)
   6. Account register (the Bills sheet one-to-one with payments.yaml, Monarch and
      Zoho Books, balances to the cent — see docs/account-register-plan.md)
 
-A failing data source (expired Monarch login, disconnected Xero org) no longer
+A failing data source (expired Monarch login, broken Zoho Books feed) no longer
 aborts the report: the affected section is empty and the outage is reported
 as a gap in section 5 and in the action items.
 
@@ -45,12 +45,7 @@ from sync_status import collect as collect_sync_status, warn_lines as sync_warn_
 import account_register
 import debt_plan
 
-try:
-    from xero_balances import fetch_xero_balances, xero_connection_status, fetch_xero_latest_activity
-except ImportError:
-    fetch_xero_balances = None
-    xero_connection_status = None
-    fetch_xero_latest_activity = None
+from zoho_balances import balances_from_accounts as zoho_balances_from_accounts
 
 from transaction_audit import run_audit as run_transaction_audit
 from payment_forecast import build_forecast, determine_exit_code
@@ -105,7 +100,7 @@ if not sys.stdout.isatty():
 
 EMPTY_AUDIT = {
     "monarch_uncategorized": {"needs_review": [], "uncategorized": []},
-    "xero_unreconciled": {"unreconciled": []},
+    "zoho_uncategorized": {"uncategorized": []},
     "recurring_check": {"missing": [], "found": []},
 }
 
@@ -139,21 +134,16 @@ async def gather_all_data():
         _safe("sync", collect_sync_status(), None, status),
     )
 
-    # Xero (sync)
-    xero_status = xero_connection_status() if xero_connection_status else "xero_balances module missing"
-    status["xero"] = xero_status
-    xero_balances = {}
-    xero_latest = None
-    if xero_status == "ok":
-        try:
-            xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
-            xero_latest = fetch_xero_latest_activity() if fetch_xero_latest_activity else None
-        except Exception as e:
-            status["xero"] = f"{type(e).__name__}: {str(e)[:160]}"
+    # Zoho Books (business balances) come from the sync check already fetched above —
+    # no second API call against Zoho's daily cap.
+    zoho_entry = (sync or {}).get("zoho") or {}
+    zoho_status = zoho_entry.get("error") or ("ok" if sync else status.get("sync", "sync check unavailable"))
+    status["zoho_books"] = zoho_status
+    zoho_balances = zoho_balances_from_accounts(zoho_entry.get("accounts")) if zoho_status == "ok" else {}
 
     # Build forecast from balances
     config = load_payments_yaml()
-    forecast = build_forecast(config, monarch_balances, xero_balances, days=30)
+    forecast = build_forecast(config, monarch_balances, zoho_balances, days=30)
 
     # Analyze budget
     if budget_data is not None and categories is not None:
@@ -168,8 +158,7 @@ async def gather_all_data():
         config,
         monarch_accounts=monarch_balances or None,
         event_titles=None,
-        source_status={"monarch": status.get("monarch", "unknown"), "xero": xero_status},
-        xero_latest=xero_latest,
+        source_status={"monarch": status.get("monarch", "unknown"), "zoho_books": zoho_status},
     )
 
     # Account register (section 6): the Bills sheet <-> payments.yaml <-> Monarch / Zoho Books.
@@ -222,10 +211,10 @@ def count_action_items(data):
     if uc > 0 and uc != nr:
         items.append(f"{uc} uncategorized transaction(s) in Monarch")
 
-    xr = audit["xero_unreconciled"]
-    ur = len(xr.get("unreconciled", []))
+    zr = audit["zoho_uncategorized"]
+    ur = sum(x["count"] for x in zr.get("uncategorized", []))
     if ur > 0:
-        items.append(f"{ur} unreconciled Xero transaction(s) → https://go.xero.com/Bank/BankAccounts.aspx")
+        items.append(f"{ur} uncategorized Zoho Books feed line(s) → task zoho:recon:apply / task zoho:feed:apply")
 
     missing = audit["recurring_check"].get("missing", [])
     if missing:
@@ -300,7 +289,7 @@ def print_terminal_report(data):
     # --- Section 1: Transaction Audit ---
     audit = data["audit"]
     mc = audit["monarch_uncategorized"]
-    xr = audit["xero_unreconciled"]
+    zr = audit["zoho_uncategorized"]
     rc = audit["recurring_check"]
 
     print(f"\n  {Color.BOLD}1. TRANSACTION AUDIT{Color.RESET} (last {audit['days']} days)")
@@ -316,15 +305,15 @@ def print_terminal_report(data):
         else:
             print(f"    Monarch: {Color.YELLOW}{nr} need review{Color.RESET} ({mc['total_checked']} txns)")
 
-    # Xero
-    if xr.get("error"):
-        print(f"    Xero:    {Color.DIM}skipped ({xr['error']}){Color.RESET}")
+    # Zoho Books
+    if zr.get("error"):
+        print(f"    Zoho:    {Color.DIM}skipped ({zr['error']}){Color.RESET}")
     else:
-        ur = len(xr.get("unreconciled", []))
+        ur = sum(x["count"] for x in zr.get("uncategorized", []))
         if ur == 0:
-            print(f"    Xero:    {Color.GREEN}All reconciled{Color.RESET}")
+            print(f"    Zoho:    {Color.GREEN}Every feed line booked{Color.RESET}")
         else:
-            print(f"    Xero:    {Color.YELLOW}{ur} unreconciled{Color.RESET}")
+            print(f"    Zoho:    {Color.YELLOW}{ur} uncategorized feed line(s){Color.RESET}")
 
     # Recurring
     missing = rc.get("missing", [])
@@ -582,10 +571,10 @@ def build_health_email_html(data):
     # Transaction audit summary
     audit = data["audit"]
     mc = audit["monarch_uncategorized"]
-    xr = audit["xero_unreconciled"]
+    zr = audit["zoho_uncategorized"]
     rc = audit["recurring_check"]
     nr = len(mc.get("needs_review", []))
-    ur = len(xr.get("unreconciled", []))
+    ur = sum(x["count"] for x in zr.get("uncategorized", []))
     missing_count = len(rc.get("missing", []))
     found_count = len(rc.get("found", []))
 
@@ -606,7 +595,7 @@ def build_health_email_html(data):
 <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right; color: {audit_color};">{nr}</td>
 </tr>
 <tr>
-<td style="padding: 6px 8px; border: 1px solid #e5e7eb;">Xero — unreconciled</td>
+<td style="padding: 6px 8px; border: 1px solid #e5e7eb;">Zoho Books — uncategorized feed lines</td>
 <td style="padding: 6px 8px; border: 1px solid #e5e7eb; text-align: right;">{ur}</td>
 </tr>
 <tr>

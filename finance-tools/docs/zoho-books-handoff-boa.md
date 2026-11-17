@@ -111,8 +111,8 @@ posted in 2026, so **delete it** (`DELETE /bankaccounts/1622286000000108013`) an
 `BANK_NAMES["BoA: Business Checking (1778)"]` in `zoho_books_recon.py` at
 `Business Adv Fundamentals` instead.
 
-Registry (`payments.yaml`): 1778 = `boa-business-1778` (business checking, Xero name
-"BoA: Business Checking (1778)"); 2119 = `boa-corp-2119` (Xero "BoA: CORP Account (2119)").
+Registry (`payments.yaml`): 1778 = `boa-business-1778` (business checking, short bank name
+"BoA: Business Checking (1778)"); 2119 = `boa-corp-2119` (short name "BoA: CORP Account (2119)").
 The other BoA accounts in the registry (2803 Adv Plus personal checking, 5153 / 7250 /
 2986 personal cards, 5819 Cash Rewards) are **not** linked and, being personal, do not
 belong in the Yumyums Kitchen LLC books.
@@ -162,7 +162,7 @@ belong in the Yumyums Kitchen LLC books.
 
 1. Delete the placeholder; fix `BANK_NAMES`; add 1778 and 2119 to a new
    `zoho_feed_only_accounts:` list in merchants.yaml with their Zoho ids and the
-   Xero names above.
+   short bank names above.
 2. Dry run a new `--feed-only` mode: list uncategorized lines, classify by BoA
    patterns, print the unmapped descriptions grouped by count (like the Mercury
    "unmatched merchants" table). Expect to ask the operator the questions marked

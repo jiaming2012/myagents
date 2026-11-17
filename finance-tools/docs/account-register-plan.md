@@ -30,7 +30,7 @@ warning tier for this check.
   `Yumyum Bank Accounts` lists 26 Xero-era business account names with reconciliation dates.
 - **Registry.** `payments.yaml` `accounts:` has 39 entries, each with `last4`,
   `category: personal|business`, `monarch_match` (Monarch display name or null) and, for
-  business, `xero_account_id`. No Zoho Books link, no balances. The forecast and gaps
+  business, the old books' account name. No Zoho Books link, no balances. The forecast and gaps
   scripts key off this file.
 - **Monarch.** `task balances` (`monarch_balances.py`) returns displayName, type,
   institution and `currentBalance`; `coverage_report.py` already normalises Monarch accounts
@@ -136,7 +136,7 @@ separate command; `accounts:check` any time, `accounts:sync` on demand once trus
 ### Registry changes
 
 - `zoho_match:` on business accounts (the Books `account_name`), mirroring
-  `monarch_match`. `xero_account_id` stays until Xero is fully retired. The same field,
+  `monarch_match`. (The old books' `xero_account_id` field was removed 2026-11-17.) The same field,
   same name and values, was added independently on the unmerged branch
   `worktree-finance-week-funding` (debt_plan.py reads it); whichever branch merges second
   will see identical-content conflicts on four accounts, resolved by keeping one line.

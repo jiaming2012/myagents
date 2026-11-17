@@ -1,5 +1,5 @@
 # Statement balances for the feed-only (Bank of America) accounts, read by
-# `task zoho:feed` / `task zoho:feed:reconcile`. Keys are the Xero bank names used
+# `task zoho:feed` / `task zoho:feed:reconcile`. Keys are the short bank names (`bank_account`) used
 # in merchants.yaml. "2025-12-31" is the opening balance (posted once as a journal
 # against Opening Balance Offset); "YYYY-MM" is the statement closing balance for
 # that month (a reconciliation record is posted only when Zoho's closing equals it).

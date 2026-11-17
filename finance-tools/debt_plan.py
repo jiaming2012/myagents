@@ -97,21 +97,6 @@ def zoho_lookup(zoho_accounts):
     return {a["name"]: a for a in zoho_accounts}
 
 
-def xero_shaped_from_zoho(config, zoho_by_name):
-    """Let the forecast engine see business balances: registry accounts that carry both
-    xero_account_id and zoho_match get Zoho's book balance under their Xero key.
-    Credit cards are negated to match the Monarch "liability is negative" convention."""
-    out = {}
-    for a in config.get("accounts", []):
-        zm, xid = a.get("zoho_match"), a.get("xero_account_id")
-        if zm and xid and zm in zoho_by_name:
-            bal = zoho_by_name[zm]["book_balance"]
-            if zoho_by_name[zm].get("type") == "credit_card":
-                bal = -bal
-            out[xid] = {"balance": bal, "type": zoho_by_name[zm].get("type", "")}
-    return out
-
-
 def owed_balance(account, monarch_by_name, zoho_by_name):
     """Positive amount owed on a credit/loan account, with its source. (None, None) if unknown."""
     zm = account.get("zoho_match")
@@ -453,14 +438,15 @@ async def gather(days=30, fresh=False):
     from coverage_report import load_payments_yaml
     from payment_forecast import build_forecast
     from sync_status import collect
+    from zoho_balances import balances_from_accounts
 
     config = load_payments_yaml()
     debts_cfg = load_debts_yaml()
     sync = await collect(fresh=fresh)
     monarch_by_name = monarch_lookup(sync.get("monarch", {}).get("accounts", []) if not sync.get("monarch", {}).get("error") else [])
-    zoho_by_name = zoho_lookup(sync.get("zoho", {}).get("accounts", []) if not sync.get("zoho", {}).get("error") else [])
-    xero_shaped = xero_shaped_from_zoho(config, zoho_by_name)
-    forecast = build_forecast(config, monarch_by_name, xero_shaped, days=days, warn_missing=False)
+    zoho_accounts = sync.get("zoho", {}).get("accounts", []) if not sync.get("zoho", {}).get("error") else []
+    zoho_by_name = zoho_lookup(zoho_accounts)
+    forecast = build_forecast(config, monarch_by_name, balances_from_accounts(zoho_accounts), days=days, warn_missing=False)
     debts, notes = build_debts(config, debts_cfg, monarch_by_name, zoho_by_name)
     promos = promo_statuses(config, debts_cfg, monarch_by_name, zoho_by_name, debts)
     rows = headroom_by_account(forecast, config)

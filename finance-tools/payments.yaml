@@ -13,10 +13,9 @@
 #   type:            depository | credit | investment | loan
 #   category:        personal | business
 #   monarch_match:   name as it appears in Monarch Money (for balance lookup)
-#   xero_account_id:  Xero account name for balance lookup (business accounts)
-#   zoho_match: exact Zoho Books bank-account name (business accounts); account_register.py
+#   zoho_match:      exact Zoho Books bank-account name (business accounts); account_register.py
 #                    requires it on every open business account and matches it one-to-one;
-#                    debt_plan.py reads business balances through it
+#                    the forecast, debt plan and gap check read business balances through it
 #   status:          closed  (same meaning as inactive: true; account_register.py accepts either)
 #   closed_on:       YYYY-MM-DD the account closed; the Bills sheet keeps the row for 35 days after
 #   feed:            manual  -> no live source (no monarch_match / zoho_match expected); the sheet's
@@ -69,7 +68,6 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "Mercury: Operations (4613)"   # was "Mercury: Income (4613)", which Xero does not have; the ledger calls 4613 Operations
     zoho_match: "Operations ••4613"
     nicknames: ["Mercury Business", "Mercury Biz Income", "Mercury 4613"]
 
@@ -80,7 +78,6 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "Mercury: Outgoing ACH (5396)"
     zoho_match: "Outgoing ACH ••5396"
     nicknames: ["Mercury Outgoing", "Mercury Biz Outgoing", "Mercury 5396"]
 
@@ -92,9 +89,8 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "Mercury: Operations (0551)"
     zoho_match: "Operations ••0551 (closed)"
-    inactive: true   # archived in Mercury with $0 (API, 2026-10-17); Xero still carries a $13,489 ledger balance that is not real money
+    inactive: true   # archived in Mercury with $0 (API, 2026-10-17)
     nicknames: ["Mercury Operations", "Mercury Biz Ops", "Mercury 0551"]
 
   - id: mercury-biz-profit-7818
@@ -104,7 +100,6 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "Mercury: Profit (7818)"
     zoho_match: "Taxes ••7818"
     nicknames: ["Mercury Profit", "Mercury Biz Savings", "Mercury 7818"]
 
@@ -168,7 +163,6 @@ accounts:
     type: depository
     category: business
     monarch_match: null  # not connected to Monarch; Adv Plus 2803 shows transfers "to CHK 1778" so the account is live
-    xero_account_id: "BoA: Business Checking (1778)"   # NOT in Xero's bank list (2026-10-17) -> balance unknown. Rent, Progressive, OnPay, Sling, PayPal draw from here blind.
     zoho_match: "Business Adv Fundamentals"
     nicknames: ["BoA Business", "BoA 1778", "Bank of America 1778", "BoA Biz"]
     min_balance: 500
@@ -208,7 +202,6 @@ accounts:
     type: credit
     category: business
     monarch_match: null  # business; Monarch holds only the personal BoA accounts
-    xero_account_id: "BoA: CORP Account (2119)"
     zoho_match: "CORP Account - Business Adv Customized Cash Rewards - 2119"
     nicknames: ["BoA Corp", "BoA 2119", "Bank of America 2119", "CORP",
                 "BoA Cash Rewards", "BoA 5819", "Bank of America 5819", "Biz Cash Rewards"]
@@ -217,7 +210,7 @@ accounts:
     # overdraft source for checking 1778. 5819 is Jamal's cardholder CARD under this account
     # (statement "Cardholder Activity Summary: COLE, JAMAL A ... 5819"); its purchases and the
     # overdraft advances roll into this balance. Verified 2026-11-16 from eStmt_2025-02-10.pdf.
-    # The former separate entry boa-cash-rewards-5819 (a Xero-era duplicate, "BoA: Jamal Cash
+    # The former separate entry boa-cash-rewards-5819 (a duplicate from the old books, "BoA: Jamal Cash
     # Rewards (5819)") was folded in here; its nicknames stay so notes saying 5819 resolve.
 
   # --- Chase ---
@@ -228,7 +221,6 @@ accounts:
     type: credit
     category: business
     monarch_match: null  # TODO: confirm Monarch name
-    xero_account_id: null
     zoho_match: "Chase Ink ••7667"
     nicknames: ["Chase 7667", "Ink 7667", "Chase Ink", "Ink"]
 
@@ -392,7 +384,6 @@ accounts:
     type: depository
     category: business
     monarch_match: "Business Basic Checking Account (...3617)"
-    xero_account_id: "LFCU: Checking"
     zoho_match: "LFCU Business Checking ••7011"
     nicknames: ["Lafayette Business", "Lafayette 3617", "Lafayette Federal 3617", "Lafayette 7011"]
 
@@ -403,7 +394,6 @@ accounts:
     type: depository
     category: business
     monarch_match: null
-    xero_account_id: "LFCU: Savings"
     zoho_match: "LFCU Share Savings ••3617"
     nicknames: ["Lafayette Savings", "LFCU Savings"]
 
@@ -435,7 +425,6 @@ accounts:
     type: credit
     category: business
     monarch_match: null
-    xero_account_id: "Wells: Signify Business (4637)"
     zoho_match: "WELLS FARGO SIGNIFY BUSINESS CASH CARD ...4637"
     nicknames: ["Wells Fargo Signify", "WF Signify", "Signify", "Wells 4637"]
     # Added 2026-10-17: feed-linked in Zoho Books; never used (operator), 0.00 balance.

@@ -42,9 +42,9 @@ except ImportError as e:
     sys.exit(1)
 
 try:
-    from xero_balances import fetch_xero_balances
+    from zoho_balances import fetch_with_status as fetch_zoho_with_status
 except ImportError:
-    fetch_xero_balances = None
+    fetch_zoho_with_status = None
 
 try:
     from alert_email import (
@@ -150,7 +150,7 @@ def get_payment_dates_in_horizon(day_of_month, days_ahead, start=None):
     return [d for d in dates if start_date <= d <= end_date]
 
 
-def resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balances,
+def resolve_payment_amount(payment, account_lookup, monarch_balances, zoho_balances,
                            credit_account=None):
     """Resolve the actual payment amount, using live balance for credit cards.
 
@@ -169,7 +169,7 @@ def resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balan
         payment: Payment dict from payments.yaml.
         account_lookup: Dict mapping account_id -> account dict.
         monarch_balances: Dict from fetch_monarch_balances().
-        xero_balances: Dict from fetch_xero_balances().
+        zoho_balances: Dict from zoho_balances.fetch_zoho_balances().
         credit_account: The credit card account dict if this payment pays a credit card.
 
     Returns:
@@ -178,7 +178,7 @@ def resolve_payment_amount(payment, account_lookup, monarch_balances, xero_balan
     if credit_account and credit_account.get("type") == "credit":
         if payment.get("autopay_type") == "min":
             return payment.get("amount", 0.0)
-        balance, source = resolve_balance(credit_account, monarch_balances, xero_balances)
+        balance, source = resolve_balance(credit_account, monarch_balances, zoho_balances)
         if balance is not None:
             return abs(balance)
         # Fallback to YAML amount if balance unavailable
@@ -226,13 +226,13 @@ def _find_credit_card_for_payment(payment, accounts):
     return None
 
 
-def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missing=True):
+def build_forecast(config, monarch_balances, zoho_balances, days=30, warn_missing=True):
     """Build the complete forecast: per-account projected balances after deducting scheduled payments.
 
     Args:
         config: Parsed payments.yaml (dict with 'accounts' and 'payments' keys).
         monarch_balances: Dict from fetch_monarch_balances().
-        xero_balances: Dict from fetch_xero_balances().
+        zoho_balances: Dict from zoho_balances.fetch_zoho_balances().
         days: Forecast horizon in days (default 30).
 
     Returns:
@@ -297,7 +297,7 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
             continue
 
         # Resolve current balance
-        balance, source, as_of = resolve_balance_entry(account, monarch_balances, xero_balances)
+        balance, source, as_of = resolve_balance_entry(account, monarch_balances, zoho_balances)
         if balance is None:
             if warn_missing:
                 print(f"Warning: Could not fetch balance for {account.get('name', acct_id)}, "
@@ -315,13 +315,13 @@ def build_forecast(config, monarch_balances, xero_balances, days=30, warn_missin
         for p in acct_payments:
             dates = get_payment_dates_in_horizon(p["day_of_month"], days)
             credit_account = _find_credit_card_for_payment(p, all_accounts)
-            amount = resolve_payment_amount(p, accounts_by_id, monarch_balances, xero_balances,
+            amount = resolve_payment_amount(p, accounts_by_id, monarch_balances, zoho_balances,
                                             credit_account=credit_account)
             # A "full" card payment is priced from the card's live balance; if that
             # feed stopped syncing, the amount is as old as the feed. Say so.
             amount_stale_days = None
             if credit_account and p.get("autopay_type") != "min":
-                _b, _s, card_as_of = resolve_balance_entry(credit_account, monarch_balances, xero_balances)
+                _b, _s, card_as_of = resolve_balance_entry(credit_account, monarch_balances, zoho_balances)
                 age = _balance_age_days(card_as_of)
                 if age is not None and age > MONARCH_STALE_DAYS:
                     amount_stale_days = age
@@ -643,7 +643,7 @@ async def main():
     )
     parser.add_argument(
         "--no-balances", action="store_true",
-        help="Skip Monarch/Xero entirely: list the scheduled payments with every balance "
+        help="Skip Monarch/Zoho Books entirely: list the scheduled payments with every balance "
              "treated as $0 (deterministic; use when a login is broken)"
     )
     args = parser.parse_args()
@@ -686,7 +686,7 @@ async def main():
         print("Balances skipped (--no-balances): every starting balance is $0, so projected "
               "balances and shortfall flags below are NOT meaningful. The payment list and dates are.",
               file=sys.stderr)
-        monarch_balances, xero_balances = {}, {}
+        monarch_balances, zoho_balances = {}, {}
     else:
         print("Fetching balances...", end=" ", flush=True)
         try:
@@ -696,11 +696,13 @@ async def main():
             print("Re-run with --no-balances to see the payment schedule without balances.",
                   file=sys.stderr)
             sys.exit(EXIT_ERROR)
-        xero_balances = fetch_xero_balances() if fetch_xero_balances else {}
+        zoho_balances, zoho_status = fetch_zoho_with_status() if fetch_zoho_with_status else ({}, "zoho_balances module missing")
+        if zoho_status != "ok":
+            print(f"\nWarning: Zoho Books unavailable ({zoho_status}); business balances are unknown", file=sys.stderr)
         print("")
 
     # Build forecast
-    forecast = build_forecast(config, monarch_balances, xero_balances, days=args.days,
+    forecast = build_forecast(config, monarch_balances, zoho_balances, days=args.days,
                               warn_missing=not args.no_balances)
 
     # Display output
