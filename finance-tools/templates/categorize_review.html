@@ -180,7 +180,7 @@ document.addEventListener('click', async (e) => {
 });
 $('#copy').addEventListener('click', async () => {
   const text = JSON.stringify(approvedJson(), null, 2);
-  try { await navigator.clipboard.writeText(text); setStatus('Approved JSON copied. Save it as approved.json and run the apply task.'); }
+  try { await navigator.clipboard.writeText(text); setStatus('Approved JSON copied. Next: task finance:categorize:approve -- latest'); }
   catch { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); setStatus('Clipboard blocked: the JSON is selected below, copy it by hand.'); }
 });
 $('#approve').addEventListener('click', async () => {
@@ -189,7 +189,7 @@ $('#approve').addEventListener('click', async () => {
   if (db) {
     try { await db.doc(`runs/${RUN.run_id}`).set(runDoc); setStatus('Approval saved.'); }
     catch (e) { setStatus(`Could not save approval: ${e.code || e}`); }
-  } else setStatus('Approved locally. Copy the JSON to carry it to the apply step.');
+  } else setStatus('Approved. Now click "Copy approved JSON", then run: task finance:categorize:approve -- latest');
   render();
 });
 function approvedJson() {

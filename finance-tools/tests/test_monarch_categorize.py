@@ -146,6 +146,39 @@ def test_load_ai_proposals_falls_back_to_category_name():
         assert picks["t1"]["category_id"] == "c-groceries" and picks["t1"]["confidence"] == 0.8 and err is None
 
 
+def test_resolve_latest_and_default_approved_file(tmp_path, monkeypatch):
+    import monarch_categorize as mc
+    monkeypatch.setattr(mc, "RUNS_DIR", tmp_path)
+    (tmp_path / "20260101-000000").mkdir()
+    (tmp_path / "20260102-000000").mkdir()
+    latest = mc.resolve_run_dir("latest")
+    assert latest.name == "20260102-000000"
+    assert mc.resolve_run_dir("20260101-000000").name == "20260101-000000"
+    proposals = {"items": [{"id": "t1", "proposed": {"category_id": "c-groceries", "category_name": "Groceries"}, "needs_human": False}]}
+    (latest / "proposals.json").write_text(json.dumps(proposals))
+    _, decisions = mc.load_approved(latest, None)
+    assert decisions == {"t1": {"category_id": "c-groceries", "category_name": "Groceries", "apply": True}}
+    (latest / "approved.json").write_text(json.dumps({"decisions": {"t1": {"category_id": "c-dining", "category_name": "Restaurants & Bars", "apply": False}}}))
+    _, decisions = mc.load_approved(latest, None)  # approved.json wins once it exists
+    assert decisions["t1"]["apply"] is False and decisions["t1"]["category_id"] == "c-dining"
+
+
+def test_save_approved_from_clipboard_checks_payload(tmp_path, monkeypatch):
+    import monarch_categorize as mc
+    import pytest
+    run_dir = tmp_path / "20260102-000000"
+    run_dir.mkdir()
+    monkeypatch.setattr(mc, "read_clipboard", lambda: "not json")
+    with pytest.raises(SystemExit):
+        mc.save_approved_from_clipboard(run_dir, "20260102-000000")
+    monkeypatch.setattr(mc, "read_clipboard", lambda: json.dumps({"run_id": "other", "decisions": {}}))
+    with pytest.raises(SystemExit):
+        mc.save_approved_from_clipboard(run_dir, "20260102-000000")
+    monkeypatch.setattr(mc, "read_clipboard", lambda: json.dumps({"run_id": "20260102-000000", "decisions": {"t1": {"apply": True}}}))
+    path = mc.save_approved_from_clipboard(run_dir, "20260102-000000")
+    assert json.loads(path.read_text())["decisions"]["t1"]["apply"] is True
+
+
 def test_plan_updates_only_changed_or_unreviewed():
     run = {"items": [
         {"id": "t1", "date": "d", "amount": -1.0, "merchant": "A", "current_category": "Restaurants & Bars",

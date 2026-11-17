@@ -14,10 +14,13 @@ proposals file.
 |------|---------|--------------|
 | 1. Rules | `task finance:categorize:rules` | Snapshots the rules stored inside Monarch to `data/categorize/monarch_rules.json` |
 | 2. Run | `task finance:categorize -- --limit 50` or `-- --days 7` or `-- --since 2026-11-01` | Fetches the group, proposes a category per transaction, writes `data/categorize/runs/<run-id>/` |
-| 3. Review | open `review.html` or the published artifact | Human edits picks, ticks what to apply, presses Approve |
-| 4. Apply | `task finance:categorize:apply -- <run-id> --approved approved.json --execute` | Pushes category changes and clears needs-review; dry run without `--execute` |
+| 3. Review | `review.html` (opens itself with `--open`) or the published artifact | Human edits picks, ticks what to apply, presses Approve, copies the approved JSON |
+| 4. Approve | `task finance:categorize:approve -- latest` | Saves the clipboard payload as `<run>/approved.json` and prints the dry run |
+| 5. Apply | `task finance:categorize:apply -- latest --execute` | Pushes category changes and clears needs-review; dry run without `--execute` |
 
-Selection defaults to needs-review transactions only; `--all` includes reviewed ones.
+Selection defaults to needs-review transactions only; `--all` includes reviewed ones. `latest`
+stands for the newest run folder anywhere a run id is accepted. Step-by-step for this machine:
+`docs/monarch-categorize-runbook.md`.
 
 ### Confidence ladder (highest candidate wins)
 

@@ -202,8 +202,13 @@ tasks:
     cmds:
       - python monarch_categorize.py rules pull
 
+  categorize:approve:
+    desc: "Save the review page's 'Copy approved JSON' clipboard payload into the run and show the dry run: -- latest (or a run id)"
+    cmds:
+      - python monarch_categorize.py apply {{.CLI_ARGS}} --from-clipboard
+
   categorize:apply:
-    desc: "Send an approved run to Monarch (dry run unless --execute): -- <run-id> --approved approved.json [--execute]"
+    desc: "Send an approved run to Monarch (dry run unless --execute): -- latest --execute (or a run id; --approved file.json to override)"
     cmds:
       - python monarch_categorize.py apply {{.CLI_ARGS}}
 

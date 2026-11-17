@@ -57,6 +57,14 @@ except ImportError:
 
 HERE = Path(__file__).parent
 DATA_DIR = HERE / "data" / "categorize"
+def _rel(p):
+    """Path for messages: relative to the tool when it lives there, absolute otherwise (tests, odd data dirs)."""
+    try:
+        return Path(p).relative_to(HERE)
+    except ValueError:
+        return Path(p)
+
+
 RULES_FILE = DATA_DIR / "rules.yaml"
 MONARCH_RULES_FILE = DATA_DIR / "monarch_rules.json"
 RUNS_DIR = DATA_DIR / "runs"
@@ -516,7 +524,7 @@ def cmd_rules_pull(args):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         MONARCH_RULES_FILE.write_text(json.dumps({"pulled_at": datetime.now().isoformat(timespec="seconds"),
                                                   "rules": rules}, indent=2))
-        print(f"Pulled {len(rules)} rules from Monarch -> {MONARCH_RULES_FILE.relative_to(HERE)}")
+        print(f"Pulled {len(rules)} rules from Monarch -> {_rel(MONARCH_RULES_FILE)}")
         local = monarch_rules_as_local(rules)
         unresolved = [r for r in local if r["match"].get("_unresolved_criteria")]
         print(f"  {len(local)} set a category; {len(local) - len(unresolved)} translated into matcher form, "
@@ -577,7 +585,7 @@ def cmd_run(args):
         uncertain = [it for it in items if not it["proposed"] or it["proposed"]["confidence"] < args.ai_threshold]
         ai_error = None
         if uncertain and not args.no_ai:
-            print(f"AI step: {len(uncertain)} low-confidence transaction(s) -> {run_dir.relative_to(HERE) / AI_REQUEST_FILE}")
+            print(f"AI step: {len(uncertain)} low-confidence transaction(s) -> {_rel(run_dir) / AI_REQUEST_FILE}")
             picks, ai_error = ai_pick(run_dir, run_id, uncertain, cats)
             for it in uncertain:
                 p = picks.get(it["id"])
@@ -600,7 +608,7 @@ def cmd_run(args):
         html = TEMPLATE.read_text().replace("/*__DATA__*/null", json.dumps(run))
         (run_dir / "review.html").write_text(html)
 
-        print(f"\nRun {run_id} -> {run_dir.relative_to(HERE)}/")
+        print(f"\nRun {run_id} -> {_rel(run_dir)}/")
         print(f"{'date':10} {'amount':>10}  {'merchant':28} {'current':20} -> {'proposed':20} {'conf':>5}  source")
         for it in items:
             p = it["proposed"] or {"category_name": "?", "confidence": 0, "source": "none"}
@@ -609,16 +617,68 @@ def cmd_run(args):
                   f"{p['category_name'][:20]:20} {p['confidence']:>5.2f}  {p['source']}{flag}")
         n_h = sum(it["needs_human"] for it in items)
         print(f"\n{len(items)} proposed, {n_h} need a human pick (*). Review: {run_dir / 'review.html'}")
-        print(f"Then: task finance:categorize:apply -- {run_id} --approved <approved.json> [--execute]")
+        print("Then: click Approve and 'Copy approved JSON' on the review page, "
+              "task finance:categorize:approve -- latest, task finance:categorize:apply -- latest --execute")
+        if args.open:
+            import webbrowser
+            webbrowser.open((run_dir / "review.html").resolve().as_uri())
     asyncio.run(go())
+
+
+def resolve_run_dir(name):
+    """A run id, or 'latest' for the newest run folder."""
+    if name == "latest":
+        runs = sorted(p for p in RUNS_DIR.iterdir() if p.is_dir()) if RUNS_DIR.exists() else []
+        if not runs:
+            sys.exit("No runs yet: task finance:categorize")
+        return runs[-1]
+    run_dir = RUNS_DIR / name
+    if not run_dir.exists():
+        sys.exit(f"No such run: {run_dir}")
+    return run_dir
+
+
+def read_clipboard():
+    """The clipboard text (macOS pbpaste; Linux xclip/wl-paste). Returns None when unavailable."""
+    import shutil
+    import subprocess
+    for cmd in (["pbpaste"], ["wl-paste", "--no-newline"], ["xclip", "-selection", "clipboard", "-o"]):
+        if shutil.which(cmd[0]):
+            try:
+                return subprocess.run(cmd, capture_output=True, text=True, check=True).stdout
+            except (OSError, subprocess.CalledProcessError):
+                return None
+    return None
+
+
+def save_approved_from_clipboard(run_dir, run_id):
+    """Write the review page's 'Copy approved JSON' payload to <run>/approved.json after checking it."""
+    text = read_clipboard()
+    if not text:
+        sys.exit("Clipboard is empty or unreadable. On the review page click Approve, then 'Copy approved JSON'.")
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        sys.exit("Clipboard does not hold JSON. On the review page click 'Copy approved JSON' first.")
+    if not isinstance(doc, dict) or "decisions" not in doc:
+        sys.exit("Clipboard JSON is not an approved-decisions export (no 'decisions' key).")
+    if doc.get("run_id") and doc["run_id"] != run_id:
+        sys.exit(f"Clipboard holds decisions for run {doc['run_id']}, not {run_id}.")
+    path = run_dir / "approved.json"
+    path.write_text(json.dumps(doc, indent=2))
+    print(f"Saved {len(doc['decisions'])} decision(s) -> {_rel(path)}")
+    return path
 
 
 def load_approved(run_dir, path):
     """approved.json: {"decisions": {txn_id: {"category_id", "category_name", "apply": bool}}}.
 
-    Without a file, every proposal is treated as approved as proposed (useful for --dry-run previews).
+    With no path given, <run>/approved.json is used when it exists; otherwise every proposal is treated
+    as approved as proposed (useful for dry-run previews).
     """
     run = json.loads((run_dir / "proposals.json").read_text())
+    if not path and (run_dir / "approved.json").exists():
+        path = run_dir / "approved.json"
     if path:
         approved = json.loads(Path(path).read_text())
         decisions = approved.get("decisions") or {}
@@ -648,13 +708,19 @@ def plan_updates(run, decisions, mark_reviewed=True):
 
 
 def cmd_apply(args):
-    run_dir = RUNS_DIR / args.run
-    if not run_dir.exists():
-        sys.exit(f"No such run: {run_dir}")
+    run_dir = resolve_run_dir(args.run)
+    run_id = run_dir.name
+    if args.from_clipboard:
+        args.approved = str(save_approved_from_clipboard(run_dir, run_id))
     run, decisions = load_approved(run_dir, args.approved)
     plan = plan_updates(run, decisions, mark_reviewed=not args.no_mark_reviewed)
-    src = args.approved or "proposals as-is (no approved.json given)"
-    print(f"Run {args.run}: {len(plan)} update(s) from {src}")
+    if args.approved:
+        src = args.approved
+    elif (run_dir / "approved.json").exists():
+        src = "approved.json"
+    else:
+        src = "proposals as-is (nothing approved yet)"
+    print(f"Run {run_id}: {len(plan)} update(s) from {src}")
     for p in plan:
         bits = []
         if p["category_id"]:
@@ -665,7 +731,7 @@ def cmd_apply(args):
     if not plan:
         return
     if not args.execute:
-        print("\nDry run. Add --execute to send these to Monarch.")
+        print(f"\nDry run. To send these to Monarch: task finance:categorize:apply -- {args.run} --execute")
         return
 
     async def go():
@@ -688,7 +754,7 @@ def cmd_apply(args):
                 except Exception as e:
                     fh.write(f"{datetime.now().isoformat(timespec='seconds')} FAIL {p['id']} {json.dumps(kwargs)} {e}\n")
                     print(f"  FAILED {p['id']}: {e}", file=sys.stderr)
-        print(f"\nApplied {ok}/{len(plan)}; log: {log.relative_to(HERE)}")
+        print(f"\nApplied {ok}/{len(plan)}; log: {_rel(log)}")
     asyncio.run(go())
 
 
@@ -709,10 +775,13 @@ def main():
     rn.add_argument("--no-ai", action="store_true", help="skip the AI step")
     rn.add_argument("--ai-threshold", type=float, default=0.8, help="confidence below which the AI is asked (default 0.8)")
     rn.add_argument("--history", type=int, default=25, help="past transactions per merchant to inspect (default 25)")
+    rn.add_argument("--open", action="store_true", help="open the review page in the browser when done")
 
     ra = sub.add_parser("apply", help="send approved decisions to Monarch")
-    ra.add_argument("run", help="run id (folder name under data/categorize/runs/)")
-    ra.add_argument("--approved", help="approved.json exported from the review page")
+    ra.add_argument("run", help="run id (folder name under data/categorize/runs/), or 'latest'")
+    ra.add_argument("--approved", help="approved.json exported from the review page (default: <run>/approved.json if present)")
+    ra.add_argument("--from-clipboard", action="store_true",
+                    help="take the review page's 'Copy approved JSON' payload from the clipboard and save it as <run>/approved.json")
     ra.add_argument("--execute", action="store_true", help="actually update Monarch (default: dry run)")
     ra.add_argument("--no-mark-reviewed", action="store_true", help="leave the needs-review flag as is")
 
