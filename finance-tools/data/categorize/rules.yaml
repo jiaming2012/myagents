@@ -40,6 +40,23 @@ rules:
       category: Transfer
     confidence: 0.95
 
+  - name: Payment into the personal loan (...0621) is a loan repayment
+    match:
+      account: { contains: "0621" }
+      statement: { contains: "Origination Payment" }
+    set:
+      category: Loan Repayment
+
+  - name: Monthly 615.64 to Lafayette FCU from Capital One is the personal loan payment
+    match:
+      merchant: { contains: "Lafayette FCU" }
+      account: { contains: "4354" }
+      amount: { is_expense: true, equals: 615.64 }
+    set:
+      category: Loan Repayment
+    confidence: 0.95
+    confidence: 0.95
+
 # Transfer pairing. A deposit whose bank text says "wire" or "transfer" names no sender (Capital One's
 # "Wire Deposit" can come from Mercury business or Mercury personal), so the categorizer looks for the
 # other side of the move instead: same amount, opposite sign, another account, within window_days.
