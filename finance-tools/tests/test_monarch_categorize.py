@@ -195,3 +195,103 @@ def test_plan_updates_only_changed_or_unreviewed():
     assert [p["id"] for p in plan] == ["t1"]
     assert plan[0]["category_id"] == "c-groceries" and plan[0]["needs_review"] is False
     assert plan_updates(run, decisions, mark_reviewed=False)[0]["needs_review"] is None
+
+
+# --------------------------------------------------------------------------- transfer pairing
+
+from monarch_categorize import (  # noqa: E402
+    PAIRING_DEFAULTS, load_pairing_config, mercury_business_accounts, mercury_counterparts, monarch_counterparts,
+    pair_candidate, pairing_window, wants_pairing,
+)
+
+PAIR_CATS = Categories([
+    {"id": "c-transfer", "name": "Transfer", "group": {"name": "Transfers", "type": "transfer"}},
+    {"id": "c-yum", "name": "Yumyums", "group": {"name": "Income", "type": "income"}},
+])
+CFG = json.loads(json.dumps(PAIRING_DEFAULTS))
+
+
+def wire(**over):
+    base = dict(id="w1", amount=2500.0, plaidName="Wire Deposit", merchant={"name": "Capital One"},
+                account={"id": "a-capone", "displayName": "Recurring ACH (...4354)"}, date="2026-10-19")
+    base.update(over)
+    return txn(**base)
+
+
+def side(**over):
+    base = {"id": "m1", "amount": -2500.0, "date": "2026-10-19", "account_id": "a-merc-personal",
+            "account": "Mercury Personal Checking (...6343)", "source": "monarch"}
+    base.update(over)
+    return base
+
+
+def test_wants_pairing_needs_transfer_wording_and_an_amount():
+    assert wants_pairing(wire(), CFG)
+    assert wants_pairing(txn(plaidName="From Jamal Cole via mercury.com"), CFG)
+    assert not wants_pairing(txn(), CFG)                       # a grocery store
+    assert not wants_pairing(wire(amount=0), CFG)
+    assert not wants_pairing(wire(), None)
+
+
+def test_pair_monarch_counterpart_is_a_transfer_and_nearest_date_wins():
+    far = side(id="m0", date="2026-10-17", account="Far")
+    near = side(id="m1", date="2026-10-19", account="Near")
+    c = pair_candidate(wire(), [far, near], CFG, PAIR_CATS)
+    assert c["category_id"] == "c-transfer" and c["source"] == "pair:monarch" and c["confidence"] == 0.95
+    assert "Near" in c["reason"] and "-2,500.00" in c["reason"]
+
+
+def test_pair_rejects_same_account_same_sign_other_amount_or_outside_window():
+    assert pair_candidate(wire(), [side(account_id="a-capone")], CFG, PAIR_CATS) is None
+    assert pair_candidate(wire(), [side(amount=2500.0)], CFG, PAIR_CATS) is None
+    assert pair_candidate(wire(), [side(amount=-2500.5)], CFG, PAIR_CATS) is None
+    assert pair_candidate(wire(), [side(date="2026-10-16")], CFG, PAIR_CATS) is None
+    assert pair_candidate(wire(), [side(date="2026-10-21")], CFG, PAIR_CATS) is not None  # 2 days = window edge
+    assert pair_candidate(wire(), [side(id="w1")], CFG, PAIR_CATS) is None                # never itself
+
+
+def test_pair_mercury_business_counterpart_is_business_income_but_monarch_outranks_it():
+    biz = side(id="b1", account_id="mercury:ops", account="Mercury Operations ••4613", source="mercury-business")
+    c = pair_candidate(wire(), [biz], CFG, PAIR_CATS)
+    assert c["category_id"] == "c-yum" and c["source"] == "pair:mercury-business"
+    c = pair_candidate(wire(), [biz, side()], CFG, PAIR_CATS)
+    assert c["source"] == "pair:monarch"
+    # money leaving for the business is an owner contribution, not this step's call
+    out = wire(amount=-2500.0)
+    assert pair_candidate(out, [dict(biz, amount=2500.0)], CFG, PAIR_CATS) is None
+    assert pair_candidate(out, [side(amount=2500.0)], CFG, PAIR_CATS)["source"] == "pair:monarch"
+
+
+def test_pair_candidate_outranks_a_monarch_rule_in_propose():
+    monarch = [{"name": "monarch-rule:1", "match": {"statement": {"contains": "wire deposit"}},
+                "set": {"category": "Yumyums"}, "confidence": 0.9}]
+    pair = pair_candidate(wire(), [side()], CFG, PAIR_CATS)
+    cands = propose(wire(), [], monarch, PAIR_CATS, [], pair=pair)
+    assert [c["source"] for c in cands[:2]] == ["pair:monarch", "monarch-rule:1"]
+    assert propose(wire(), [], monarch, PAIR_CATS, [])[0]["source"] == "monarch-rule:1"
+
+
+def test_counterpart_shapes_and_window():
+    m = monarch_counterparts([txn(id="x", amount=-5, date="2026-11-01")])[0]
+    assert (m["account_id"], m["source"], m["amount"]) == ("a1", "monarch", -5.0)
+    rows = [{"id": "t", "amount": -475.0, "postedAt": "2026-11-17T19:45:08Z", "createdAt": "2026-11-17T19:44:36Z"},
+            {"id": "u", "amount": -1.0, "createdAt": "2026-11-16T00:00:00Z"}, {"id": "v", "amount": -1.0}]
+    b = mercury_counterparts(rows, "ops", "Mercury Operations")
+    assert [(x["date"], x["account_id"], x["source"]) for x in b] == [
+        ("2026-11-17", "mercury:ops", "mercury-business"), ("2026-11-16", "mercury:ops", "mercury-business")]
+    assert pairing_window([wire(date="2026-10-19"), wire(date="2026-10-16")], CFG) == ("2026-10-14", "2026-10-21")
+
+
+def test_pairing_config_merges_defaults_and_can_be_disabled(tmp_path):
+    f = tmp_path / "rules.yaml"
+    f.write_text("pairing:\n  window_days: 5\n  mercury_business: {category: Biz}\n")
+    cfg = load_pairing_config(f)
+    assert cfg["window_days"] == 5 and cfg["mercury_business"]["category"] == "Biz"
+    assert cfg["words"] == PAIRING_DEFAULTS["words"] and cfg["mercury_business"]["accounts"] == []
+    f.write_text("pairing: false\n")
+    assert load_pairing_config(f) is None
+    assert load_pairing_config(tmp_path / "missing.yaml") == PAIRING_DEFAULTS
+    merchants = tmp_path / "merchants.yaml"
+    merchants.write_text("accounts:\n  - {mercury_account_id: id-1}\n  - {bank_account: feedless}\n")
+    assert mercury_business_accounts(cfg, merchants) == ["id-1"]
+    assert mercury_business_accounts({"mercury_business": {"accounts": ["z"]}}, merchants) == ["z"]

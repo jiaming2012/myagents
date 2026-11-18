@@ -15,6 +15,8 @@ Selection (pick one; default --days 7):
   --all                      include transactions Monarch already marks reviewed (default: needs-review only)
 
 Confidence ladder (highest wins; below --ai-threshold the AI model is asked):
+  pair:monarch         the other side of the move sits in another Monarch account -> Transfer   (0.95)
+  pair:mercury-business the other side left a Mercury business account (Mercury API) -> Yumyums (0.95)
   rule:<name>          local rule in data/categorize/rules.yaml       (rule's own confidence, default 0.95)
   monarch-rule:<id>    a rule Monarch itself stores, whose action matches  (0.90)
   history              the merchant's past reviewed transactions agree  (share of agreeing txns, scaled)
@@ -24,6 +26,12 @@ Confidence ladder (highest wins; below --ai-threshold the AI model is asked):
 AI step: modelled on sales-processor's payroll classify step. The run writes ai_request.json, invokes
 the `claude` CLI (interactive at a terminal, -p when unattended) with a prompt that reads that file and
 writes ai_proposals.json, then validates the verdicts. No API key; --no-ai skips it.
+
+Pairing step: a deposit whose bank text says "wire" or "transfer" names no sender, so no text rule can
+tell a move between the household's own accounts from income. The other side of the move can: a row of
+the same amount, opposite sign, within a couple of days, in another account. Monarch holds that other
+side for every linked account; the Mercury business accounts are not linked, so they are read through
+the Mercury API (MERCURY_API_TOKEN, as mercury_classify.py does). Tunable under `pairing:` in rules.yaml.
 
 Data folder: data/categorize/ (rules.yaml, monarch_rules.json, runs/<run-id>/ — runs are gitignored).
 """
@@ -109,6 +117,43 @@ def load_local_rules(path=RULES_FILE):
         return []
     doc = yaml.safe_load(path.read_text()) or {}
     return doc.get("rules") or []
+
+
+MERCHANTS_FILE = HERE / "merchants.yaml"
+
+PAIRING_DEFAULTS = {
+    "words": ["wire", "transfer", "xfer", "own account", "mercury"],  # rows worth pairing
+    "window_days": 2,            # how far apart the two sides of a move may post
+    "confidence": 0.95,
+    "transfer_category": "Transfer",
+    "mercury_business": {"category": "Yumyums", "accounts": []},  # accounts: Mercury API ids; [] = merchants.yaml
+}
+
+
+def load_pairing_config(path=RULES_FILE):
+    """The `pairing:` block of rules.yaml over PAIRING_DEFAULTS; `pairing: false` turns the step off."""
+    doc = (yaml.safe_load(path.read_text()) or {}) if path.exists() else {}
+    block = doc.get("pairing", {})
+    if block is False:
+        return None
+    cfg = json.loads(json.dumps(PAIRING_DEFAULTS))
+    for k, v in (block or {}).items():
+        if k == "mercury_business" and isinstance(v, dict):
+            cfg[k].update(v)
+        else:
+            cfg[k] = v
+    return cfg
+
+
+def mercury_business_accounts(cfg, merchants_file=MERCHANTS_FILE):
+    """Mercury API account ids to search: the config's own list, else the accounts merchants.yaml reconciles."""
+    ids = (cfg.get("mercury_business") or {}).get("accounts") or []
+    if ids:
+        return list(ids)
+    if merchants_file.exists():
+        doc = yaml.safe_load(merchants_file.read_text()) or {}
+        return [a["mercury_account_id"] for a in doc.get("accounts", []) if a.get("mercury_account_id")]
+    return []
 
 
 def monarch_rules_as_local(monarch_rules):
@@ -306,9 +351,12 @@ def history_candidate(history_txns, self_id):
             "source": f"history:{n}/{total}", "reason": f"{n} of {total} past reviewed transactions for this merchant"}
 
 
-def propose(txn, local_rules, monarch_rules, categories, history_txns):
-    """All candidates for one transaction, best first."""
+def propose(txn, local_rules, monarch_rules, categories, history_txns, pair=None):
+    """All candidates for one transaction, best first. `pair` is pair_candidate()'s verdict, if any;
+    it goes first so that at equal confidence the evidence of an actual counterpart beats a text rule."""
     cands = []
+    if pair:
+        cands.append(dict(pair))
     r = first_matching_rule(local_rules, txn)
     if r:
         cat = categories.resolve(r["set"].get("category_id") or r["set"].get("category"))
@@ -332,6 +380,137 @@ def propose(txn, local_rules, monarch_rules, categories, history_txns):
                       "source": "monarch-default", "reason": "category Monarch already assigned"})
     cands.sort(key=lambda c: -c["confidence"])
     return cands
+
+
+# --------------------------------------------------------------------------- transfer pairing
+#
+# Counterpart shape shared by both sources:
+#   {"id", "amount" (negative = money out, as Monarch), "date" YYYY-MM-DD, "account_id", "account", "source"}
+# source is "monarch" (a linked account) or "mercury-business" (read through the Mercury API).
+
+def wants_pairing(txn, cfg):
+    """Rows worth pairing: a non-zero amount and transfer wording in the bank text or merchant name."""
+    if not cfg or not float(txn.get("amount") or 0):
+        return False
+    hay = f"{txn.get('plaidName') or ''} {(txn.get('merchant') or {}).get('name') or ''}".lower()
+    return any(str(w).lower() in hay for w in cfg.get("words", []))
+
+
+def monarch_counterparts(txns):
+    out = []
+    for t in txns:
+        acct = t.get("account") or {}
+        out.append({"id": t.get("id"), "amount": float(t.get("amount") or 0), "date": t["date"],
+                    "account_id": acct.get("id"), "account": acct.get("displayName") or "", "source": "monarch"})
+    return out
+
+
+def mercury_counterparts(txns, account_id, account_label):
+    """Mercury API rows (amount negative = money out, like Monarch; dated by postedAt, else createdAt)."""
+    out = []
+    for t in txns:
+        when = (t.get("postedAt") or t.get("createdAt") or "")[:10]
+        if not when:
+            continue
+        out.append({"id": t.get("id"), "amount": float(t.get("amount") or 0), "date": when,
+                    "account_id": f"mercury:{account_id}", "account": account_label, "source": "mercury-business"})
+    return out
+
+
+def pair_candidate(txn, counterparts, cfg, categories):
+    """The other side of a move, if one exists -> a candidate; None when nothing pairs.
+
+    A counterpart has the same absolute amount, the opposite sign, another account, and a date within
+    window_days. The nearest date wins and a Monarch counterpart outranks a Mercury one: a sum seen
+    leaving a linked account is a transfer whatever the business accounts show. A Monarch counterpart
+    makes the row a Transfer; a Mercury business counterpart makes a deposit the business category
+    (income to the household). Money leaving for the business account is left alone: that is an owner
+    contribution, whose category is not this step's call."""
+    amt = float(txn.get("amount") or 0)
+    when = date.fromisoformat(txn["date"])
+    window = int(cfg.get("window_days", 2))
+    own = (txn.get("account") or {}).get("id")
+    best = None
+    for c in counterparts:
+        if c.get("account_id") == own or c.get("id") == txn.get("id"):
+            continue
+        if abs(abs(c["amount"]) - abs(amt)) > 0.005 or (c["amount"] < 0) == (amt < 0):
+            continue
+        if c["source"] != "monarch" and amt < 0:
+            continue
+        gap = abs((date.fromisoformat(c["date"]) - when).days)
+        if gap > window:
+            continue
+        rank = (0 if c["source"] == "monarch" else 1, gap)
+        if best is None or rank < best[0]:
+            best = (rank, c)
+    if best is None:
+        return None
+    c = best[1]
+    if c["source"] == "monarch":
+        cat_name, source = cfg.get("transfer_category", "Transfer"), "pair:monarch"
+    else:
+        cat_name, source = (cfg.get("mercury_business") or {}).get("category"), "pair:mercury-business"
+    cat = categories.resolve(cat_name) if cat_name else None
+    if not cat:
+        return None
+    return {"category_id": cat["id"], "category_name": cat["name"], "confidence": float(cfg.get("confidence", 0.95)),
+            "source": source, "reason": f"other side of the move: {c['amount']:+,.2f} on {c['date']} in {c['account']}"}
+
+
+def pairing_window(txns, cfg):
+    """[lo, hi] ISO dates covering the rows to pair, padded by window_days on each side."""
+    w = timedelta(days=int(cfg.get("window_days", 2)))
+    days = [date.fromisoformat(t["date"]) for t in txns]
+    return (min(days) - w).isoformat(), (max(days) + w).isoformat()
+
+
+async def fetch_monarch_counterparts(mm, start, end):
+    """Every Monarch transaction in the window, all accounts, reviewed or not."""
+    out, offset = [], 0
+    while True:
+        d = await mm.get_transactions(limit=100, offset=offset, start_date=start, end_date=end)
+        rows = d["allTransactions"]["results"]
+        out.extend(rows)
+        offset += len(rows)
+        if len(rows) < 100:
+            break
+        if offset >= 2000:
+            print(f"  warning: pairing window {start}..{end} holds more than 2000 rows; later ones not searched",
+                  file=sys.stderr)
+            break
+    return out
+
+
+def fetch_mercury_counterparts(account_ids, start, end):
+    """Rows on the Mercury business accounts over the window, via the Mercury API. Problems warn and skip."""
+    if not account_ids:
+        return []
+    try:
+        import mercury_classify as mc
+    except ImportError as e:
+        print(f"  warning: Mercury pairing skipped: {e}", file=sys.stderr)
+        return []
+    token = os.getenv("MERCURY_API_TOKEN")
+    if not token:
+        print("  warning: Mercury pairing skipped: MERCURY_API_TOKEN not set", file=sys.stderr)
+        return []
+    labels = {}
+    try:
+        r = mc.requests.get(f"{mc.MERCURY_API}/accounts", headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        r.raise_for_status()
+        labels = {a["id"]: a.get("nickname") or a.get("name") or a["id"] for a in r.json().get("accounts", [])}
+    except Exception as e:
+        print(f"  warning: Mercury account names unavailable: {e}", file=sys.stderr)
+    out = []
+    for aid in account_ids:
+        try:
+            rows = mc.fetch_mercury(aid, start, end)
+        except (SystemExit, Exception) as e:
+            print(f"  warning: Mercury pairing skipped for {labels.get(aid, aid)}: {e}", file=sys.stderr)
+            continue
+        out += mercury_counterparts(rows, aid, f"Mercury {labels.get(aid, aid)}")
+    return out
 
 
 # --------------------------------------------------------------------------- AI step (claude CLI)
@@ -557,13 +736,28 @@ def cmd_run(args):
         txns = await fetch_transactions(mm, args)
         print(f"Fetched {len(txns)} transaction(s); {len(local_rules)} local rule(s), {len(monarch_rules)} Monarch rule(s)")
 
+        pairing = None if args.no_pairing else load_pairing_config()
+        pair_ids = {t["id"] for t in txns if wants_pairing(t, pairing)} if pairing else set()
+        counterparts, pair_stats = [], {"rows": len(pair_ids), "monarch": 0, "mercury_business": 0, "window": None}
+        if pair_ids:
+            lo, hi = pairing_window([t for t in txns if t["id"] in pair_ids], pairing)
+            counterparts = monarch_counterparts(await fetch_monarch_counterparts(mm, lo, hi))
+            pair_stats["monarch"] = len(counterparts)
+            business = fetch_mercury_counterparts(mercury_business_accounts(pairing), lo, hi)
+            pair_stats["mercury_business"] = len(business)
+            pair_stats["window"] = [lo, hi]
+            counterparts += business
+            print(f"Pairing: {len(pair_ids)} transfer-like row(s); searched {pair_stats['monarch']} Monarch and "
+                  f"{pair_stats['mercury_business']} Mercury business row(s) in {lo}..{hi}")
+
         history_cache = {}
         items = []
         for t in txns:
             mname = (t.get("merchant") or {}).get("name") or ""
             if mname not in history_cache:
                 history_cache[mname] = await fetch_merchant_history(mm, mname, args.history)
-            cands = propose(t, local_rules, monarch_rules, cats, history_cache[mname])
+            pair = pair_candidate(t, counterparts, pairing, cats) if t["id"] in pair_ids else None
+            cands = propose(t, local_rules, monarch_rules, cats, history_cache[mname], pair=pair)
             best = cands[0] if cands else None
             items.append({
                 "id": t["id"], "date": t["date"], "amount": float(t["amount"]),
@@ -601,6 +795,7 @@ def cmd_run(args):
             "selection": {"limit": args.limit, "days": args.days, "since": args.since, "until": args.until, "all": args.all},
             "ai": {"model": AI_MODEL or "claude-cli", "threshold": args.ai_threshold,
                    "asked": len(uncertain) if not args.no_ai else 0, "error": ai_error},
+            "pairing": pair_stats if pairing else None,
             "categories": cats.public(),
             "items": items,
         }
@@ -773,6 +968,7 @@ def main():
     rn.add_argument("--until", help="YYYY-MM-DD (with --since)")
     rn.add_argument("--all", action="store_true", help="include already-reviewed transactions")
     rn.add_argument("--no-ai", action="store_true", help="skip the AI step")
+    rn.add_argument("--no-pairing", action="store_true", help="skip the transfer pairing step (Monarch + Mercury API)")
     rn.add_argument("--ai-threshold", type=float, default=0.8, help="confidence below which the AI is asked (default 0.8)")
     rn.add_argument("--history", type=int, default=25, help="past transactions per merchant to inspect (default 25)")
     rn.add_argument("--open", action="store_true", help="open the review page in the browser when done")
