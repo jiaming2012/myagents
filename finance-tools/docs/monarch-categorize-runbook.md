@@ -31,6 +31,8 @@ What happens:
 
 - Five needs-review transactions are fetched and scored against local rules, Monarch's rules, and
   merchant history.
+- Rows whose bank text says wire or transfer go through the pairing step first (see below): the run
+  prints `Pairing: N transfer-like row(s); searched X Monarch and Y Mercury business row(s)`.
 - Rows under the 0.8 threshold go to Claude: a Claude Code session opens in this terminal. **Click
   Yes** when it asks to write `ai_proposals.json`. When it prints "Classification complete — please
   exit", **type `/exit`**. The run resumes by itself.
@@ -70,6 +72,35 @@ Expect: `Applied N/N; log: data/categorize/runs/<id>/apply.log`. Then check Mona
 transactions no longer show in Needs Review and carry the chosen categories. A re-run of step 2
 should fetch a different set, since the applied rows are reviewed now.
 
+## Transfer pairing (wires, transfers)
+
+A deposit described only as "Wire Deposit" or "Incoming Wire" names no sender, so no text rule can
+tell a move between your own accounts from business income. The categorizer looks for the other side
+of the move instead: same amount, opposite sign, another account, within 2 days.
+
+| Other side found | Verdict | Source shown |
+|---|---|---|
+| in another Monarch account | Transfer | `pair:monarch` |
+| leaving a Mercury business account (via the Mercury API) | Yumyums | `pair:mercury-business` |
+| nowhere | none; the row falls through to rules, history, AI | |
+
+A Monarch counterpart outranks a Mercury one, and a pairing verdict outranks a text rule at the same
+confidence. Money leaving a Monarch account for the business is not decided here (owner contribution).
+
+Settings live under `pairing:` in `data/categorize/rules.yaml` (words, window, categories, Mercury
+account ids; the ids default to the accounts `merchants.yaml` reconciles). `--no-pairing` skips the
+step for one run. The Mercury lookup needs `MERCURY_API_TOKEN`, read as `mercury_classify.py` reads it
+(`finance-tools/.env`, or the toast_xero checkout's `.env`); without it the run warns and pairs
+against Monarch only.
+
+Two plain rules cover the sides that need no pairing: a wire naming "Yumyums Kitchen" is Yumyums, and
+money sent out of Mercury Personal in the owner's name is a Transfer.
+
+**Monarch's own rule 251847319957650677** ("original statement contains wire deposit" -> Yumyums) is
+wrong for personal wires into Capital One. The pairing verdict outranks it in this tool, but Monarch
+still applies the rule itself as new wires arrive, so change it in Monarch: set the statement
+criterion to `Yumyums Kitchen` (or delete the rule) and re-run `task finance:categorize:rules`.
+
 ## If something goes wrong
 
 | Symptom | Fix |
@@ -77,6 +108,7 @@ should fetch a different set, since the applied rows are reviewed now.
 | `Monarch rejected the saved credentials (401)` | `task finance:balances:login` from `/Users/jamal/projects/myagents`, then retry |
 | `` `claude` CLI not found on PATH `` | install Claude Code, or use `task finance:categorize:no-ai` |
 | `Claude did not write ai_proposals.json` | re-run step 2, or use the no-ai task |
+| `warning: Mercury pairing skipped: MERCURY_API_TOKEN not set` | put the token in `finance-tools/.env`; Monarch-only pairing still ran |
 | `Clipboard does not hold JSON` | on the review page click Approve and copy JSON again, then retry step 4 |
 | `Clipboard holds decisions for run X, not Y` | the page open in the browser is an older run; open `data/categorize/runs/<latest>/review.html` |
 | Want to change a verdict after step 4 | edit `data/categorize/runs/<id>/approved.json` (set `"apply": false` or a new `category_id`), then step 5 |

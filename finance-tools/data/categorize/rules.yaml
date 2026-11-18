@@ -22,3 +22,35 @@ rules:
     set:
       category: Transfer
     confidence: 0.95
+
+  - name: Money in from Yumyums Kitchen (Mercury business) is business income
+    match:
+      statement: { contains: "Yumyums Kitchen" }
+      amount: { is_expense: false }
+    set:
+      category: Yumyums
+    confidence: 0.95
+
+  - name: Money sent out of Mercury Personal in the owner's name is a transfer
+    match:
+      merchant: { contains: "Jamal Cole" }
+      statement: { contains: "via mercury.com" }
+      amount: { is_expense: true }
+    set:
+      category: Transfer
+    confidence: 0.95
+
+# Transfer pairing. A deposit whose bank text says "wire" or "transfer" names no sender (Capital One's
+# "Wire Deposit" can come from Mercury business or Mercury personal), so the categorizer looks for the
+# other side of the move instead: same amount, opposite sign, another account, within window_days.
+#   - found in another Monarch account      -> transfer_category   (a move between the household's own accounts)
+#   - found leaving a Mercury business account (Mercury API, MERCURY_API_TOKEN) -> mercury_business.category
+#   - neither                                -> no verdict; the row falls through to rules / history / AI
+# Every key is optional (defaults shown); `pairing: false` turns the step off; --no-pairing skips one run.
+pairing:
+  words: [wire, transfer, xfer, "own account", mercury]
+  window_days: 2
+  transfer_category: Transfer
+  mercury_business:
+    category: Yumyums
+    accounts: []        # Mercury API account ids; empty = the accounts merchants.yaml reconciles (4613, 5396, 7818)
