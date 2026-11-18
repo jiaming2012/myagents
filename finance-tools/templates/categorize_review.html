@@ -59,6 +59,8 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
 .bar { position: fixed; left: 0; right: 0; bottom: 0; background: var(--surface); border-top: 1px solid var(--line); padding: 12px 16px; padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
 .bar .count { font-variant-numeric: tabular-nums; }
 .bar .spacer { flex: 1; }
+.bar .confirm { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 8px 12px; border-radius: 6px; background: var(--warn-bg); border-left: 4px solid var(--warn); }
+.bar .confirm[hidden] { display: none; }
 .btn { font: inherit; font-weight: 500; padding: 8px 16px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--fg); cursor: pointer; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .btn:disabled { opacity: .5; cursor: default; }
@@ -86,6 +88,11 @@ input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); }
   <span class="count" id="count"></span>
   <span class="status" id="status"></span>
   <span class="spacer"></span>
+  <span class="confirm" id="confirm" hidden role="alertdialog" aria-live="assertive">
+    <span id="confirm-text"></span>
+    <button class="btn" id="confirm-back">Go back</button>
+    <button class="btn primary" id="confirm-go">Approve anyway</button>
+  </span>
   <button class="btn primary" id="approve">Approve and copy JSON</button>
 </div>
 
@@ -122,14 +129,14 @@ function render() {
   if (RUN.ai.error) notes.push(`<div class="note warn">AI step did not run (${escapeHtml(RUN.ai.error)}). Low-confidence rows show the best rule or history guess; use Ask Claude or pick by hand.</div>`);
   if (runDoc && runDoc.status === 'approved') notes.push(`<div class="note ok">Approved ${runDoc.approved_at.replace('T', ' ')} with ${runDoc.count} change(s). Next: task finance:categorize:approve -- latest, then apply.</div>`);
   $('#notes').innerHTML = notes.join('');
-  $('#filters').innerHTML = [['all', 'All'], ['human', 'Needs a pick'], ['changed', 'Category changes'], ['apply', 'Marked apply']]
+  $('#filters').innerHTML = [['all', 'All'], ['human', 'Needs a pick'], ['changed', 'Category changes'], ['apply', 'Marked apply'], ['skip', 'Not marked apply']]
     .map(([k, l]) => `<button class="chip" data-f="${k}" aria-pressed="${filter === k}">${l}</button>`).join('');
   $('#count').textContent = `${toApply} of ${RUN.items.length} will be applied`;
   $('#approve').disabled = toApply === 0;
   for (const it of RUN.items) {
     const tr = document.getElementById('r-' + it.id);
     const s = state[it.id];
-    tr.classList.toggle('hidden', !(filter === 'all' || (filter === 'human' && it.needs_human) || (filter === 'changed' && s.category_id !== it.current_category_id) || (filter === 'apply' && s.apply)));
+    tr.classList.toggle('hidden', !(filter === 'all' || (filter === 'human' && it.needs_human) || (filter === 'changed' && s.category_id !== it.current_category_id) || (filter === 'apply' && s.apply) || (filter === 'skip' && !s.apply)));
     const sel = tr.querySelector('select'); sel.value = s.category_id || ''; sel.classList.toggle('changed', s.category_id !== it.current_category_id);
     tr.querySelector('input').checked = s.apply;
   }
@@ -180,7 +187,23 @@ document.addEventListener('click', async (e) => {
 // One click: record the approval (in the shared store when there is one) and put the decisions on
 // the clipboard for `task finance:categorize:approve -- latest`. The clipboard write must stay inside
 // the click handler, so it runs before any awaited store write.
+// Rows left unticked stay needs-review in Monarch and come back in the next run, so approving with
+// any of them asks first. The question lives in the bar rather than window.confirm(), which a
+// sandboxed artifact frame may silently answer "cancel"; "Approve anyway" is its own click, so the
+// clipboard write still runs inside a user gesture.
 $('#approve').addEventListener('click', async () => {
+  const skipped = RUN.items.filter(it => !state[it.id].apply).length;
+  if (skipped === 0) { await approve(); return; }
+  const count = RUN.items.length - skipped;
+  $('#confirm-text').textContent = `${skipped} of ${RUN.items.length} transaction(s) are not marked Apply; they stay needs-review and come back next run. Approve the ${count} marked one(s)?`;
+  $('#approve').hidden = true;
+  $('#confirm').hidden = false;
+  $('#confirm-go').focus();
+});
+function closeConfirm() { $('#confirm').hidden = true; $('#approve').hidden = false; }
+$('#confirm-back').addEventListener('click', () => { closeConfirm(); filter = 'skip'; render(); setStatus('Showing the rows not marked Apply. Tick the ones to send, then approve.'); });
+$('#confirm-go').addEventListener('click', async () => { closeConfirm(); await approve(); });
+async function approve() {
   const count = RUN.items.filter(it => state[it.id].apply).length;
   runDoc = { status: 'approved', approved_at: new Date().toISOString(), count };
   const text = JSON.stringify(approvedJson(), null, 2);
@@ -195,7 +218,7 @@ $('#approve').addEventListener('click', async () => {
   setStatus(copied ? `Approved ${count} change(s) and copied the JSON.${saved} Next: task finance:categorize:approve -- latest`
                    : `Approved ${count} change(s). Clipboard blocked: the JSON is selected below, copy it by hand.${saved}`);
   render();
-});
+}
 function approvedJson() {
   return { run_id: RUN.run_id, approved_at: (runDoc && runDoc.approved_at) || new Date().toISOString(), decisions: state };
 }

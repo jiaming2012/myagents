@@ -48,7 +48,10 @@ On the page that opened:
 
 1. Change any category from its dropdown; tick or untick **Apply** per row. Rows flagged "needs a
    pick" start unticked.
-2. **Click Approve and copy JSON.** The status line confirms the count and the copy.
+2. **Click Approve and copy JSON.** The status line confirms the count and the copy. If any row is
+   still unticked, the bar first asks: "N of M transaction(s) are not marked Apply; they stay
+   needs-review and come back next run." **Go back** shows just those rows (the "Not marked apply"
+   filter) so you can tick them; **Approve anyway** copies the ticked ones only.
 
 (As a local file the page has no saved state and no Ask Claude button; both only exist when the
 page is published as a claude.ai artifact.)
