@@ -229,7 +229,7 @@ tasks:
       - python toast_preview_dump.py 2026-01-01 {{.END | default "2026-12-31"}} .toast_preview_2026.json {{.CLI_ARGS}}
 
   zoho:recon:
-    desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md)"
+    desc: "Dry-run Mercury -> Zoho Books reconciliation (docs/zoho-books-recon-plan.md); -- --vendors lists expenses still without a vendor (-- --vendors --apply sets them)"
     cmds:
       - task: sync-status:warn
       - python zoho_books_recon.py --toast .toast_preview_2026.json {{.CLI_ARGS}}
@@ -240,7 +240,7 @@ tasks:
       - python zoho_books_recon.py --apply --toast .toast_preview_2026.json {{.CLI_ARGS}}
 
   zoho:rules:
-    desc: Create Zoho bank rules from merchants.yaml (dry run unless -- --apply)
+    desc: "Create Zoho bank rules from merchants.yaml and add the vendor to existing rules without one (dry run unless -- --apply)"
     cmds:
       - python zoho_books_recon.py --rules {{.CLI_ARGS}}
 
@@ -266,7 +266,7 @@ tasks:
       - python zoho_books_recon.py --feed-only --reconcile {{.CLI_ARGS}}
 
   zoho:feed:rules:
-    desc: "Bank rules on the live feed-only accounts for the boa_merchants patterns (dry run unless -- --apply)"
+    desc: "Bank rules on the live feed-only accounts for the boa_merchants patterns, with their vendors (dry run unless -- --apply)"
     cmds:
       - python zoho_books_recon.py --feed-only --rules {{.CLI_ARGS}}
 

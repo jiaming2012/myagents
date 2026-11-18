@@ -62,6 +62,7 @@ def merchant_name(t):
 
 def classify(txns, cfg, own_bank_name):
     """Split one account's Mercury txns into transfers / coded / skipped / unmatched.
+    coded = (txn, merchant name, account code, vendor name or None).
 
     `own_bank_name` is the account's short bank name in merchants.yaml
     (`bank_account`), so a transfer never targets its own side."""
@@ -100,7 +101,7 @@ def classify(txns, cfg, own_bank_name):
             None,
         )
         if m:
-            coded.append((t, name, m["account"]))
+            coded.append((t, name, m["account"], m.get("vendor")))
         else:
             unmatched.append((t, name))
     return transfers, coded, skipped, unmatched

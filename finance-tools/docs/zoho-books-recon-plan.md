@@ -273,7 +273,7 @@ imported statement, delete created accounts. No Xero state is touched.
   stopping.
 - **O-2 Unmatched merchants** — the dry-run prints them with a suggested `merchants.yaml`
   line each; answer or say "leave uncategorized".
-- **O-3 Vendors** — create vendor contacts from merchant names (yes/no). Default no.
+- **O-3 Vendors** — create vendor contacts from merchant names (yes/no). Default no. **Resolved 2026-11-18: yes** — the operator wants Expenses by Vendor; `vendor:` per pattern in merchants.yaml, see runbook §5a.
 
 ---
 

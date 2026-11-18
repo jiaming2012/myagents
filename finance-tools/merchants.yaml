@@ -5,6 +5,12 @@
 # counterparty name, falling back to the bank description. First match wins,
 # in order: skip -> transfers -> merchants. Unmatched transactions are never
 # posted -- they land in the dry-run review list.
+#
+# `vendor`: the Zoho Books vendor (contact) an expense is recorded against, so the
+# Expenses by Vendor report works. The script creates missing vendors by name on
+# apply, sets the vendor on every new expense and bank rule, and `--vendors`
+# backfills expenses that still have none. Several patterns may share one vendor
+# (OnPay, Google Ads). Equity and income codes (3xxx/4xxx) take no vendor.
 
 # Mercury accounts to reconcile, each with the short bank name used throughout this
 # file (BANK_NAMES in zoho_books_recon.py maps it to the Zoho Books account name).
@@ -36,88 +42,88 @@ transfers:
 
 merchants:
   # --- food & COGS ---
-  - {pattern: "Save A Lot",           account: "5000"}   # Cost of Goods Sold
-  - {pattern: "Restaurant Depot",     account: "5000"}
-  - {pattern: "Shoppers Food",        account: "5000"}
-  - {pattern: "Harris Teeter",        account: "5000"}
-  - {pattern: "Verchio",              account: "5000"}   # produce outlet
-  - {pattern: "Amoretti",             account: "5000"}
-  - {pattern: "Groceryeshop",         account: "5000"}
-  - {pattern: "Giant Food",           account: "5000"}
-  - {pattern: "ShopRite",             account: "5000"}
-  - {pattern: "Trader Joe",           account: "5000"}
-  - {pattern: "Instacart",            account: "5000"}   # small top-up ingredient deliveries
-  - {pattern: "HomeGoods",            account: "6350"}   # Supplies
-  - {pattern: "The Restaurant Store", account: "5200"}   # COGS - Supplies
-  - {pattern: "Restaurantsupply",     account: "5200"}
-  - {pattern: "Thompson",             account: "6430"}   # ThompsonGas propane -> Utilities (review: could be COGS)
+  - {pattern: "Save A Lot",           account: "5000", vendor: "Save A Lot"}   # Cost of Goods Sold
+  - {pattern: "Restaurant Depot",     account: "5000", vendor: "Restaurant Depot"}
+  - {pattern: "Shoppers Food",        account: "5000", vendor: "Shoppers Food"}
+  - {pattern: "Harris Teeter",        account: "5000", vendor: "Harris Teeter"}
+  - {pattern: "Verchio",              account: "5000", vendor: "Verchio"}   # produce outlet
+  - {pattern: "Amoretti",             account: "5000", vendor: "Amoretti"}
+  - {pattern: "Groceryeshop",         account: "5000", vendor: "Groceryeshop"}
+  - {pattern: "Giant Food",           account: "5000", vendor: "Giant Food"}
+  - {pattern: "ShopRite",             account: "5000", vendor: "ShopRite"}
+  - {pattern: "Trader Joe",           account: "5000", vendor: "Trader Joe's"}
+  - {pattern: "Instacart",            account: "5000", vendor: "Instacart"}   # small top-up ingredient deliveries
+  - {pattern: "HomeGoods",            account: "6350", vendor: "HomeGoods"}   # Supplies
+  - {pattern: "The Restaurant Store", account: "5200", vendor: "The Restaurant Store"}   # COGS - Supplies
+  - {pattern: "Restaurantsupply",     account: "5200", vendor: "RestaurantSupply.com"}
+  - {pattern: "Thompson",             account: "6430", vendor: "ThompsonGas"}   # ThompsonGas propane -> Utilities (review: could be COGS)
 
   # --- owner ---
   - {pattern: "Jamal Cole",           account: "3200"}   # Owner's Draws
-  - {pattern: "Latanya Mcgriff",      account: "6240"}   # expense reimbursement (review)
+  - {pattern: "Latanya Mcgriff",      account: "6240", vendor: "Latanya McGriff"}   # expense reimbursement (review)
 
   # --- operating expenses ---
-  - {pattern: "Tanger",               account: "6300"}   # Rent - Real Estate
-  - {pattern: "CubeSmart",            account: "6310"}   # Rent - Other (storage)
-  - {pattern: "Fiverr",               account: "6090"}   # Contract Labor
-  - {pattern: "Facebook",             account: "6000"}   # Advertising
-  - {pattern: "TikTok",               account: "6000"}
-  - {pattern: "Google Workspace",     account: "6340"}   # Software & Web
-  - {pattern: "Sling",                account: "6340"}
-  - {pattern: "SignalWire",           account: "6340"}
-  - {pattern: "TODOIST",              account: "6340"}
-  - {pattern: "Mint Mobile",          account: "6390"}   # Telephone and Internet
-  - {pattern: "Staples",              account: "6250"}   # Office Expense
-  - {pattern: "Digital Room",         account: "6280"}   # Printing and Stationary
-  - {pattern: "UPrinting",            account: "6280"}
-  - {pattern: "Backblaze",            account: "6340"}
-  - {pattern: "Progressive",          account: "6210"}   # Insurance - Other (review: vehicle policy?)
-  - {pattern: "Pgc Dpie",             account: "6160"}   # PG County DPIE -> Licenses and Fees
-  - {pattern: "First American Payment", account: "6040"} # Merchant Fees (PGC DPIE svc fee)
-  - {pattern: "Tractor Supply",       account: "6140"}   # Equipment & Tools
-  - {pattern: "FedEx",                account: "6270"}   # Postage and Delivery
-  - {pattern: "Roses Discount",       account: "6350"}   # Supplies
-  - {pattern: "Dollar Tree",          account: "6350"}
-  - {pattern: "Amazon",               account: "6350"}   # Supplies (review individual items)
-  - {pattern: "The Home Depot",       account: "6140"}   # Equipment & Tools
-  - {pattern: "Vf Washing",           account: "6060"}   # Cleaning and Maintenance
+  - {pattern: "Tanger",               account: "6300", vendor: "Tanger Outlets"}   # Rent - Real Estate
+  - {pattern: "CubeSmart",            account: "6310", vendor: "CubeSmart"}   # Rent - Other (storage)
+  - {pattern: "Fiverr",               account: "6090", vendor: "Fiverr"}   # Contract Labor
+  - {pattern: "Facebook",             account: "6000", vendor: "Facebook"}   # Advertising
+  - {pattern: "TikTok",               account: "6000", vendor: "TikTok"}
+  - {pattern: "Google Workspace",     account: "6340", vendor: "Google Workspace"}   # Software & Web
+  - {pattern: "Sling",                account: "6340", vendor: "Sling"}
+  - {pattern: "SignalWire",           account: "6340", vendor: "SignalWire"}
+  - {pattern: "TODOIST",              account: "6340", vendor: "Todoist"}
+  - {pattern: "Mint Mobile",          account: "6390", vendor: "Mint Mobile"}   # Telephone and Internet
+  - {pattern: "Staples",              account: "6250", vendor: "Staples"}   # Office Expense
+  - {pattern: "Digital Room",         account: "6280", vendor: "Digital Room"}   # Printing and Stationary
+  - {pattern: "UPrinting",            account: "6280", vendor: "UPrinting"}
+  - {pattern: "Backblaze",            account: "6340", vendor: "Backblaze"}
+  - {pattern: "Progressive",          account: "6210", vendor: "Progressive"}   # Insurance - Other (review: vehicle policy?)
+  - {pattern: "Pgc Dpie",             account: "6160", vendor: "Prince George's County DPIE"}   # PG County DPIE -> Licenses and Fees
+  - {pattern: "First American Payment", account: "6040", vendor: "First American Payment Systems"} # Merchant Fees (PGC DPIE svc fee)
+  - {pattern: "Tractor Supply",       account: "6140", vendor: "Tractor Supply"}   # Equipment & Tools
+  - {pattern: "FedEx",                account: "6270", vendor: "FedEx"}   # Postage and Delivery
+  - {pattern: "Roses Discount",       account: "6350", vendor: "Roses Discount Store"}   # Supplies
+  - {pattern: "Dollar Tree",          account: "6350", vendor: "Dollar Tree"}
+  - {pattern: "Amazon",               account: "6350", vendor: "Amazon"}   # Supplies (review individual items)
+  - {pattern: "The Home Depot",       account: "6140", vendor: "The Home Depot"}   # Equipment & Tools
+  - {pattern: "Vf Washing",           account: "6060", vendor: "VF Washing"}   # Cleaning and Maintenance
 
   # --- fuel ---
-  - {pattern: "ExxonMobil",           account: "6440"}   # Vehicle Expense
-  - {pattern: "Royal Farms",          account: "6440"}
-  - {pattern: "Sunoco",               account: "6440"}
-  - {pattern: "Shell",                account: "6440"}
+  - {pattern: "ExxonMobil",           account: "6440", vendor: "ExxonMobil"}   # Vehicle Expense
+  - {pattern: "Royal Farms",          account: "6440", vendor: "Royal Farms"}
+  - {pattern: "Sunoco",               account: "6440", vendor: "Sunoco"}
+  - {pattern: "Shell",                account: "6440", vendor: "Shell"}
 
   # --- payroll (order matters: TS/DDS before the generic OnPay fallback) ---
-  - {pattern: "PayrollTS",            account: "6360"}   # OnPay payroll taxes -> Taxes - Payroll
-  - {pattern: "PayrollDDS",           account: "6450"}   # OnPay direct deposits -> Wages and Salaries
-  - {pattern: "OnPay",                account: "6450"}   # other OnPay debits (plain PAYROLL, fees)
-  - {pattern: "Cash App",             account: "6450"}   # Wages and Salaries (per-person payroll, confirmed 2026-09-19)
-  - {pattern: "DaMarien Lee Banks",   account: "6450"}   # Send Money wage payment
+  - {pattern: "PayrollTS",            account: "6360", vendor: "OnPay"}   # OnPay payroll taxes -> Taxes - Payroll
+  - {pattern: "PayrollDDS",           account: "6450", vendor: "OnPay"}   # OnPay direct deposits -> Wages and Salaries
+  - {pattern: "OnPay",                account: "6450", vendor: "OnPay"}   # other OnPay debits (plain PAYROLL, fees)
+  - {pattern: "Cash App",             account: "6450", vendor: "Cash App"}   # Wages and Salaries (per-person payroll, confirmed 2026-09-19)
+  - {pattern: "DaMarien Lee Banks",   account: "6450", vendor: "DaMarien Lee Banks"}   # Send Money wage payment
 
   # --- one-offs ---
-  - {pattern: "Unique",               account: "6350"}   # thrift store -- pots/pans (confirmed supplies)
+  - {pattern: "Unique",               account: "6350", vendor: "Unique Thrift"}   # thrift store -- pots/pans (confirmed supplies)
   - {pattern: "••5237",               account: "3200"}   # transfer to personal Mercury savings = owner draw
 
   # --- added 2026-10-16 from the Zoho recon review list ---
-  - {pattern: "Public Storage",       account: "6310"}   # Rent - Other (storage unit, like CubeSmart)
-  - {pattern: "Cummins",              account: "6140"}   # Equipment & Tools (engine/generator service; review)
-  - {pattern: "Jd Transport",         account: "6440"}   # Vehicle Expense: truck mechanic/repairs, paid via Square (confirmed by operator 2026-10-15)
-  - {pattern: "Commerce Management",  account: "6300"}   # Rent - Real Estate: food truck location rent (operator, 2026-10-16)
+  - {pattern: "Public Storage",       account: "6310", vendor: "Public Storage"}   # Rent - Other (storage unit, like CubeSmart)
+  - {pattern: "Cummins",              account: "6140", vendor: "Cummins"}   # Equipment & Tools (engine/generator service; review)
+  - {pattern: "Jd Transport",         account: "6440", vendor: "JD Transport"}   # Vehicle Expense: truck mechanic/repairs, paid via Square (confirmed by operator 2026-10-15)
+  - {pattern: "Commerce Management",  account: "6300", vendor: "Commerce Management"}   # Rent - Real Estate: food truck location rent (operator, 2026-10-16)
 
   # --- 0551 (closed Jun 2026) merchants, added 2026-10-16 ---
-  - {pattern: "Dollar General",       account: "6350"}   # Supplies
-  - {pattern: "QuickBooks",           account: "6340"}   # Software & Web
-  - {pattern: "Xero US",              account: "6340"}   # Software & Web (former accounting software, charges through 2026)
-  - {pattern: "Alto-Hartley",         account: "5200"}   # COGS - Supplies (restaurant supply)
-  - {pattern: "Snagajob",             account: "6000"}   # Advertising (job posting; review)
+  - {pattern: "Dollar General",       account: "6350", vendor: "Dollar General"}   # Supplies
+  - {pattern: "QuickBooks",           account: "6340", vendor: "Intuit QuickBooks"}   # Software & Web
+  - {pattern: "Xero US",              account: "6340", vendor: "Xero"}   # Software & Web (former accounting software, charges through 2026)
+  - {pattern: "Alto-Hartley",         account: "5200", vendor: "Alto-Hartley"}   # COGS - Supplies (restaurant supply)
+  - {pattern: "Snagajob",             account: "6000", vendor: "Snagajob"}   # Advertising (job posting; review)
   - {pattern: "Inova",                account: "3200"}   # Owner's Draws (medical, personal; review)
   # 2026-11-16 catch-up (Oct 16 - Nov 15 Mercury lines)
-  - {pattern: "Advance Auto Parts",   account: "6440"}   # Vehicle Expense: truck parts
-  - {pattern: "Harbor Freight Tools", account: "6140"}   # Equipment & Tools
-  - {pattern: "Zoho Corporation",     account: "6340"}   # Software & Web (Zoho Books)
-  - {pattern: "Cloudflare",           account: "6340"}   # Software & Web (domains / DNS)
-  - {pattern: "Mail Xpress",          account: "6270"}   # Postage and Delivery
+  - {pattern: "Advance Auto Parts",   account: "6440", vendor: "Advance Auto Parts"}   # Vehicle Expense: truck parts
+  - {pattern: "Harbor Freight Tools", account: "6140", vendor: "Harbor Freight Tools"}   # Equipment & Tools
+  - {pattern: "Zoho Corporation",     account: "6340", vendor: "Zoho"}   # Software & Web (Zoho Books)
+  - {pattern: "Cloudflare",           account: "6340", vendor: "Cloudflare"}   # Software & Web (domains / DNS)
+  - {pattern: "Mail Xpress",          account: "6270", vendor: "Mail Xpress"}   # Postage and Delivery
 
 # Mercury accounts with no bank feed in Zoho Books.
 # No bank feed: zoho_books_recon.py imports the Mercury history as a statement.
@@ -178,38 +184,38 @@ boa_merchants:
   - {pattern: "Transfer From Jamal Cole", account: "3100"}   # LFCU: from the owner's personal 0621 -> owner contribution
   - {pattern: "Transfer To Jamal Cole",   account: "3200"}   # LFCU: to the owner's personal 0621 -> owner draw
   - {pattern: "Dividend Deposit",         account: "4400"}   # LFCU share dividends -> Interest Income
-  - {pattern: "Monthly Maintenance Fee",  account: "6050"}   # LFCU
+  - {pattern: "Monthly Maintenance Fee",  account: "6050", vendor: "Lafayette Federal Credit Union"}   # LFCU
   # --- bank / card fees ---
-  - {pattern: "OVERDRAFT ITEM FEE",       account: "6050"}   # Bank Fees and Charges
-  - {pattern: "Monthly Fee Business Adv", account: "6050"}
-  - {pattern: "Dormancy Fee",             account: "6050"}   # Bluevine
-  - {pattern: "LATE PAYMENT FEE",         account: "6055"}   # Credit Card Charges (card 2119)
-  - {pattern: "FINANCE CHARGE",           account: "6055"}
-  - {pattern: "PURCHASE INTEREST CHARGE", account: "6055"}   # Chase Ink
-  - {pattern: "QBooks",                   account: "6340"}   # Intuit QuickBooks on the Chase Ink (descriptor "INTUIT *QBooks")
-  - {pattern: "LASTPASS",                 account: "6340"}
+  - {pattern: "OVERDRAFT ITEM FEE",       account: "6050", vendor: "Bank of America"}   # Bank Fees and Charges
+  - {pattern: "Monthly Fee Business Adv", account: "6050", vendor: "Bank of America"}
+  - {pattern: "Dormancy Fee",             account: "6050", vendor: "Bluevine"}   # Bluevine
+  - {pattern: "LATE PAYMENT FEE",         account: "6055", vendor: "Bank of America"}   # Credit Card Charges (card 2119)
+  - {pattern: "FINANCE CHARGE",           account: "6055", vendor: "Bank of America"}
+  - {pattern: "PURCHASE INTEREST CHARGE", account: "6055", vendor: "Chase"}   # Chase Ink
+  - {pattern: "QBooks",                   account: "6340", vendor: "Intuit QuickBooks"}   # Intuit QuickBooks on the Chase Ink (descriptor "INTUIT *QBooks")
+  - {pattern: "LASTPASS",                 account: "6340", vendor: "LastPass"}
   # --- vendors not already in merchants: ---
-  - {pattern: "GOOGLE *ADS",              account: "6000"}   # Advertising
-  - {pattern: "Google ADS",               account: "6000"}
-  - {pattern: "GOOGLE*ADS",               account: "6000"}
-  - {pattern: "GOOGLE*CLOUD",             account: "6340"}   # Software & Web
-  - {pattern: "GOOGLE*WORKSPACE",         account: "6340"}
-  - {pattern: "NAME-CHEAP",               account: "6340"}
-  - {pattern: "Adobe",                    account: "6340"}
-  - {pattern: "ZOHODISTRIB",              account: "6340"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
-  - {pattern: "Angel Mechanic",           account: "6440"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
-  - {pattern: "VERIZON WIRELESS",         account: "6390"}   # Telephone and Internet
-  - {pattern: "PROG CASUALTY",            account: "6210"}   # Progressive by its ACH descriptor (bank rules see only the description)
-  - {pattern: "GOOGLE *Worksp",           account: "6340"}   # Google Workspace by its card descriptor
+  - {pattern: "GOOGLE *ADS",              account: "6000", vendor: "Google Ads"}   # Advertising
+  - {pattern: "Google ADS",               account: "6000", vendor: "Google Ads"}
+  - {pattern: "GOOGLE*ADS",               account: "6000", vendor: "Google Ads"}
+  - {pattern: "GOOGLE*CLOUD",             account: "6340", vendor: "Google Cloud"}   # Software & Web
+  - {pattern: "GOOGLE*WORKSPACE",         account: "6340", vendor: "Google Workspace"}
+  - {pattern: "NAME-CHEAP",               account: "6340", vendor: "Namecheap"}
+  - {pattern: "Adobe",                    account: "6340", vendor: "Adobe"}
+  - {pattern: "ZOHODISTRIB",              account: "6340", vendor: "Zoho"}   # PayPal descriptor for Zoho (feed guessed payee "Zohaib"); $8/mo — review
+  - {pattern: "Angel Mechanic",           account: "6440", vendor: "Angel Mechanic"}   # Vehicle Expense (Ram 2018 maintenance, Zelle)
+  - {pattern: "VERIZON WIRELESS",         account: "6390", vendor: "Verizon Wireless"}   # Telephone and Internet
+  - {pattern: "PROG CASUALTY",            account: "6210", vendor: "Progressive"}   # Progressive by its ACH descriptor (bank rules see only the description)
+  - {pattern: "GOOGLE *Worksp",           account: "6340", vendor: "Google Workspace"}   # Google Workspace by its card descriptor
   # --- operator answers 2026-10-17 ---
   - {pattern: "Counter Credit",           account: "4000"}   # cash sales deposited at the counter
   - {pattern: "BKOFAMERICA ATM",          account: "4000"}   # cash sales deposited at the ATM
   - {pattern: "AVIS RENT-A-CAR",          account: "3200"}   # personal trip -> owner draw
-  - {pattern: "U-HAUL",                   account: "6310"}   # Rent - Other: move to a storage unit closer to the truck
-  - {pattern: "Spotify",                  account: "6340"}   # Software & Web: music on the truck (operator 2026-10-17)
+  - {pattern: "U-HAUL",                   account: "6310", vendor: "U-Haul"}   # Rent - Other: move to a storage unit closer to the truck
+  - {pattern: "Spotify",                  account: "6340", vendor: "Spotify"}   # Software & Web: music on the truck (operator 2026-10-17)
   - {pattern: "MEDIUM.COM",               account: "3200"}   # Owner's Draws (operator 2026-10-17)
   - {pattern: "DOORDASHDASHPAS",          account: "3200"}   # DashPass -> owner draw
   - {pattern: "PEACOCKTVLL",              account: "3200"}   # Peacock TV -> owner draw
   - {pattern: "UBER *",                   account: "3200"}   # owner draw
-  - {pattern: "APPLE CASH SENT MONEY",    account: "6450"}   # Wages and Salaries: payroll sent to an employee
-  - {pattern: "Hostinger",                account: "6340"}   # Software & Web: web hosting (BoA 1778, 2026-11)
+  - {pattern: "APPLE CASH SENT MONEY",    account: "6450", vendor: "Apple Cash"}   # Wages and Salaries: payroll sent to an employee
+  - {pattern: "Hostinger",                account: "6340", vendor: "Hostinger"}   # Software & Web: web hosting (BoA 1778, 2026-11)

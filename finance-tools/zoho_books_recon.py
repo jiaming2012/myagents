@@ -461,11 +461,116 @@ def match_line(z, line, want_ref=None, want_type=None, known_id=None):
     return pick, cands
 
 
-def categorize_expense(z, line, account_id, bank_id, t, name):
+def categorize_expense(z, line, account_id, bank_id, t, name, vendor_id=None):
     body = {"account_id": account_id, "paid_through_account_id": bank_id, "date": line["date"],
             "amount": float(money(line["amount"])), "reference_number": ref(t),
             "description": f"{name} | {(t.get('bankDescription') or '')[:150]}"}
+    if vendor_id:
+        body["vendor_id"] = vendor_id
     return z.post(f"/banktransactions/uncategorized/{line['transaction_id']}/categorize/expenses", body)
+
+
+# --- vendors -------------------------------------------------------------------
+#
+# merchants.yaml `vendor` names a Zoho Books vendor contact per expense pattern so
+# the Expenses by Vendor report has something to report. Vendors are created by
+# name on apply (once), every new expense and bank rule carries the vendor, and
+# `--vendors` backfills the expenses posted before vendors existed.
+
+
+def vendor_names(cfg):
+    return sorted({m["vendor"] for k in ("merchants", "boa_merchants") for m in cfg.get(k, []) if m.get("vendor")})
+
+
+def vendor_index(z):
+    """{vendor contact name: contact_id} for the live org."""
+    return {c["contact_name"]: c["contact_id"]
+            for c in z.pages("/contacts", "contacts", contact_type="vendor")}
+
+
+def ensure_vendors(z, cfg, apply, log):
+    """Create the merchants.yaml vendors that do not exist yet; returns {name: contact_id}
+    (dry run: missing ones map to None)."""
+    have = vendor_index(z)
+    missing = [n for n in vendor_names(cfg) if n not in have]
+    if missing:
+        log(f"## Vendors: {len(have)} in Zoho, {len(missing)} to create" + ("" if apply else " (dry run)"))
+        for n in missing:
+            log(f"  vendor: create '{n}'")
+            if apply:
+                try:
+                    r = z.post("/contacts", {"contact_name": n, "contact_type": "vendor"})
+                    have[n] = r["contact"]["contact_id"]
+                except ZohoError as e:
+                    log(f"    FAILED: {str(e)[:200]}")
+                    have[n] = None
+            else:
+                have[n] = None
+        log()
+    return have
+
+
+def expense_vendor(cfg, description):
+    """The merchants.yaml vendor for a posted expense, from its description (which
+    holds "name | bank description" for script-posted ones and the bare bank
+    description for rule-posted ones). Same haystack rule as the classifiers:
+    first pattern match wins, boa_merchants before merchants."""
+    hay = re.sub(r"INDN:.*?CO ID:", "", description or "").lower()
+    m = next((m for m in cfg.get("boa_merchants", []) + cfg.get("merchants", [])
+              if m["pattern"].lower() in hay), None)
+    return (m.get("vendor"), m["pattern"]) if m else (None, None)
+
+
+def backfill_vendors(z, cfg, vendors, apply, limit, log):
+    """Set the vendor on every expense that has none. Idempotent: an expense with a
+    vendor is skipped, so a run cut short by the daily cap just resumes."""
+    log("## Vendor backfill" + ("" if apply else " (dry run)"))
+    expenses = list(z.pages("/expenses", "expenses", sort_column="date", sort_order="A"))
+    todo = [e for e in expenses if not e.get("vendor_id")]
+    log(f"{len(expenses)} expenses, {len(todo)} without a vendor\n")
+    plan, nomatch, novendor = [], defaultdict(list), defaultdict(list)
+    for e in todo:
+        v, pat = expense_vendor(cfg, e.get("description"))
+        if v and (vendors.get(v) or not apply):     # dry run: the vendor is not created yet
+            plan.append((e, v))
+        elif pat:
+            novendor[pat].append(e)
+        else:
+            nomatch[(e.get("description") or "?")[:60]].append(e)
+    agg = defaultdict(lambda: [0, Decimal(0)])
+    for e, v in plan:
+        agg[v][0] += 1
+        agg[v][1] += money(e.get("total", 0))
+    log("| vendor | expenses | total |")
+    log("|---|---|---|")
+    for v, (n, s) in sorted(agg.items(), key=lambda kv: -kv[1][1]):
+        log(f"| {v} | {n} | {s} |")
+    if novendor:
+        log(f"\n### Pattern matched but no `vendor:` in merchants.yaml ({sum(len(v) for v in novendor.values())})")
+        for pat, es in sorted(novendor.items(), key=lambda kv: -len(kv[1])):
+            log(f"- {pat}: {len(es)} expenses, {sum(money(e.get('total', 0)) for e in es)}")
+    if nomatch:
+        log(f"\n### No merchants.yaml pattern matches ({sum(len(v) for v in nomatch.values())}) — add a pattern or set by hand")
+        for d, es in sorted(nomatch.items(), key=lambda kv: -len(kv[1])):
+            log(f"- {d}: {len(es)} expenses, {sum(money(e.get('total', 0)) for e in es)}   (e.g. {es[0]['date']} {es[0].get('account_name')})")
+    if not apply:
+        return
+    writes, failures = 0, []
+    for e, v in plan:
+        if z.capped or (limit and writes >= limit):
+            break
+        try:
+            z.put(f"/expenses/{e['expense_id']}", {"vendor_id": vendors[v]})
+            writes += 1
+        except ZohoError as e2:
+            failures.append((e, str(e2)))
+            log(f"  FAIL {e['date']} {e.get('total')} {v}: {str(e2)[-200:]}")
+            if len(failures) >= 3 and writes == 0:
+                log("  stopping after three failures with no success; fix the update body")
+                break
+    if z.capped:
+        log("Zoho daily API cap reached — re-run tomorrow to continue (expenses with a vendor are skipped).")
+    log(f"\nvendors set: {writes} of {len(plan)}, failures: {len(failures)}, Zoho calls: {z.calls}")
 
 
 def categorize_generic(z, line, ttype, from_id, to_id, t, name, account_id=None):
@@ -669,7 +774,7 @@ def fake_txn(line):
 
 def classify_feed(lines, cfg, own_name):
     """-> [(line, kind, payload)]: transfer -> other account's short bank name;
-    coded -> (name, code, is_return); unmatched -> name."""
+    coded -> (name, code, is_return, vendor); unmatched -> name."""
     by_key = defaultdict(list)
     for ln in lines:
         by_key[(ln["date"], money(ln["amount"]), ln["debit_or_credit"])].append(ln)
@@ -690,7 +795,8 @@ def classify_feed(lines, cfg, own_name):
                   if m["pattern"].lower() in hay), None)
         if m:
             MATCHED_PATTERNS.add(m["pattern"])
-        cls[ln["transaction_id"]] = ("coded", (line_name(ln), m["account"], False)) if m else ("unmatched", line_name(ln))
+        cls[ln["transaction_id"]] = (("coded", (line_name(ln), m["account"], False, m.get("vendor"))) if m
+                                     else ("unmatched", line_name(ln)))
     used = set()
     for ln in lines:
         desc = ln.get("description") or ""
@@ -708,7 +814,7 @@ def classify_feed(lines, cfg, own_name):
         used.add(orig["transaction_id"])
         k, p = cls[orig["transaction_id"]]
         if k == "coded":
-            cls[ln["transaction_id"]] = ("coded", (f"RETURN of {p[0]}", p[1], True))
+            cls[ln["transaction_id"]] = ("coded", (f"RETURN of {p[0]}", p[1], True, p[3]))
         elif k == "transfer":
             cls[ln["transaction_id"]] = ("transfer", p)     # money comes back: a transfer the other way
         else:
@@ -737,11 +843,13 @@ def post_opening_journal(z, zid, bal, note):
     return r["journal"]["journal_id"]
 
 
-def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
+def feed_only(z, cfg, state, by_code, banks, apply, limit, log, vendors=None):
     """Classify every uncategorized line of the feed-only accounts and (apply)
     post: opening journals from closing_balances.yaml, transfers between the two
     accounts (create from the money-out side, match the other), coded lines,
-    returned items as refunds. Returns {zoho_id: (account cfg, plan)}."""
+    returned items as refunds. Returns {zoho_id: (account cfg, plan)}.
+    `vendors` = {vendor name: contact_id}; expenses are posted against them."""
+    vendors = vendors or {}
     accounts = cfg.get("zoho_feed_only_accounts") or sys.exit("merchants.yaml has no zoho_feed_only_accounts")
     closings = load_closings()
     log("## Feed-only accounts (BoA, LFCU, Bluevine, Chase Ink, Wells Fargo)")
@@ -783,7 +891,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
             agg[(k, label)][1] += line_signed(ln)
         log(f"### {BANK_NAMES[acct['bank_account']]}")
         for (k, label), (n, s) in sorted(agg.items(), key=lambda kv: (kv[0][0], -kv[1][0])):
-            hint = f'   # suggested: - {{pattern: "{label[:30]}", account: "????"}}' if k == "unmatched" else ""
+            hint = f'   # suggested: - {{pattern: "{label[:30]}", account: "????", vendor: "{label[:30]}"}}' if k == "unmatched" else ""
             log(f"- {k:9} {label}: {n} lines, net {s}{hint}")
         log()
     if not apply:
@@ -893,7 +1001,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
         for ln, k, p in sorted(plan, key=lambda e: e[0]["date"]):
             if k != "coded" or key(ln) in state or budget():
                 continue
-            name, code, _ = p
+            name, code, _, vendor = p
             acc = by_code[code]["account_id"]
             t, s = fake_txn(ln), line_signed(ln)
             try:
@@ -907,7 +1015,7 @@ def feed_only(z, cfg, state, by_code, banks, apply, limit, log):
                     categorize_generic(z, ln, "deposit", acc, zid, t, name)   # cash sales -> income
                     op = "deposit"
                 elif s < 0:
-                    categorize_expense(z, ln, acc, zid, t, name)
+                    categorize_expense(z, ln, acc, zid, t, name, vendor_id=vendors.get(vendor))
                     op = "expense"
                 else:
                     categorize_generic(z, ln, "expense_refund", acc, zid, t, name, account_id=acc)
@@ -994,13 +1102,24 @@ def reconcile_feed_only(z, plans, apply, log):
 # --- bank rules for future feed lines ------------------------------------------
 
 
-def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
+RULE_VENDOR_FIELD = "customer_id"   # the rule record's one contact field; Zoho ignores `vendor_id` (verified 2026-11-18)
+
+
+def rule_vendor(detail):
+    """The vendor contact id a rule record carries (Zoho echoes it back under the
+    contact field it stores it in), or ''."""
+    return detail.get("vendor_id") or detail.get("customer_id") or ""
+
+
+def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None, vendors=None, limit=0):
     """One withdrawal rule per merchants.yaml pattern so future feed lines
     auto-categorize. Transfers and Toast payouts stay script-driven (a rule on
     both sides of a transfer would post it twice; Toast needs the journal).
     The BoA block (`boa_merchants`) gets its own rules on the feed-only accounts;
-    deposit-side patterns (owner contributions, 3100) stay script-driven."""
-    existing = {r["rule_name"] for r in z.get("/bankaccounts/rules").get("rules", [])}
+    deposit-side patterns (owner contributions, 3100) stay script-driven.
+    Expense rules carry the merchant's vendor; an existing rule without one is updated."""
+    vendors = vendors or {}
+    existing = {r["rule_name"]: r for r in z.get("/bankaccounts/rules").get("rules", [])}
     # live Mercury accounts only: Zoho rejects a rule naming an inactive account (11015)
     live_mercury = [a for a in accounts if not a.get("closed")]
     wanted = [("Mercury", ",".join(a["zoho_id"] for a in live_mercury), m) for m in cfg["merchants"]] if live_mercury else []
@@ -1025,20 +1144,49 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
         wanted += [("BoA", boa_ids, m) for m in cfg.get("boa_merchants", []) + shared
                    if m["account"] != "3100" and not m["account"].startswith(INCOME_PREFIX)]
     log("## Bank rules")
-    n = 0
+    n = updated = 0
     for prefix, account_ids, m in wanted:
+        if limit and n + updated >= limit:
+            break
         code = m["account"]
         # Zoho rejects punctuation such as ':' and '>' in rule names
         name = re.sub(r"[^A-Za-z0-9 ]", "", f"{prefix} {m['pattern']} to {code}")[:50]
-        if name in existing:
-            continue
         record_as = "owner_drawings" if code in EQUITY_CODES else "expense"
+        vendor_id = vendors.get(m.get("vendor")) if record_as == "expense" else None
         body = {"rule_name": name, "rule_category": "selected_accounts", "account_ids": account_ids,
                 "apply_to": "withdrawals", "criteria_type": "and",
                 "criterion": [{"field": "description", "comparator": "contains", "value": m["pattern"]}],
                 "record_as": record_as, "account_id": by_code[code]["account_id"],
                 "auto_categorize": "autocategorize", "reference_number": "from_statement"}
-        log(f"  rule: {name}" + ("" if apply else " (dry run)"))
+        if vendor_id:
+            body[RULE_VENDOR_FIELD] = vendor_id
+        if name in existing:
+            if not vendor_id:
+                continue
+            # existing rule: add the vendor when it has none (one detail read per candidate)
+            rid = existing[name]["rule_id"]
+            detail = z.get(f"/bankaccounts/rules/{rid}").get("rule", {})
+            if rule_vendor(detail):
+                continue
+            body["account_ids"] = ",".join(a["account_id"] for a in detail.get("accounts", [])) or account_ids
+            log(f"  rule: {name} ← vendor {m['vendor']}" + ("" if apply else " (dry run)"))
+            if apply:
+                try:
+                    z.put(f"/bankaccounts/rules/{rid}", body)
+                    if updated == 0:    # read the first one back: Zoho ignores unknown fields silently
+                        after = z.get(f"/bankaccounts/rules/{rid}").get("rule", {})
+                        if rule_vendor(after) != vendor_id:
+                            log(f"    vendor did not stick (record shows '{rule_vendor(after)}'); "
+                                f"check RULE_VENDOR_FIELD against the rule record: {sorted(after.keys())}")
+                            return
+                    updated += 1
+                except ZohoError as e:
+                    log(f"    FAILED: {str(e)[:200]}")
+                    if updated == 0:
+                        log("    stopping after first failure; fix the update body and re-run --rules")
+                        return
+            continue
+        log(f"  rule: {name}" + (f" (vendor {m['vendor']})" if vendor_id else "") + ("" if apply else " (dry run)"))
         if apply:
             try:
                 z.post("/bankaccounts/rules", body)
@@ -1048,7 +1196,7 @@ def seed_rules(z, cfg, accounts, by_code, apply, log, banks=None):
                 if n == 0:
                     log("    stopping after first failure; fix the body shape and re-run --rules")
                     return
-    log(f"  {n} rules created\n")
+    log(f"  {n} rules created, {updated} given a vendor\n")
 
 
 # --- main --------------------------------------------------------------------
@@ -1065,7 +1213,9 @@ def main():
                     help="A = journal on the bank account + match; B = deposit to 1320 + journal from 1320")
     ap.add_argument("--limit", type=int, default=0, help="stop after N writes (apply)")
     ap.add_argument("--reconcile", action="store_true", help="create monthly reconciliation records")
-    ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml")
+    ap.add_argument("--rules", action="store_true", help="create bank rules from merchants.yaml (and add vendors to existing ones)")
+    ap.add_argument("--vendors", action="store_true",
+                    help="create the merchants.yaml vendors and set the vendor on every expense that has none")
     ap.add_argument("--feed-only", action="store_true",
                     help="feed-only accounts (every non-Mercury bank): classify/post the uncategorized feed lines of zoho_feed_only_accounts")
     ap.add_argument("--undo-created-transfers", metavar="ZOHO_ACCOUNT_ID",
@@ -1106,11 +1256,20 @@ def main():
     bank_id = {xn: banks[zn]["account_id"] for xn, zn in BANK_NAMES.items() if zn in banks}
     log(f"  {len(by_code)} coded accounts, banks: {', '.join(BANK_NAMES[k] for k in bank_id)}\n")
 
+    # --- vendors: created before anything posts an expense against them ---
+    vendors = ensure_vendors(z, cfg, apply and not args.reconcile, log)
+    if args.vendors:
+        backfill_vendors(z, cfg, vendors, apply, args.limit, log)
+        Path(args.report).write_text("\n".join(out))
+        log(f"{'applied' if apply else 'dry run only'} — report at {args.report}; Zoho calls: {z.calls}")
+        return
+
     # --- feed-only accounts (BoA): no Mercury, the feed is the data ---
     if args.feed_only:
-        plans = feed_only(z, cfg, state, by_code, banks, apply and not args.reconcile and not args.rules, args.limit, log)
+        plans = feed_only(z, cfg, state, by_code, banks, apply and not args.reconcile and not args.rules, args.limit, log,
+                          vendors=vendors)
         if args.rules:
-            seed_rules(z, cfg, [], by_code, apply, log, banks=banks)
+            seed_rules(z, cfg, [], by_code, apply, log, banks=banks, vendors=vendors, limit=args.limit)
         if args.reconcile:
             reconcile_feed_only(z, plans, apply, log)
         Path(args.report).write_text("\n".join(out))
@@ -1151,9 +1310,9 @@ def main():
         for t, target in transfers:
             if t["id"] in paired:
                 plan.append((acct, t, paired[t["id"]], "transfer", target))
-        for t, name, code in coded:
+        for t, name, code, vendor in coded:
             if t["id"] in paired:
-                plan.append((acct, t, paired[t["id"]], "coded", (name, code)))
+                plan.append((acct, t, paired[t["id"]], "coded", (name, code, vendor)))
         for t, why in skipped:
             if t["id"] in paired:
                 toast_txns.append((acct, t, paired[t["id"]]))
@@ -1261,7 +1420,7 @@ def main():
             agg[name][0] += 1
             agg[name][1] += money(t["amount"])
         for name, (n, s) in sorted(agg.items(), key=lambda kv: -kv[1][0]):
-            log(f"- {name}: {n} txns, net {s}   # suggested: - {{pattern: \"{name[:30]}\", account: \"????\"}}")
+            log(f"- {name}: {n} txns, net {s}   # suggested: - {{pattern: \"{name[:30]}\", account: \"????\", vendor: \"{name[:30]}\"}}")
     if toast_flagged:
         log(f"\n### Toast credits whose toast_xero deposit does not balance ({len(toast_flagged)}) — left uncategorized")
         for _, t, _ in toast_txns:
@@ -1278,7 +1437,7 @@ def main():
 
     if args.reconcile or args.rules:
         if args.rules:
-            seed_rules(z, cfg, accounts, by_code, apply, log)
+            seed_rules(z, cfg, accounts, by_code, apply, log, vendors=vendors, limit=args.limit)
         if args.reconcile:
             reconcile(z, accounts, openings, apply, log)
         Path(args.report).write_text("\n".join(out))
@@ -1402,7 +1561,7 @@ def main():
         name = mp.merchant_name(t)
         try:
             if True:
-                mname, code = payload
+                mname, code, vendor = payload
                 acc = by_code[code]["account_id"]
                 if code in EQUITY_CODES:
                     if t["amount"] < 0:
@@ -1412,7 +1571,7 @@ def main():
                         categorize_generic(z, line, "owner_contribution", acc, own, t, mname)
                         done(t, {"op": "owner_contribution", "line": line["transaction_id"]})
                 elif t["amount"] < 0:
-                    categorize_expense(z, line, acc, own, t, mname)
+                    categorize_expense(z, line, acc, own, t, mname, vendor_id=vendors.get(vendor))
                     done(t, {"op": "expense", "line": line["transaction_id"], "account": code})
                 else:
                     categorize_generic(z, line, "expense_refund", acc, own, t, mname, account_id=acc)
