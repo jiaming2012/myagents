@@ -672,8 +672,11 @@ def upload(dest, dry=False, only=None):
             continue
         local = Path(rec.get("local") or ARCHIVE_DIR / n["path"])
         if not local.exists():
-            rec.update(upload_error="not downloaded")
-            fail += 1
+            if dry:
+                log(f"[{i}/{len(files)}] would upload {n['path']} (not downloaded yet)")
+            else:
+                rec.update(upload_error="not downloaded")
+                fail += 1
             continue
         size = local.stat().st_size
         route = upload_route(size)
@@ -696,6 +699,9 @@ def upload(dest, dry=False, only=None):
             log(f"[{i}/{len(files)}] FAILED {n['path']}: {e}")
         if i % 10 == 0:
             save_json(PROGRESS, prog)
+    if dry:
+        log(f"dry run: {len(files)} files would be uploaded; nothing written")
+        return
     save_json(PROGRESS, prog)
     log(f"upload: {done} uploaded, {present} already there, {fail} failed")
 
