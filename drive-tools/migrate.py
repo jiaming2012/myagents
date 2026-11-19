@@ -40,8 +40,15 @@ import requests
 from dotenv import load_dotenv
 
 HERE = Path(__file__).resolve().parent
-for env in (HERE / ".env", HERE.parent / "finance-tools" / ".env", HERE.parent / "email-tools" / ".env"):
-    load_dotenv(env)
+load_dotenv(HERE / ".env")
+# Client ids/secrets live in the sibling tools' .env files. Those are gitignored, so from a
+# worktree they only exist in the main checkout: look for them up the directory tree.
+for sibling in ("finance-tools", "email-tools"):
+    for ancestor in HERE.parents:
+        cand = ancestor / sibling / ".env"
+        if cand.exists():
+            load_dotenv(cand)
+            break
 
 ACCOUNT = os.getenv("GOOGLE_ACCOUNT", "jamal@yumyums.kitchen")
 STATE_DIR = Path(os.getenv("STATE_DIR") or HERE / "state" / ACCOUNT)
