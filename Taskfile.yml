@@ -13,6 +13,9 @@ includes:
   notion:
     taskfile: ./notion-tools/Taskfile.yml
     dir: ./notion-tools
+  drive:
+    taskfile: ./drive-tools/Taskfile.yml
+    dir: ./drive-tools
 
 tasks:
   default:

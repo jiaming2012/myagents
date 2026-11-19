@@ -1,0 +1,59 @@
+version: "3"
+
+# Google Drive -> Zoho WorkDrive migration. Runbook: docs/google-drive-to-workdrive.md
+# Every phase is resumable; re-running skips what already succeeded.
+
+tasks:
+  auth:google:
+    desc: "One-time browser consent for the Google account (read-only Drive). Add -- --no-browser to print the URL only."
+    cmds:
+      - python migrate.py auth-google {{.CLI_ARGS}}
+
+  auth:zoho:
+    desc: "Store a WorkDrive refresh token: task drive:auth:zoho -- <grant code from Zoho API console Self Client>"
+    cmds:
+      - python migrate.py auth-zoho {{.CLI_ARGS}}
+
+  myfolders:
+    desc: "Print the WorkDrive 'My Folders' id for each team of the signed-in Zoho user"
+    cmds:
+      - python migrate.py myfolders
+
+  inventory:
+    desc: "List every file and folder in the Google account (add -- --include-shared to include files shared with the account)"
+    cmds:
+      - python migrate.py inventory {{.CLI_ARGS}}
+
+  download:
+    desc: "Fetch the whole Drive into ARCHIVE_DIR; Google Docs/Sheets/Slides are exported as docx/xlsx/pptx"
+    cmds:
+      - python migrate.py download {{.CLI_ARGS}}
+
+  upload:
+    desc: "Recreate the tree in WorkDrive: task drive:upload -- --dest <folder id> [--dry-run] [--only <path text>]"
+    cmds:
+      - python migrate.py upload {{.CLI_ARGS}}
+
+  verify:
+    desc: "Compare every uploaded file's WorkDrive size with the archive copy"
+    cmds:
+      - python migrate.py verify
+
+  report:
+    desc: "Summary of the migration: counts, problems, skipped items"
+    cmds:
+      - python migrate.py report
+
+  migrate:
+    desc: "inventory + download + upload + verify + report in one go (needs WORKDRIVE_DEST_FOLDER_ID in .env)"
+    cmds:
+      - task: inventory
+      - task: download
+      - task: upload
+      - task: verify
+      - task: report
+
+  test:
+    desc: "Unit tests for the tree/name mapping"
+    cmds:
+      - python -m pytest -q test_migrate.py
