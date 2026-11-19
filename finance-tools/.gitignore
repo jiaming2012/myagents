@@ -14,3 +14,4 @@ forecast_preview.html
 .sync_status_cache.json
 .zoho_sheet_token.json
 data/categorize/runs/
+data/fees/
