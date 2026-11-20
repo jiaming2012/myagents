@@ -336,6 +336,16 @@ tasks:
       - rm -f ~/Library/LaunchAgents/com.jamal.finance-health.plist
       - echo "Removed com.jamal.finance-health"
 
+  fees:
+    desc: "Interest, fees, missed payments and recurring charges for one year, personal + business, as docs/fees-interest-<year>.html: pulls Monarch, Zoho Books, Mercury, Toast and the Bills sheet, then renders. -- --year 2026"
+    cmds:
+      - python fees_interest_report.py all {{.CLI_ARGS}}
+
+  fees:report:
+    desc: "Re-render the fees report from the last pull in data/fees/<year>/ (no API calls). -- --year 2026 [--json]"
+    cmds:
+      - python fees_interest_report.py report {{.CLI_ARGS}}
+
   rewards:
     desc: "Credit card rewards: earn, statement credits, balance check (pulls Monarch, saves snapshot)"
     cmds:
