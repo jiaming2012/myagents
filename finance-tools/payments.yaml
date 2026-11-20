@@ -853,6 +853,17 @@ payments:
     zoho_match: "Wells Fargo"
     notes: "AT RISK. Card-side payments: $1,851.33 (6/26), $349.67 (7/27, the only one debited from 4354), $2,109.96 (8/27, reversed). Nothing since: $25 late fee 9/27, $96.98 interest 10/2, balance $4,411. CONFIRM which account autopay points at and that it is funded by 10/26."
 
+  - name: "Navy Federal Visa (manual)"
+    amount: 58.54      # last observed payment, 2026-11-14 (card balance was ~$210; limit $500)
+    day_of_month: 14
+    funding_account: navyfed-checking-7909
+    pays_account: navyfed-visa
+    autopay: false
+    autopay_type: null
+    category: personal
+    zoho_match: null
+    notes: "Owner-confirmed 2026-11-19: paid by hand from NavyFed checking 7909, which is topped up by a transfer two days before (a $60 transfer landed 11/16 for the 11/14 payment). Monarch's Navy Federal card feed drops transactions after 14 days (known Plaid issue), so the card's history is never complete; the duplicate Navy Federal connection was deleted 2026-11-19."
+
   # --- Added 2026-10-17 from Monarch history (first seen on Recurring ACH 4354 in Oct 2026) ---
   - name: "IRS"
     amount: 256.00
