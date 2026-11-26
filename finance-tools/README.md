@@ -321,6 +321,32 @@ task report                # Coverage report across all accounts
 task balances              # Monarch Money account balances
 ```
 
+## Clearspan Source (MCP)
+
+Clearspan, the command center in `~/projects/clearspan`, watches a few figures from
+each tool it connects to. Its ADR 0005 says a tool is a **Source** when it is an MCP
+server over stdio offering a `key_indicators` tool that returns
+`[{name, value, unit, as_of}]`; every other tool it lists is a Capability, sensitive
+unless annotated read-only.
+
+`mcp_server.py` is that server, on the official Python SDK (`mcp`, 2.x). Clearspan
+starts it: register the Source with command `python`, arguments `mcp_server.py`, and
+this directory. `task mcp` runs it by hand; `task mcp:test` runs its unit tests.
+
+| Tool | What it does | Read-only |
+|------|--------------|-----------|
+| `key_indicators` | `sync_errors`: findings of severity error from `sync_status`; `days_to_shortfall`: days until the forecast first takes a bank account below zero, 30 when it never does in the horizon | — |
+| `sync_status` | `task sync-status -- --json`, with `fresh` to re-query | yes |
+| `payment_forecast` | `task forecast` as data, for 1–365 days | yes |
+| `upcoming_payments` | `task due` as data: the schedule from `payments.yaml`, no logins | yes |
+
+Decisions: a figure whose source cannot be read is left out, not reported as zero,
+so Clearspan's freshness rule can flag it. Monarch and Zoho are asked at most every 30
+minutes (5 after a failure), cached in `.clearspan_source_cache.json` in `DATA_DIR`,
+because Clearspan polls every 5 minutes. Secrets, the Monarch session and the caches
+are found through `FINANCE_TOOLS_DATA` like every other command here. The tools' own
+stdout is redirected to stderr while they run, since stdout is the protocol.
+
 ## Exit Codes
 
 The forecast uses exit codes for scripting:
