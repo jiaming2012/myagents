@@ -6,6 +6,11 @@ tasks:
     cmds:
       - go build ./cmd/...
 
+  mcp:
+    desc: "Serve email-tools as a Clearspan Source over stdio (MCP); Clearspan starts this itself, run it by hand only to try it"
+    cmds:
+      - go run ./cmd/mcp
+
   cleanup:
     desc: Review and delete old/promo emails
     cmds:

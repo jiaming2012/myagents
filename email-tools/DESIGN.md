@@ -154,6 +154,39 @@ The analyze step (both the `prepare-chunk` Go helper and the Claude Code interac
 - `content`: the action item text
 - `description`: email sender + subject for context
 
+### Clearspan (as a Source)
+
+Clearspan, the personal command center in `~/projects/clearspan`, watches a few figures
+from each tool it connects to. Its ADR 0005 says a tool is a **Source** when it is an
+MCP server over stdio that offers a `key_indicators` tool returning
+`[{name, value, unit, as_of}]`; every other tool it lists is a Capability, sensitive
+unless annotated `readOnlyHint: true`.
+
+**Decision:** `cmd/mcp` is that server, built on the official Go SDK
+(`github.com/modelcontextprotocol/go-sdk`). It reads the pipeline's caches and never
+the mailboxes:
+
+| Tool | What it does | Read-only |
+|------|--------------|-----------|
+| `key_indicators` | `action_needed`: insights marked urgent or action_needed; `hours_since_download`: time since `emails.json` was last written | — |
+| `inbox_status` | `inbox status`, as JSON | yes |
+| `list_insights` | insights from `insights.json`, filtered by urgency, capped by limit | yes |
+| `inbox_download` | runs `go run ./cmd/inbox download` in the project root | no |
+
+**Decision:** a figure whose cache does not exist is left out, not reported as zero.
+Zero would be a lie, and leaving it out lets Clearspan's freshness rule do its job.
+Clearspan learns the figure names when it connects, so download and analyse once
+before connecting the Source.
+
+**Decision:** `inbox_download` shells out to the existing command instead of calling
+into it. The download lives in `package main` of `cmd/inbox`, and moving it was not
+worth doing for one caller; Clearspan starts this server with `go run`, so `go` is on
+the path.
+
+The server must run with the project root as its working directory, which is how
+`config.ProjectRoot()` finds `accounts.yaml`, `.env` and `.tokens/`; the credentials
+stay where they are. stdout is the protocol, so logging goes to stderr.
+
 ### Environment Variables
 
 All secrets live in `.env` (loaded via godotenv):

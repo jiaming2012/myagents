@@ -100,6 +100,7 @@ are missing):
 | `email:cleanup:old` | Cleanup over emails older than 30 days |
 | `email:auth:gmail EMAIL=user@gmail.com` | One-time OAuth for a Gmail account |
 | `email:auth:zoho` | One-time OAuth for Zoho |
+| `email:mcp` | Serve email-tools as a Clearspan Source over stdio. Clearspan starts it itself (command `go`, arguments `run ./cmd/mcp`, directory `email-tools/`); it reports `action_needed` and `hours_since_download` as Key Indicators and offers `inbox_status`, `list_insights` and `inbox_download` as tools |
 
 ### finance — Monarch, Zoho Books, payment forecasting (Python)
 
