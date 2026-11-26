@@ -15,3 +15,4 @@ forecast_preview.html
 .zoho_sheet_token.json
 data/categorize/runs/
 data/fees/
+.clearspan_source_cache.json
