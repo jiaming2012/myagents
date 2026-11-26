@@ -6,6 +6,16 @@ tasks:
     cmds:
       - pip install -r requirements.txt
 
+  mcp:
+    desc: "Serve finance-tools as a Clearspan Source over stdio (MCP); Clearspan starts this itself, run it by hand only to try it"
+    cmds:
+      - python mcp_server.py
+
+  mcp:test:
+    desc: Unit tests for the Clearspan Source (no network)
+    cmds:
+      - python -m pytest tests/test_mcp_server.py -q
+
   sync-status:
     desc: "Which Monarch connections / Zoho bank feeds are disconnected or stale (cached 30 min; -- --fresh to re-query)"
     cmds:

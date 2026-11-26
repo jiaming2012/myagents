@@ -122,6 +122,7 @@ are missing):
 | `finance:audit` | 7-day transaction coverage audit |
 | `finance:report` / `:week` | Coverage report |
 | `finance:balances:login` | Re-login to Monarch (interactive; email one-time code or authenticator code). Optional in `.env`: `MONARCH_DEVICE_UUID` (browser's trusted device id), `MONARCH_MFA_SECRET` (prompt-free login) |
+| `finance:mcp` / `:test` | Serve finance-tools as a Clearspan Source over stdio. Clearspan starts it itself (command `python`, arguments `mcp_server.py`, directory `finance-tools/`); it reports `sync_errors` and `days_to_shortfall` as Key Indicators and offers `sync_status`, `payment_forecast` and `upcoming_payments` as read-only tools. `:test` runs its unit tests |
 
 ---
 
